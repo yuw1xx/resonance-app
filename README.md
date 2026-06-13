@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> Please join my Discord server, I'm currently looking for testers so I can release the app on Google Play as well, thank you!! https://discord.gg/SftqvvveMj
+
 <div align="center">
   <h1>Resonance</h1>
   <p>A modern, feature-rich local music player for <b>Android 15 and newer</b></p>
