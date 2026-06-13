@@ -858,12 +858,11 @@ fun ArtistDetailScreen(
 ) {
     val artists by libraryViewModel.allArtists.collectAsState()
     val albums by libraryViewModel.allAlbums.collectAsState()
-    val allSongs by libraryViewModel.allSongs.collectAsState()
     val playlists by libraryViewModel.allPlaylists.collectAsState()
 
     val artist = remember(artists, artistName) { artists.find { it.name == artistName } }
-    val artistAlbums = remember(albums, artistName) { albums.filter { it.artist == artistName } }
-    val artistSongs = remember(allSongs, artistName) { allSongs.filter { it.artist == artistName } }
+    val artistSongs = remember(artist) { artist?.songs ?: emptyList() }
+    val artistAlbums = remember(albums, artistName) { albums.filter { album -> album.songs.any { artistName in it.artists } } }
 
     var songForInfoSheet by remember { mutableStateOf<Song?>(null) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
