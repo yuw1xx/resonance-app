@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Decorative ring — two arcs because a single 360° arc command doesn't close -->
+    <path
+        android:strokeColor="#33FFFFFF"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:pathData="
+            M 21,54
+            a 33,33 0 1 0 66,0
+            a 33,33 0 1 0 -66,0" />
+
+    <!-- Bar 1 — x=24.5  h=14 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M24.5,47
+            a2.5,2.5 0 0 1 5,0
+            L29.5,61
+            a2.5,2.5 0 0 1 -5,0
+            Z" />
+
+    <!-- Bar 2 — x=33.5  h=26 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M33.5,41
+            a2.5,2.5 0 0 1 5,0
+            L38.5,67
+            a2.5,2.5 0 0 1 -5,0
+            Z" />
+
+    <!-- Bar 3 — x=42.5  h=38 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M42.5,35
+            a2.5,2.5 0 0 1 5,0
+            L47.5,73
+            a2.5,2.5 0 0 1 -5,0
+            Z" />
+
+    <!-- Bar 4 — x=51.5  h=46 (tallest) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M51.5,31
+            a2.5,2.5 0 0 1 5,0
+            L56.5,77
+            a2.5,2.5 0 0 1 -5,0
+            Z" />
+
+    <!-- Bar 5 — x=60.5  h=38 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M60.5,35
+            a2.5,2.5 0 0 1 5,0
+            L65.5,73
+            a2.5,2.5 0 0 1 -5,0
+            Z" />
+
+    <!-- Bar 6 — x=69.5  h=26 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M69.5,41
+            a2.5,2.5 0 0 1 5,0
+            L74.5,67
+            a2.5,2.5 0 0 1 -5,0
+            Z" />
+
+    <!-- Bar 7 — x=78.5  h=14 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M78.5,47
+            a2.5,2.5 0 0 1 5,0
+            L83.5,61
+            a2.5,2.5 0 0 1 -5,0
+            Z" />
+
+</vector>
