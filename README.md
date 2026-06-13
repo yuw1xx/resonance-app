@@ -13,11 +13,11 @@
 
 ## Overview
 
-Resonance is a powerful local music player built entirely with Kotlin and Jetpack Compose. It is designed for audiophiles who want full control over their listening experience — from ReplayGain and crossfade to synced lyrics and Last.fm scrobbling, all without ads or subscriptions and completely FOSS forever.
+Resonance is a powerful local music player built entirely with Kotlin and Jetpack Compose. Designed for audiophiles who want full control over their listening experience — from ReplayGain and crossfade to synced lyrics, Last.fm scrobbling, Navidrome streaming, and peer-to-peer song sharing. No ads, no subscriptions, completely FOSS forever.
 
 ## Screenshots
 
-| Home tab | Player | Settings | Artist tab |
+| Home | Player | Settings | Artist |
 | :---: | :---: | :---: | :---: |
 | <img src="screenshots/Screenshot_20260407-001502.png" width="200"> | <img src="screenshots/Screenshot_20260407-001514.png" width="200"> | <img src="screenshots/Screenshot_20260407-001534.png" width="200"> | <img src="screenshots/Screenshot_20260407-001546.png" width="200"> |
 
@@ -28,39 +28,59 @@ Resonance is a powerful local music player built entirely with Kotlin and Jetpac
 ## Features
 
 ### Playback
-- [x] **Gapless playback** — seamless transitions between tracks using ExoPlayer's native gapless support
+- [x] **Gapless playback** — seamless transitions using ExoPlayer's native gapless support
 - [x] **Crossfade** — configurable crossfade duration between songs
 - [x] **ReplayGain 2.0** — per-track and per-album volume normalization with configurable preamp
 - [x] **Skip silence** — automatically skip silent passages
 - [x] **Playback speed & pitch control** — independent speed and pitch adjustment
-- [x] **Smart Shuffle** — history-aware shuffle that avoids repeating recently played tracks
+- [x] **Smart shuffle** — history-aware shuffle that avoids repeating recently played tracks
 - [x] **Sleep timer** — stop after a set number of tracks or minutes
 
 ### Library
 - [x] **Full MediaStore integration** — automatically detects all local audio files
-- [ ] **Configurable artist delimiters** — split multi-artist tags the way you want
-- [ ] **Folder browsing** — navigate your music by directory
-- [ ] **Excluded folders** — hide folders from the library
+- [x] **Configurable artist delimiters** — split multi-artist tags the way you want
+- [x] **Folder browsing** — navigate your music by directory
+- [x] **Excluded folders** — hide folders from the library
 - [x] **Auto-scan** — scheduled background library refresh
 - [x] **Sort & filter** — sort by title, artist, album, date added, duration, play count, and more
 - [x] **Persistent queue** — queue survives app restarts
 
+### Streaming
+- [x] **Navidrome / Subsonic** — full Subsonic API support: browse, play, and scrobble from your self-hosted server
+- [x] **Chromecast** — cast to any Google Cast device directly from the player
+
 ### Lyrics
 - [x] **Synced lyrics** — LRC, TTML, and word-level karaoke support
-- [x] **Embedded lyrics** — reads lyrics from ID3 tags
+- [x] **Embedded lyrics** — reads lyrics from ID3 tags via JAudioTagger
 - [x] **LRCLib integration** — automatic online lyrics fetching
 - [x] **Lyrics editor** — edit and save lyrics directly in the app
 
 ### Metadata & Artwork
-- [ ] **Tag editor** — edit title, artist, album, genre, year, track number, and more
+- [x] **Tag editor** — edit title, artist, album, genre, year, track number, and more
 - [x] **Artwork fetching** — automatic album art from MediaStore and online sources
 - [x] **Artist images** — artist photos fetched from the Deezer API
 - [x] **Waveform seekbar** — real-time waveform visualization extracted from the audio file
 
-### Last.fm
-- [x] **Scrobbling** — automatic track scrobbling with configurable minimum listen threshold
-- [x] **Now Playing** — real-time "now playing" updates
-- [x] **Loved tracks** — sync liked songs with your Last.fm loved tracks
+### Scrobbling
+- [x] **Last.fm** — automatic scrobbling, now playing updates, and loved track sync
+- [x] **Maloja** — self-hosted scrobbling via the Maloja API
+
+### Mixes
+- [x] **Auto-generated playlists** — weekly mixes built from your listening history (top artist, top genre)
+- [x] **Navidrome mixes** — mix generation works with your Navidrome library too
+
+### Statistics
+- [x] **Listening history** — track your most played songs and artists over time
+- [x] **Play breakdowns** — see when you listen most, by hour and time period
+
+### Sharing
+- [x] **Resonance Share** — send songs directly to nearby devices over Wi-Fi via Google Nearby Connections
+
+### Backup
+- [x] **Playlist & liked song backup** — export and import as JSON
+
+### Equalizer
+- [x] **System equalizer** — access and control EQ presets from within the app
 
 ### UI & Customization
 - [x] **Material 3** — full Material You dynamic color support
@@ -93,6 +113,9 @@ Resonance is a powerful local music player built entirely with Kotlin and Jetpac
 | Image loading | Coil |
 | Preferences | DataStore |
 | Background work | WorkManager |
+| Tag reading | JAudioTagger |
+| Casting | Google Cast SDK |
+| P2P sharing | Google Nearby Connections |
 
 ## Getting Started
 
@@ -105,7 +128,7 @@ Resonance is a powerful local music player built entirely with Kotlin and Jetpac
 ### Build
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/resonance.git
+git clone https://github.com/yuw1xx/resonance.git
 cd resonance
 ./gradlew assembleDebug
 ```
@@ -114,20 +137,22 @@ cd resonance
 
 ```
 resonance/
+├── cast/               # Google Cast (CastManager, LocalAudioServer)
 ├── data/
-│   ├── database/       # Room entities, DAOs, database
+│   ├── database/       # Room entities, DAOs, migrations
 │   ├── model/          # Domain models (Song, Album, Artist, Playlist…)
-│   ├── network/        # Retrofit APIs (Last.fm, Deezer, LRCLib)
+│   ├── network/        # Retrofit APIs (Last.fm, Maloja, Navidrome, LRCLib)
 │   ├── preferences/    # DataStore preferences
 │   ├── repository/     # Data repositories
-│   └── service/        # MusicService (Media3 + ExoPlayer)
+│   ├── service/        # MusicService, NearbyShareManager, BackupManager, EQ
+│   └── worker/         # AutoScanWorker, MixGeneratorWorker
 ├── di/                 # Hilt modules
 ├── domain/
 │   └── usecase/        # WaveformExtractor, ReplayGainProcessor, TagEditor, MediaSyncWorker
 ├── presentation/
 │   ├── navigation/     # Compose NavGraph
-│   ├── screens/        # Player, Library, Settings, Lyrics, Folders, Setup
-│   ├── viewmodel/      # PlayerViewModel, LibraryViewModel, SettingsViewModel
+│   ├── screens/        # Player, Library, Settings, Lyrics, Folders, Statistics, Setup, Share
+│   ├── viewmodel/      # PlayerViewModel, LibraryViewModel, SettingsViewModel, and more
 │   └── components/     # Shared Compose components
 └── ui/
     ├── glancewidget/   # Home screen widget
