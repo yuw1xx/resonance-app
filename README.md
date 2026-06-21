@@ -131,8 +131,8 @@ Resonance is a powerful local music player built entirely with Kotlin and Jetpac
 ### Build
 
 ```bash
-git clone https://github.com/yuw1xx/resonance.git
-cd resonance
+git clone https://github.com/yuw1xx/resonance-app.git
+cd resonance-app
 ./gradlew assembleDebug
 ```
 
