@@ -11,7 +11,9 @@ import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.model.RepeatMode
 import dev.yuwixx.resonance.data.model.SortOrder
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -95,6 +97,10 @@ class ResonancePreferences @Inject constructor(
         val MALOJA_ENABLED    = booleanPreferencesKey("maloja_enabled")
         val MALOJA_SERVER_URL = stringPreferencesKey("maloja_server_url")
         val MALOJA_API_KEY    = stringPreferencesKey("maloja_api_key")
+
+        val REMOTE_SHARE_SERVER_URL   = stringPreferencesKey("remote_share_server_url")
+        val REMOTE_SHARE_UPLOAD_TOKEN = stringPreferencesKey("remote_share_upload_token")
+        val DEVICE_ID                 = stringPreferencesKey("device_id")
 
         val LAST_FM_ENABLED = booleanPreferencesKey("last_fm_enabled")
         val LAST_FM_NOW_PLAYING = booleanPreferencesKey("last_fm_now_playing")
@@ -432,6 +438,21 @@ class ResonancePreferences @Inject constructor(
     suspend fun setMalojaEnabled(v: Boolean)  { ds.edit { it[MALOJA_ENABLED]    = v } }
     suspend fun setMalojaServerUrl(v: String) { ds.edit { it[MALOJA_SERVER_URL] = v } }
     suspend fun setMalojaApiKey(v: String)    { ds.edit { it[MALOJA_API_KEY]    = v } }
+
+    val remoteShareServerUrl: Flow<String>   = ds.data.map { it[REMOTE_SHARE_SERVER_URL] ?: "" }
+    val remoteShareUploadToken: Flow<String> = ds.data.map { it[REMOTE_SHARE_UPLOAD_TOKEN] ?: "" }
+    suspend fun setRemoteShareServerUrl(v: String)   { ds.edit { it[REMOTE_SHARE_SERVER_URL] = v } }
+    suspend fun setRemoteShareUploadToken(v: String) { ds.edit { it[REMOTE_SHARE_UPLOAD_TOKEN] = v } }
+
+    // Anonymous per-install identifier, sent to the relay server so it can rate-limit or
+    // ban per-device without any login. Never surfaced in the UI.
+    suspend fun getOrCreateDeviceId(): String {
+        val existing = ds.data.map { it[DEVICE_ID] }.first()
+        if (!existing.isNullOrBlank()) return existing
+        val generated = UUID.randomUUID().toString()
+        ds.edit { it[DEVICE_ID] = generated }
+        return generated
+    }
 
     val lastFmUsername: Flow<String?> = ds.data.map { it[LAST_FM_USERNAME] }
     val lastFmSessionKey: Flow<String?> = ds.data.map { it[LAST_FM_SESSION_KEY] }

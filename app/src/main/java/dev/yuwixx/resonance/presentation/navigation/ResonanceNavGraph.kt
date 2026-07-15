@@ -295,8 +295,10 @@ fun ResonanceNavGraph(
                     val toIndex   = navItems.indexOfFirst { it.screen.route == toRoute }
 
                     if (fromIndex != -1 && toIndex != -1) {
-                        // Fade Through: clean crossfade, no scale (scale feels like zooming)
-                        fadeIn(tween(220, easing = EmphasizedDecelerate))
+                        // Fade Through: crossfade with a subtle scale-up so the swap
+                        // reads as motion even between screens sharing the same background.
+                        fadeIn(tween(220, easing = EmphasizedDecelerate)) +
+                            scaleIn(tween(220, easing = EmphasizedDecelerate), initialScale = 0.94f)
                     } else {
                         // Shared Axis X: slide from right + fade in
                         slideInHorizontally(tween(480, easing = EmphasizedDecelerate)) { (it * 0.2f).toInt() } +
@@ -310,8 +312,10 @@ fun ResonanceNavGraph(
                     val toIndex   = navItems.indexOfFirst { it.screen.route == toRoute }
 
                     if (fromIndex != -1 && toIndex != -1) {
-                        // Fade Through: fade out slightly before new screen fades in
-                        fadeOut(tween(160, easing = EmphasizedAccelerate))
+                        // Fade Through: fade out slightly before new screen fades in,
+                        // scaling down a touch to sell the "through" depth motion.
+                        fadeOut(tween(160, easing = EmphasizedAccelerate)) +
+                            scaleOut(tween(160, easing = EmphasizedAccelerate), targetScale = 1.04f)
                     } else {
                         // Shared Axis X: slide to left + fade out
                         slideOutHorizontally(tween(360, easing = EmphasizedAccelerate)) { -(it * 0.2f).toInt() } +
@@ -593,8 +597,8 @@ fun ResonanceNavGraph(
                 ReceiveSheet(
                     uri       = uri,
                     onDismiss = onReceiveDismiss,
-                    onPlayNow = { song ->
-                        playerViewModel.play(listOf(song), 0)
+                    onPlayNow = { songs ->
+                        playerViewModel.play(songs, 0)
                         navController.navigate(Screen.Player.route)
                     },
                 )

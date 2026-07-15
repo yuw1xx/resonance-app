@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -60,10 +61,6 @@ import dev.yuwixx.resonance.presentation.navigation.Screen
 import dev.yuwixx.resonance.ui.theme.PresetColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private val Emphasized = CubicBezierEasing(0.2f, 0.0f, 0f, 1.0f)
-private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
-private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -102,71 +99,80 @@ fun SongsScreen(
 
     Scaffold(
         topBar = {
-            if (isSelectionMode) {
-                TopAppBar(
-                    title = { Text("${selectedSongs.size} selected") },
-                    navigationIcon = {
-                        IconButton(onClick = { selectedSongs = emptySet() }) {
-                            Icon(Icons.Rounded.Close, "Cancel")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { selectedSongs = songs.toSet() }) {
-                            Icon(Icons.Rounded.SelectAll, "Select All")
-                        }
-                        IconButton(onClick = {
-                            if (selectedSongs.size == 1) {
-                                shareViewModel.preselectSong(selectedSongs.first())
-                            } else {
-                                shareViewModel.preselectSong(null)
+            AnimatedContent(
+                targetState = isSelectionMode,
+                transitionSpec = {
+                    (slideInVertically(tween(500, easing = EmphasizedDecelerate)) { -it / 3 } +
+                        fadeIn(tween(500, delayMillis = 50, easing = EmphasizedDecelerate)))
+                        .togetherWith(
+                            slideOutVertically(tween(400, easing = EmphasizedAccelerate)) { -it / 3 } +
+                                fadeOut(tween(200, easing = EmphasizedAccelerate))
+                        )
+                },
+                label = "songs_topbar",
+            ) { selectionMode ->
+                if (selectionMode) {
+                    TopAppBar(
+                        title = { Text("${selectedSongs.size} selected") },
+                        navigationIcon = {
+                            IconButton(onClick = { selectedSongs = emptySet() }) {
+                                Icon(Icons.Rounded.Close, "Cancel")
                             }
-                            showShareSheet = true
-                        }) {
-                            Icon(Icons.Rounded.Share, "Share")
-                        }
-                        IconButton(onClick = { showAddToPlaylistDialog = true }) {
-                            Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "Add to Playlist")
-                        }
-                        IconButton(onClick = {
-                            selectedSongs.forEach { playerViewModel.addToQueueEnd(it) }
-                            selectedSongs = emptySet()
-                        }) {
-                            Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Add to Queue")
-                        }
-                        IconButton(onClick = {
-                            selectedSongs.forEach { playerViewModel.addToQueueNext(it) }
-                            selectedSongs = emptySet()
-                        }) {
-                            Icon(Icons.Rounded.SkipNext, "Play Next")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    ),
-                )
-            } else {
-                LargeTopAppBar(
-                    title = { Text("Songs", fontWeight = FontWeight.Bold) },
-                    actions = {
-                        IconButton(onClick = onSearchClick) {
-                            Icon(Icons.Rounded.Search, "Search")
-                        }
-                        IconButton(onClick = { libraryViewModel.syncLibrary(force = true) }) {
-                            if (isSyncing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            } else {
-                                Icon(Icons.Rounded.Refresh, "Refresh")
+                        },
+                        actions = {
+                            IconButton(onClick = { selectedSongs = songs.toSet() }) {
+                                Icon(Icons.Rounded.SelectAll, "Select All")
                             }
-                        }
-                    },
-                    colors = TopAppBarDefaults.largeTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    ),
-                )
+                            IconButton(onClick = {
+                                shareViewModel.preselectSongs(selectedSongs.toList())
+                                showShareSheet = true
+                            }) {
+                                Icon(Icons.Rounded.Share, "Share")
+                            }
+                            IconButton(onClick = { showAddToPlaylistDialog = true }) {
+                                Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "Add to Playlist")
+                            }
+                            IconButton(onClick = {
+                                selectedSongs.forEach { playerViewModel.addToQueueEnd(it) }
+                                selectedSongs = emptySet()
+                            }) {
+                                Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Add to Queue")
+                            }
+                            IconButton(onClick = {
+                                selectedSongs.forEach { playerViewModel.addToQueueNext(it) }
+                                selectedSongs = emptySet()
+                            }) {
+                                Icon(Icons.Rounded.SkipNext, "Play Next")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        ),
+                    )
+                } else {
+                    TopAppBar(
+                        title = {},
+                        actions = {
+                            IconButton(onClick = onSearchClick) {
+                                Icon(Icons.Rounded.Search, "Search")
+                            }
+                            IconButton(onClick = { libraryViewModel.syncLibrary(force = true) }) {
+                                if (isSyncing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                } else {
+                                    Icon(Icons.Rounded.Refresh, "Refresh")
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                        ),
+                    )
+                }
             }
         },
     ) { padding ->
@@ -190,9 +196,11 @@ fun SongsScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 80.dp),
                     ) {
+                    item { BigScreenTitle("Songs") }
                     items(songs, key = { it.id }) { song ->
                         SongCard(
                             song = song,
+                            modifier = Modifier.animateItem(),
                             isPlaying = currentSong?.id == song.id,
                             isSelected = selectedSongs.contains(song),
                             onClick = {
@@ -248,10 +256,10 @@ fun SongsScreen(
 
     if (showShareSheet) {
         ShareSheet(
-            viewModel   = shareViewModel,
-            currentSong = selectedSongs.firstOrNull(),
-            onDismiss   = { showShareSheet = false },
-            onPlayNow   = { receivedSong ->
+            viewModel    = shareViewModel,
+            currentSongs = selectedSongs.toList(),
+            onDismiss    = { showShareSheet = false },
+            onPlayNow    = { receivedSong ->
                 playerViewModel.play(listOf(receivedSong), 0)
                 onNavigateToPlayer()
                 showShareSheet = false
@@ -439,15 +447,15 @@ fun AlbumsScreen(
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
-                title = { Text("Albums", fontWeight = FontWeight.Bold) },
+            TopAppBar(
+                title = {},
                 actions = {
                     IconButton(onClick = onSearchClick) {
                         Icon(Icons.Rounded.Search, "Search")
                     }
                 },
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
                 ),
             )
         }
@@ -471,8 +479,9 @@ fun AlbumsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
+                item(span = { GridItemSpan(maxLineSpan) }) { BigScreenTitle("Albums") }
                 items(albums, key = { it.id }) { album ->
-                    AlbumCard(album = album, onClick = { onAlbumClick(album) })
+                    AlbumCard(album = album, onClick = { onAlbumClick(album) }, modifier = Modifier.animateItem())
                 }
             }
             }
@@ -481,9 +490,9 @@ fun AlbumsScreen(
 }
 
 @Composable
-fun AlbumCard(album: Album, onClick: () -> Unit) {
+fun AlbumCard(album: Album, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
@@ -526,15 +535,15 @@ fun ArtistsScreen(
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
-                title = { Text("Artists", fontWeight = FontWeight.Bold) },
+            TopAppBar(
+                title = {},
                 actions = {
                     IconButton(onClick = onSearchClick) {
                         Icon(Icons.Rounded.Search, "Search")
                     }
                 },
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
                 ),
             )
         }
@@ -555,13 +564,14 @@ fun ArtistsScreen(
                     top = padding.calculateTopPadding(), bottom = 80.dp
                 ),
             ) {
+                item { BigScreenTitle("Artists") }
                 items(artists, key = { it.name }) { artist ->
                     var imageUrl by remember(artist.name) { mutableStateOf<String?>(null) }
                     LaunchedEffect(artist.name, fetchImages) {
                         imageUrl = if (fetchImages) libraryViewModel.getArtistArtworkUrl(artist.name) else null
                     }
                     ListItem(
-                        modifier = Modifier.clickable { onArtistClick(artist) },
+                        modifier = Modifier.animateItem().clickable { onArtistClick(artist) },
                         headlineContent = { Text(artist.name, fontWeight = FontWeight.SemiBold) },
                         supportingContent = { Text("${artist.songCount} songs · ${artist.albumCount} albums") },
                         leadingContent = {
@@ -609,15 +619,15 @@ fun PlaylistsScreen(
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
-                title = { Text("Playlists", fontWeight = FontWeight.Bold) },
+            TopAppBar(
+                title = {},
                 actions = {
                     IconButton(onClick = { showCreateDialog = true }) {
                         Icon(Icons.Rounded.Add, "New Playlist")
                     }
                 },
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
                 ),
             )
         }
@@ -648,8 +658,9 @@ fun PlaylistsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
+                item(span = { GridItemSpan(maxLineSpan) }) { BigScreenTitle("Playlists") }
                 items(playlists, key = { it.id }) { playlist ->
-                    PlaylistCard(playlist = playlist, onClick = { onPlaylistClick(playlist) })
+                    PlaylistCard(playlist = playlist, onClick = { onPlaylistClick(playlist) }, modifier = Modifier.animateItem())
                 }
             }
         }
@@ -667,9 +678,9 @@ fun PlaylistsScreen(
 }
 
 @Composable
-fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
+fun PlaylistCard(playlist: Playlist, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
@@ -1133,7 +1144,7 @@ fun PlaylistDetailScreen(
                             )
                             DropdownMenuItem(
                                 text = { Text("Sort by…") },
-                                leadingIcon = { Icon(Icons.Rounded.Sort, null) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Sort, null) },
                                 onClick = { showOverflowMenu = false; showSortDialog = true }
                             )
                             DropdownMenuItem(
@@ -1664,21 +1675,10 @@ fun LikedSongsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Column {
-                        Text("Liked Songs", fontWeight = FontWeight.Bold)
-                        if (likedSongs.isNotEmpty()) {
-                            Text(
-                                "${likedSongs.size} songs",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                },
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Rounded.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                     }
                 },
                 actions = {
@@ -1696,7 +1696,7 @@ fun LikedSongsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    containerColor = Color.Transparent,
                 ),
             )
         },
@@ -1743,14 +1743,32 @@ fun LikedSongsScreen(
                 contentPadding = padding,
                 modifier = Modifier.fillMaxSize(),
             ) {
+                item {
+                    Column {
+                        BigScreenTitle("Liked Songs")
+                        Text(
+                            "${likedSongs.size} songs",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        )
+                    }
+                }
                 itemsIndexed(likedSongs, key = { _, s -> s.id }) { index, song ->
+                    // animateFloatAsState only animates on a target *change* — seeding it with
+                    // 1f from the first frame meant there was never a lower value to animate
+                    // from, so this silently never played. Start below target, then flip once
+                    // composed so it genuinely animates in.
+                    var animationStarted by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { animationStarted = true }
                     val animatedAlpha by animateFloatAsState(
-                        targetValue = 1f,
+                        targetValue = if (animationStarted) 1f else 0f,
                         animationSpec = tween(500, delayMillis = (index * 40).coerceAtMost(400), easing = EmphasizedDecelerate),
                         label = "item_alpha_$index",
                     )
                     val animatedScale by animateFloatAsState(
-                        targetValue = 1f,
+                        targetValue = if (animationStarted) 1f else 0.92f,
                         animationSpec = tween(500, delayMillis = (index * 40).coerceAtMost(400), easing = EmphasizedDecelerate),
                         label = "item_scale_$index",
                     )
@@ -1899,13 +1917,7 @@ fun SearchScreen(
                 ) {
                     if (filteredArtists.isNotEmpty()) {
                         item {
-                            Text(
-                                "Artists",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            )
+                            AppSectionHeader("Artists", Icons.Rounded.Person)
                         }
                         items(filteredArtists, key = { it.name }) { artist ->
                             ListItem(
@@ -1936,13 +1948,7 @@ fun SearchScreen(
 
                     if (filteredAlbums.isNotEmpty()) {
                         item {
-                            Text(
-                                "Albums",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            )
+                            AppSectionHeader("Albums", Icons.Rounded.Album)
                         }
                         items(filteredAlbums, key = { it.id }) { album ->
                             ListItem(
@@ -1960,7 +1966,7 @@ fun SearchScreen(
                                         contentDescription = album.title,
                                         modifier = Modifier
                                             .size(48.dp)
-                                            .clip(RoundedCornerShape(6.dp)),
+                                            .clip(RoundedCornerShape(12.dp)),
                                     )
                                 },
                                 modifier = Modifier.clickable { onAlbumClick(album) },
@@ -1970,13 +1976,7 @@ fun SearchScreen(
 
                     if (filteredSongs.isNotEmpty()) {
                         item {
-                            Text(
-                                "Songs",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            )
+                            AppSectionHeader("Songs", Icons.Rounded.MusicNote)
                         }
                         itemsIndexed(filteredSongs, key = { _, s -> s.id }) { index, song ->
                             SongCard(
@@ -2026,7 +2026,7 @@ fun TagEditorScreen(
             TopAppBar(
                 title = { Text("Edit Tags") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back") }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
                 },
                 actions = {
                     TextButton(

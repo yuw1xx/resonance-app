@@ -3,6 +3,8 @@ package dev.yuwixx.resonance.presentation.screens
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -23,9 +26,6 @@ import dev.yuwixx.resonance.presentation.components.*
 import dev.yuwixx.resonance.presentation.navigation.Screen
 import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
-
-private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
-private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,10 +103,19 @@ fun HomeScreen(
             // Your Mixes — weekly auto-generated playlists (empty when location is "PLAYLISTS")
             if (autoMixes.isNotEmpty()) {
                 item {
-                    SectionHeader(
+                    AppSectionHeader(
                         title = "Your Mixes",
                         icon = Icons.Rounded.AutoAwesome,
-                        onRefresh = { libraryViewModel.refreshMixes() },
+                        trailing = {
+                            IconButton(onClick = { libraryViewModel.refreshMixes() }, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    Icons.Rounded.Refresh,
+                                    contentDescription = "Refresh mixes",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        },
                     )
                 }
                 item {
@@ -127,7 +136,7 @@ fun HomeScreen(
             // Most Played
             if (showMostPlayed && mostPlayed.isNotEmpty()) {
                 item {
-                    SectionHeader(
+                    AppSectionHeader(
                         title = "Most Played",
                         icon = Icons.AutoMirrored.Rounded.TrendingUp,
                     )
@@ -152,7 +161,7 @@ fun HomeScreen(
             // Recently Added
             if (showRecentlyAdded && recentlyAdded.isNotEmpty()) {
                 item {
-                    SectionHeader(
+                    AppSectionHeader(
                         title = "Recently Added",
                         icon = Icons.Rounded.FiberNew,
                     )
@@ -185,10 +194,19 @@ private fun ResumeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        label = "resume_card_press",
+    )
     Card(
         onClick = onClick,
+        interactionSource = interactionSource,
         modifier = modifier
             .fillMaxWidth()
+            .scale(pressScale)
             .preferredFrameRateSafe(120f),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
@@ -242,47 +260,6 @@ private fun ResumeCard(
     }
 }
 
-@Composable
-private fun SectionHeader(
-    title: String,
-    icon: ImageVector,
-    isLoading: Boolean = false,
-    onRefresh: (() -> Unit)? = null,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            modifier = Modifier.size(24.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            title,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-        } else if (onRefresh != null) {
-            IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Rounded.Refresh,
-                    contentDescription = "Refresh mixes",
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
 
 @Composable
 private fun MixCard(
@@ -297,9 +274,17 @@ private fun MixCard(
         MixType.RECENTLY_LOVED -> "What you've been playing this week"
         null                   -> ""
     }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        label = "mix_card_press",
+    )
     Card(
         onClick = onClick,
-        modifier = Modifier.width(200.dp),
+        interactionSource = interactionSource,
+        modifier = Modifier.width(200.dp).scale(pressScale),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -349,9 +334,17 @@ private fun CompactArtworkCard(
     artworkUri: Any?,
     onClick: () -> Unit,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        label = "compact_card_press",
+    )
     Card(
         onClick = onClick,
-        modifier = Modifier.width(160.dp),
+        interactionSource = interactionSource,
+        modifier = Modifier.width(160.dp).scale(pressScale),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,

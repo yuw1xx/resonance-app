@@ -18,13 +18,16 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.mediarouter.media.MediaRouter
@@ -87,6 +90,109 @@ fun MixArtwork(
 }
 internal val EaseInOutSine = CubicBezierEasing(0.37f, 0f, 0.63f, 1f)
 
+/** Shared "icon + title + optional trailing action" header used to introduce a section of
+ *  content (a horizontal-scroll row, a settings group, a card). One look for this concept
+ *  across the whole app instead of every screen inventing its own. */
+@Composable
+fun AppSectionHeader(
+    title: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    trailing: @Composable (() -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        trailing?.invoke()
+    }
+}
+
+/** Shared tonal card wrapping a labeled section of related controls — the grouping unit for
+ *  "several controls that belong together" (used by Resonance Share's Nearby/Internet Link
+ *  sections, and retrofitted onto Settings/Equalizer to replace ungrouped flat lists). */
+@Composable
+fun SectionCard(
+    icon: ImageVector?,
+    title: String,
+    modifier: Modifier = Modifier,
+    titleStyle: TextStyle = MaterialTheme.typography.titleLarge,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) {
+                    Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
+                    Spacer(Modifier.width(10.dp))
+                }
+                Text(title, style = titleStyle, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(12.dp))
+            content()
+        }
+    }
+}
+
+/** Divider between two logical groups sharing one [SectionCard] — use with [SectionSubHeader]
+ *  to join related sub-sections into a single continuous card instead of stacking separate
+ *  cards with a gap between them. */
+@Composable
+fun SectionDivider(modifier: Modifier = Modifier) {
+    HorizontalDivider(
+        modifier = modifier.padding(vertical = 12.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+    )
+}
+
+/** Small label introducing a sub-group within a [SectionCard], paired with [SectionDivider]. */
+@Composable
+fun SectionSubHeader(title: String, modifier: Modifier = Modifier) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(bottom = 8.dp),
+    )
+}
+
+/** Big, centered, bold screen title meant to be the first item in a scrolling list — it
+ *  scrolls away with the content instead of staying pinned behind a filled app-bar
+ *  background. Pair with a transparent TopAppBar holding just the actions/back button. */
+@Composable
+fun BigScreenTitle(title: String, modifier: Modifier = Modifier) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.displaySmall,
+        fontWeight = FontWeight.Bold,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 20.dp),
+    )
+}
+
 internal const val M3_SHORT2  = 100
 internal const val M3_SHORT4  = 200
 internal const val M3_MEDIUM2 = 300
@@ -142,7 +248,7 @@ fun MaterialYou3Seekbar(
     val targetProgress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
-        animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing),
         label = "m3_progress",
     )
 
@@ -364,6 +470,20 @@ fun SongCard(
 
     val appearanceConfig = LocalAppearanceConfig.current
 
+    val targetColor = when {
+        isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+        isPlaying -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+        else -> Color.Transparent
+    }
+    val animatedColor by animateColorAsState(
+        targetValue = targetColor,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "song_color",
+    )
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -378,11 +498,7 @@ fun SongCard(
                     }
                 },
             ),
-        color = when {
-            isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-            isPlaying -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
-            else -> Color.Transparent
-        },
+        color = animatedColor,
         shape = RoundedCornerShape(16.dp),
     ) {
         Row(
@@ -631,9 +747,9 @@ fun MiniPlayer(
                 AnimatedContent(
                     targetState = song.title to song.displayArtist,
                     transitionSpec = {
-                        (fadeIn(tween(260, delayMillis = 60, easing = EmphasizedDecelerate)) +
-                            slideInVertically(tween(300, easing = EmphasizedDecelerate)) { (it * 0.12f).toInt() })
-                            .togetherWith(fadeOut(tween(110, easing = EmphasizedAccelerate)))
+                        (fadeIn(tween(280, delayMillis = 80, easing = EmphasizedDecelerate)) +
+                            slideInVertically(tween(320, easing = EmphasizedDecelerate)) { (it * 0.12f).toInt() })
+                            .togetherWith(fadeOut(tween(120, easing = EmphasizedAccelerate)))
                     },
                     label = "mini_song_info",
                     modifier = Modifier.weight(1f),
@@ -716,6 +832,7 @@ fun CastButton(modifier: Modifier = Modifier) {
     val castTint by animateColorAsState(
         targetValue = if (isCasting) MaterialTheme.colorScheme.primary
                       else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(200),
         label = "cast_tint",
     )
 
@@ -879,7 +996,7 @@ private fun CastRouteItem(route: MediaRouter.RouteInfo, onClick: () -> Unit) {
 
 private fun castDeviceIcon(route: MediaRouter.RouteInfo) = when (route.deviceType) {
     MediaRouter.RouteInfo.DEVICE_TYPE_TV -> Icons.Rounded.Tv
-    MediaRouter.RouteInfo.DEVICE_TYPE_SPEAKER -> Icons.Rounded.Speaker
+    MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER -> Icons.Rounded.Speaker
     else -> Icons.Rounded.Cast
 }
 

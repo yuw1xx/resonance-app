@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
 import android.media.audiofx.Equalizer
+import android.os.Build
 import android.os.Bundle
 import androidx.media3.common.*
 import androidx.media3.common.util.UnstableApi
@@ -149,6 +150,10 @@ class MusicService : MediaLibraryService() {
                     }
                 }
             }
+
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                setupEqualizer()
+            }
         })
     }
 
@@ -187,6 +192,8 @@ class MusicService : MediaLibraryService() {
         try {
             val sessionId = player.audioSessionId
             if (sessionId == 0) return
+
+            equalizer?.release()
 
             val eq = Equalizer(0, sessionId)
             equalizer = eq
@@ -491,7 +498,11 @@ class MusicService : MediaLibraryService() {
             addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
             addAction(AudioManager.ACTION_HEADSET_PLUG)
         }
-        registerReceiver(headphonesReceiver, filter)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(headphonesReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(headphonesReceiver, filter)
+        }
     }
 
     // ─── Queue Persistence ───

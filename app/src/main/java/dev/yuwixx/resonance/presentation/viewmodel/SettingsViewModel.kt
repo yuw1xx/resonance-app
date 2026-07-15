@@ -241,6 +241,19 @@ class SettingsViewModel @Inject constructor(
     val malojaServerUrl: StateFlow<String> = malojaRepository.serverUrl
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
+    val remoteShareServerUrl: StateFlow<String> = prefs.remoteShareServerUrl
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    val remoteShareUploadToken: StateFlow<String> = prefs.remoteShareUploadToken
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
+    fun saveRemoteShareConfig(serverUrl: String, uploadToken: String) {
+        viewModelScope.launch {
+            prefs.setRemoteShareServerUrl(serverUrl.trimEnd('/'))
+            prefs.setRemoteShareUploadToken(uploadToken)
+        }
+    }
+
     sealed class MalojaTestState {
         data object Idle : MalojaTestState()
         data object Loading : MalojaTestState()

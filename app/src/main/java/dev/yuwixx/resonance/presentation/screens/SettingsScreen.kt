@@ -16,7 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Login
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -44,6 +46,10 @@ import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.repository.LastFmAuthState
 import dev.yuwixx.resonance.data.repository.NavidromeConnectionState
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
+import dev.yuwixx.resonance.presentation.components.BigScreenTitle
+import dev.yuwixx.resonance.presentation.components.SectionCard
+import dev.yuwixx.resonance.presentation.components.SectionDivider
+import dev.yuwixx.resonance.presentation.components.SectionSubHeader
 import dev.yuwixx.resonance.presentation.navigation.navItems
 import dev.yuwixx.resonance.presentation.viewmodel.BackupUiState
 import dev.yuwixx.resonance.presentation.viewmodel.BackupViewModel
@@ -198,6 +204,8 @@ fun SettingsScreen(
     val malojaServerUrl by settingsViewModel.malojaServerUrl.collectAsState()
     val malojaTestState by settingsViewModel.malojaTestState.collectAsState()
     val malojaPending by settingsViewModel.malojaPending.collectAsState()
+    val remoteShareServerUrl by settingsViewModel.remoteShareServerUrl.collectAsState()
+    val remoteShareUploadToken by settingsViewModel.remoteShareUploadToken.collectAsState()
     val partyMode by settingsViewModel.partyMode.collectAsState()
     val currentMusicSource by settingsViewModel.musicSource.collectAsState()
     val navidromeServerUrl by settingsViewModel.navidromeServerUrl.collectAsState()
@@ -207,8 +215,8 @@ fun SettingsScreen(
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
-                title = { Text(currentCategory.title, fontWeight = FontWeight.Bold) },
+            TopAppBar(
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = {
                         if (currentCategory == SettingsCategory.Main) onBack()
@@ -217,8 +225,8 @@ fun SettingsScreen(
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                     }
                 },
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
                 ),
             )
         },
@@ -254,6 +262,7 @@ fun SettingsScreen(
                 ),
                 modifier = Modifier.fillMaxSize()
             ) {
+                item { BigScreenTitle(category.title) }
                 when (category) {
                     SettingsCategory.Main -> {
                         // App header card
@@ -446,15 +455,23 @@ fun SettingsScreen(
                         item {
                             var showDisableWarning by remember { mutableStateOf(false) }
 
-                            SegmentedSettingsItem(
-                                title = "Check for Updates",
-                                options = listOf("Launch" to "LAUNCH", "Daily" to "DAILY", "Weekly" to "WEEKLY", "Off" to "DISABLED"),
-                                selected = updateFreq,
-                                onSelect = {
-                                    if (it == "DISABLED") showDisableWarning = true
-                                    else settingsViewModel.setUpdateFrequency(it)
-                                },
-                            )
+                            SectionCard(icon = Icons.Rounded.SystemUpdate, title = "Updates", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                SegmentedSettingsItem(
+                                    title = "Check for Updates",
+                                    options = listOf("Launch" to "LAUNCH", "Daily" to "DAILY", "Weekly" to "WEEKLY", "Off" to "DISABLED"),
+                                    selected = updateFreq,
+                                    onSelect = {
+                                        if (it == "DISABLED") showDisableWarning = true
+                                        else settingsViewModel.setUpdateFrequency(it)
+                                    },
+                                )
+                                SettingsTextItem(
+                                    title = "Check Now",
+                                    subtitle = "Current version: v$APP_VERSION",
+                                    icon = Icons.Rounded.Update,
+                                    onClick = { settingsViewModel.checkForUpdates(APP_VERSION, isManual = true) }
+                                )
+                            }
 
                             if (showDisableWarning) {
                                 AlertDialog(
@@ -477,200 +494,143 @@ fun SettingsScreen(
                                 )
                             }
                         }
-
-                        item {
-                            SettingsTextItem(
-                                title = "Check Now",
-                                subtitle = "Current version: v$APP_VERSION",
-                                icon = Icons.Rounded.Update,
-                                onClick = { settingsViewModel.checkForUpdates(APP_VERSION, isManual = true) }
-                            )
-                        }
                     }
 
                     SettingsCategory.Appearance -> {
                         item {
-                            Text(
-                                "Color & Theme",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
-                            )
-                        }
-                        settingsToggle("System Dynamic Color", "Use Android 12+ wallpaper colours", dynamicColor) {
-                            scope.launch { prefs.setDynamicColorEnabled(it) }
-                        }
-
-                        if (!dynamicColor) {
-                            item {
-                                ThemeColorPicker(
-                                    current = presetColorInt,
-                                    onPick = { scope.launch { prefs.setPresetColor(it) } }
-                                )
-                            }
-                        }
-
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Dark Theme",
-                                options = listOf("System" to "SYSTEM", "Light" to "LIGHT", "Dark" to "DARK"),
-                                selected = darkTheme,
-                                onSelect = { scope.launch { prefs.setDarkTheme(it) } },
-                            )
-                        }
-
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Seekbar Style",
-                                options = listOf("Standard" to "STANDARD", "Waveform" to "WAVEFORM", "Material You 3" to "MATERIAL_YOU_3"),
-                                selected = seekbarStyle,
-                                onSelect = { scope.launch { prefs.setSeekbarStyle(it) } },
-                            )
-                        }
-                        settingsToggle("Blur Background", "Artwork-tinted blurred backdrop in player", blurBackground) {
-                            scope.launch { prefs.setBlurArtworkBackground(it) }
-                        }
-                        if (blurBackground) {
-                            item {
-                                SettingsSliderItem(
-                                    title = "Blur Intensity",
-                                    value = blurStrength,
-                                    range = 0.1f..0.7f,
-                                    label = "${(blurStrength * 100).roundToInt()}%",
-                                    onValueChange = { scope.launch { prefs.setBlurStrength(it) } },
-                                )
-                            }
-                        }
-                        settingsToggle("Artwork Animation", "Scale artwork on play/pause", artworkAnimation) {
-                            scope.launch { prefs.setArtworkAnimation(it) }
-                        }
-                        settingsToggle("Haptic Feedback", "Vibrate on seek and long-press", hapticFeedback) {
-                            scope.launch { prefs.setHapticFeedback(it) }
-                        }
-                        settingsToggle("Show Bitrate & Format", "Display audio quality badge in player", showBitrateInfo) {
-                            scope.launch { prefs.setShowBitrateInfo(it) }
-                        }
-                        item {
-                            SettingsSliderItem(
-                                title = "Corner Radius",
-                                value = cornerRadius.toFloat(),
-                                range = 0f..40f,
-                                label = "${cornerRadius}dp",
-                                steps = 40,
-                                onValueChange = { scope.launch { prefs.setCornerRadius(it.toInt()) } },
-                            )
-                        }
-                        item {
-                            SettingsSliderItem(
-                                title = "Album Grid Columns",
-                                value = albumGridCols.toFloat(),
-                                range = 2f..4f,
-                                label = "$albumGridCols columns",
-                                steps = 1,
-                                onValueChange = { scope.launch { prefs.setAlbumGridColumns(it.toInt()) } },
-                            )
-                        }
-
-                        settingsToggle("AMOLED Black Mode", "True black backgrounds for OLED displays", amoledMode) {
-                            scope.launch { prefs.setAmoledBlackTheme(it) }
-                        }
-
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Player Artwork Shape",
-                                options = listOf("Rounded" to "ROUNDED", "Square" to "SQUARE", "Circle" to "CIRCLE"),
-                                selected = playerArtworkShape,
-                                onSelect = { scope.launch { prefs.setPlayerArtworkShape(it) } },
-                            )
-                        }
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Seekbar Colour",
-                                options = listOf("Primary" to "PRIMARY", "Secondary" to "SECONDARY", "Tertiary" to "TERTIARY"),
-                                selected = seekbarColor,
-                                onSelect = { scope.launch { prefs.setSeekbarColor(it) } },
-                            )
-                        }
-
-                        item {
-                            Text(
-                                "Song Lists",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
-                            )
-                        }
-                        settingsToggle("Compact Mode", "Reduce row height for a denser list view", compactList) {
-                            scope.launch { prefs.setCompactListMode(it) }
-                        }
-                        settingsToggle("Show Duration in List", "Display track length next to each song", showDurationList) {
-                            scope.launch { prefs.setShowDurationInList(it) }
-                        }
-                        settingsToggle("Show Album in List", "Display album name below artist in song rows", showAlbumInList) {
-                            scope.launch { prefs.setShowAlbumInList(it) }
-                        }
-                        item {
-                            SegmentedSettingsItem(
-                                title = "List Artwork Size",
-                                options = listOf("Small" to "SMALL", "Medium" to "MEDIUM", "Large" to "LARGE"),
-                                selected = listArtworkSize,
-                                onSelect = { scope.launch { prefs.setListArtworkSize(it) } },
-                            )
-                        }
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Default Songs Sort",
-                                options = listOf("Title" to "TITLE", "Artist" to "ARTIST", "Album" to "ALBUM", "Added" to "ADDED"),
-                                selected = defaultSongsSort,
-                                onSelect = { scope.launch { prefs.setDefaultSongsSort(it) } },
-                            )
-                        }
-                        item {
-                            SettingsSliderItem(
-                                title = "Playlist Grid Columns",
-                                value = playlistGridCols.toFloat(),
-                                range = 1f..4f,
-                                label = "$playlistGridCols ${if (playlistGridCols == 1) "column" else "columns"}",
-                                steps = 2,
-                                onValueChange = { scope.launch { prefs.setPlaylistGridColumns(it.toInt()) } },
-                            )
-                        }
-
-                        item {
-                            Text(
-                                "Navigation Bar",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
-                            )
-                        }
-                        settingsToggle("Floating Navigation Bar", "Pill-shaped bar that floats above the screen edge", floatingNavBar) {
-                            scope.launch { prefs.setFloatingNavBar(it) }
-                        }
-                        settingsToggle("Tinted Navigation Bar", "Apply surface tint to the bottom navigation bar", tintedNavBar) {
-                            scope.launch { prefs.setTintedNavBar(it) }
-                        }
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Tab Labels",
-                                options = listOf("Always" to "ALWAYS", "Selected" to "SELECTED", "Never" to "NEVER"),
-                                selected = navLabelVisibility,
-                                onSelect = { scope.launch { prefs.setNavLabelVisibility(it) } },
-                            )
-                        }
-
-                        item {
                             var showNavTabsDialog by remember { mutableStateOf(false) }
                             val visibleCount = navItems.count { it.screen.route !in hiddenNavTabs }
-                            SettingsTextItem(
-                                title = "Navigation Bar Tabs",
-                                subtitle = "$visibleCount of ${navItems.size} tabs shown",
-                                icon = Icons.Rounded.Tab,
-                                onClick = { showNavTabsDialog = true },
-                            )
+
+                            SectionCard(icon = Icons.Rounded.Palette, title = "Appearance", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                SectionSubHeader("Color & Theme")
+                                SettingsToggleRow("System Dynamic Color", "Use Android 12+ wallpaper colours", dynamicColor) {
+                                    scope.launch { prefs.setDynamicColorEnabled(it) }
+                                }
+                                if (!dynamicColor) {
+                                    ThemeColorPicker(
+                                        current = presetColorInt,
+                                        onPick = { scope.launch { prefs.setPresetColor(it) } }
+                                    )
+                                }
+                                SegmentedSettingsItem(
+                                    title = "Dark Theme",
+                                    options = listOf("System" to "SYSTEM", "Light" to "LIGHT", "Dark" to "DARK"),
+                                    selected = darkTheme,
+                                    onSelect = { scope.launch { prefs.setDarkTheme(it) } },
+                                )
+                                SegmentedSettingsItem(
+                                    title = "Seekbar Style",
+                                    options = listOf("Standard" to "STANDARD", "Waveform" to "WAVEFORM", "Material You 3" to "MATERIAL_YOU_3"),
+                                    selected = seekbarStyle,
+                                    onSelect = { scope.launch { prefs.setSeekbarStyle(it) } },
+                                )
+                                SettingsToggleRow("Blur Background", "Artwork-tinted blurred backdrop in player", blurBackground) {
+                                    scope.launch { prefs.setBlurArtworkBackground(it) }
+                                }
+                                if (blurBackground) {
+                                    SettingsSliderItem(
+                                        title = "Blur Intensity",
+                                        value = blurStrength,
+                                        range = 0.1f..0.7f,
+                                        label = "${(blurStrength * 100).roundToInt()}%",
+                                        onValueChange = { scope.launch { prefs.setBlurStrength(it) } },
+                                    )
+                                }
+                                SettingsToggleRow("Artwork Animation", "Scale artwork on play/pause", artworkAnimation) {
+                                    scope.launch { prefs.setArtworkAnimation(it) }
+                                }
+                                SettingsToggleRow("Haptic Feedback", "Vibrate on seek and long-press", hapticFeedback) {
+                                    scope.launch { prefs.setHapticFeedback(it) }
+                                }
+                                SettingsToggleRow("Show Bitrate & Format", "Display audio quality badge in player", showBitrateInfo) {
+                                    scope.launch { prefs.setShowBitrateInfo(it) }
+                                }
+                                SettingsSliderItem(
+                                    title = "Corner Radius",
+                                    value = cornerRadius.toFloat(),
+                                    range = 0f..40f,
+                                    label = "${cornerRadius}dp",
+                                    steps = 40,
+                                    onValueChange = { scope.launch { prefs.setCornerRadius(it.toInt()) } },
+                                )
+                                SettingsSliderItem(
+                                    title = "Album Grid Columns",
+                                    value = albumGridCols.toFloat(),
+                                    range = 2f..4f,
+                                    label = "$albumGridCols columns",
+                                    steps = 1,
+                                    onValueChange = { scope.launch { prefs.setAlbumGridColumns(it.toInt()) } },
+                                )
+                                SettingsToggleRow("AMOLED Black Mode", "True black backgrounds for OLED displays", amoledMode) {
+                                    scope.launch { prefs.setAmoledBlackTheme(it) }
+                                }
+                                SegmentedSettingsItem(
+                                    title = "Player Artwork Shape",
+                                    options = listOf("Rounded" to "ROUNDED", "Square" to "SQUARE", "Circle" to "CIRCLE"),
+                                    selected = playerArtworkShape,
+                                    onSelect = { scope.launch { prefs.setPlayerArtworkShape(it) } },
+                                )
+                                SegmentedSettingsItem(
+                                    title = "Seekbar Colour",
+                                    options = listOf("Primary" to "PRIMARY", "Secondary" to "SECONDARY", "Tertiary" to "TERTIARY"),
+                                    selected = seekbarColor,
+                                    onSelect = { scope.launch { prefs.setSeekbarColor(it) } },
+                                )
+
+                                SectionDivider()
+                                SectionSubHeader("Song Lists")
+                                SettingsToggleRow("Compact Mode", "Reduce row height for a denser list view", compactList) {
+                                    scope.launch { prefs.setCompactListMode(it) }
+                                }
+                                SettingsToggleRow("Show Duration in List", "Display track length next to each song", showDurationList) {
+                                    scope.launch { prefs.setShowDurationInList(it) }
+                                }
+                                SettingsToggleRow("Show Album in List", "Display album name below artist in song rows", showAlbumInList) {
+                                    scope.launch { prefs.setShowAlbumInList(it) }
+                                }
+                                SegmentedSettingsItem(
+                                    title = "List Artwork Size",
+                                    options = listOf("Small" to "SMALL", "Medium" to "MEDIUM", "Large" to "LARGE"),
+                                    selected = listArtworkSize,
+                                    onSelect = { scope.launch { prefs.setListArtworkSize(it) } },
+                                )
+                                SegmentedSettingsItem(
+                                    title = "Default Songs Sort",
+                                    options = listOf("Title" to "TITLE", "Artist" to "ARTIST", "Album" to "ALBUM", "Added" to "ADDED"),
+                                    selected = defaultSongsSort,
+                                    onSelect = { scope.launch { prefs.setDefaultSongsSort(it) } },
+                                )
+                                SettingsSliderItem(
+                                    title = "Playlist Grid Columns",
+                                    value = playlistGridCols.toFloat(),
+                                    range = 1f..4f,
+                                    label = "$playlistGridCols ${if (playlistGridCols == 1) "column" else "columns"}",
+                                    steps = 2,
+                                    onValueChange = { scope.launch { prefs.setPlaylistGridColumns(it.toInt()) } },
+                                )
+
+                                SectionDivider()
+                                SectionSubHeader("Navigation Bar")
+                                SettingsToggleRow("Floating Navigation Bar", "Pill-shaped bar that floats above the screen edge", floatingNavBar) {
+                                    scope.launch { prefs.setFloatingNavBar(it) }
+                                }
+                                SettingsToggleRow("Tinted Navigation Bar", "Apply surface tint to the bottom navigation bar", tintedNavBar) {
+                                    scope.launch { prefs.setTintedNavBar(it) }
+                                }
+                                SegmentedSettingsItem(
+                                    title = "Tab Labels",
+                                    options = listOf("Always" to "ALWAYS", "Selected" to "SELECTED", "Never" to "NEVER"),
+                                    selected = navLabelVisibility,
+                                    onSelect = { scope.launch { prefs.setNavLabelVisibility(it) } },
+                                )
+                                SettingsTextItem(
+                                    title = "Navigation Bar Tabs",
+                                    subtitle = "$visibleCount of ${navItems.size} tabs shown",
+                                    icon = Icons.Rounded.Tab,
+                                    onClick = { showNavTabsDialog = true },
+                                )
+                            }
+
                             if (showNavTabsDialog) {
                                 NavTabsDialog(
                                     hiddenNavTabs = hiddenNavTabs,
@@ -687,254 +647,248 @@ fun SettingsScreen(
 
                     SettingsCategory.Home -> {
                         item {
-                            Text(
-                                "Home Screen Sections",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
-                            )
-                        }
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Your Mixes",
-                                options = listOf("Home only" to "HOME", "Both" to "BOTH", "Playlists only" to "PLAYLISTS"),
-                                selected = mixesLocation,
-                                onSelect = { scope.launch { prefs.setMixesLocation(it) } },
-                            )
-                        }
-                        settingsToggle("Most Played", "Show your top tracks as a horizontal scroll row", homeShowMostPlayed) {
-                            scope.launch { prefs.setHomeShowMostPlayed(it) }
-                        }
-                        settingsToggle("Recently Added", "Show recently added songs as a horizontal scroll row", homeShowRecentlyAdded) {
-                            scope.launch { prefs.setHomeShowRecentlyAdded(it) }
-                        }
-                        if (homeShowRecentlyAdded) {
-                            item {
+                            SectionCard(icon = Icons.Rounded.Home, title = "Home Screen Sections", modifier = Modifier.padding(horizontal = 8.dp)) {
                                 SegmentedSettingsItem(
-                                    title = "Recently Added Count",
-                                    options = listOf("10" to "10", "20" to "20", "30" to "30", "50" to "50"),
-                                    selected = homeRecentlyAddedCount.toString(),
-                                    onSelect = { scope.launch { prefs.setHomeRecentlyAddedCount(it.toInt()) } },
+                                    title = "Your Mixes",
+                                    options = listOf("Home only" to "HOME", "Both" to "BOTH", "Playlists only" to "PLAYLISTS"),
+                                    selected = mixesLocation,
+                                    onSelect = { scope.launch { prefs.setMixesLocation(it) } },
                                 )
+                                SettingsToggleRow("Most Played", "Show your top tracks as a horizontal scroll row", homeShowMostPlayed) {
+                                    scope.launch { prefs.setHomeShowMostPlayed(it) }
+                                }
+                                SettingsToggleRow("Recently Added", "Show recently added songs as a horizontal scroll row", homeShowRecentlyAdded) {
+                                    scope.launch { prefs.setHomeShowRecentlyAdded(it) }
+                                }
+                                if (homeShowRecentlyAdded) {
+                                    SegmentedSettingsItem(
+                                        title = "Recently Added Count",
+                                        options = listOf("10" to "10", "20" to "20", "30" to "30", "50" to "50"),
+                                        selected = homeRecentlyAddedCount.toString(),
+                                        onSelect = { scope.launch { prefs.setHomeRecentlyAddedCount(it.toInt()) } },
+                                    )
+                                }
                             }
                         }
                     }
 
                     SettingsCategory.Player -> {
                         item {
-                            SegmentedSettingsItem(
-                                title = "Player Layout",
-                                options = listOf("Standard" to "STANDARD", "Big Artwork" to "ARTWORK_BIG", "Lyrics Focus" to "LYRICS_FOCUS"),
-                                selected = playerLayout,
-                                onSelect = { scope.launch { prefs.setPlayerLayout(it) } },
-                            )
-                        }
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Mini Player Style",
-                                options = listOf("Compact" to "COMPACT", "Card" to "CARD", "Floating" to "FLOATING"),
-                                selected = miniPlayerStyle,
-                                onSelect = { scope.launch { prefs.setMiniPlayerStyle(it) } },
-                            )
-                        }
-                        settingsToggle("Show Lyrics Button", "Display lyrics shortcut in player footer", showLyricsBtn) {
-                            scope.launch { prefs.setShowLyricsButton(it) }
-                        }
-                        item {
-                            SettingsSliderItem(
-                                title = "Lyrics Font Size",
-                                value = lyricsFontScale,
-                                range = 0.50f..1.75f,
-                                label = "${(lyricsFontScale * 100).roundToInt()}%",
-                                steps = 4,
-                                onValueChange = { newValue ->
-                                    val step = 0.25f
-                                    val rounded = (newValue / step).roundToInt() * step
-                                    scope.launch { prefs.setLyricsFontScale(rounded.coerceIn(0.50f, 1.75f)) }
-                                },
-                            )
-                        }
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Lyrics Alignment",
-                                options = listOf("Centered" to "CENTER", "Left" to "START"),
-                                selected = lyricAlignment,
-                                onSelect = { scope.launch { prefs.setLyricAlignment(it) } },
-                            )
-                        }
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Lyrics Line Spacing",
-                                options = listOf("Compact" to "COMPACT", "Normal" to "NORMAL", "Spacious" to "SPACIOUS"),
-                                selected = lyricsLineSpacing,
-                                onSelect = { scope.launch { prefs.setLyricsLineSpacing(it) } },
-                            )
-                        }
-                        settingsToggle("Show Remaining Time", "Display remaining duration instead of total on the right", showRemainingTime) {
-                            scope.launch { prefs.setShowRemainingTime(it) }
-                        }
-                        settingsToggle("Show Next Song", "Show upcoming track name below the seekbar", showNextSongInPlayer) {
-                            scope.launch { prefs.setShowNextSongInPlayer(it) }
-                        }
-                        settingsToggle("Show Equalizer Button", "Display equalizer shortcut in player footer", showEqualizerInPlayer) {
-                            scope.launch { prefs.setShowEqualizerInPlayer(it) }
-                        }
+                            SectionCard(icon = Icons.Rounded.PlayCircleOutline, title = "Player", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                SegmentedSettingsItem(
+                                    title = "Player Layout",
+                                    options = listOf("Standard" to "STANDARD", "Big Artwork" to "ARTWORK_BIG", "Lyrics Focus" to "LYRICS_FOCUS"),
+                                    selected = playerLayout,
+                                    onSelect = { scope.launch { prefs.setPlayerLayout(it) } },
+                                )
+                                SegmentedSettingsItem(
+                                    title = "Mini Player Style",
+                                    options = listOf("Compact" to "COMPACT", "Card" to "CARD", "Floating" to "FLOATING"),
+                                    selected = miniPlayerStyle,
+                                    onSelect = { scope.launch { prefs.setMiniPlayerStyle(it) } },
+                                )
+                                SettingsToggleRow("Show Lyrics Button", "Display lyrics shortcut in player footer", showLyricsBtn) {
+                                    scope.launch { prefs.setShowLyricsButton(it) }
+                                }
+                                SettingsSliderItem(
+                                    title = "Lyrics Font Size",
+                                    value = lyricsFontScale,
+                                    range = 0.50f..1.75f,
+                                    label = "${(lyricsFontScale * 100).roundToInt()}%",
+                                    steps = 4,
+                                    onValueChange = { newValue ->
+                                        val step = 0.25f
+                                        val rounded = (newValue / step).roundToInt() * step
+                                        scope.launch { prefs.setLyricsFontScale(rounded.coerceIn(0.50f, 1.75f)) }
+                                    },
+                                )
+                                SegmentedSettingsItem(
+                                    title = "Lyrics Alignment",
+                                    options = listOf("Centered" to "CENTER", "Left" to "START"),
+                                    selected = lyricAlignment,
+                                    onSelect = { scope.launch { prefs.setLyricAlignment(it) } },
+                                )
+                                SegmentedSettingsItem(
+                                    title = "Lyrics Line Spacing",
+                                    options = listOf("Compact" to "COMPACT", "Normal" to "NORMAL", "Spacious" to "SPACIOUS"),
+                                    selected = lyricsLineSpacing,
+                                    onSelect = { scope.launch { prefs.setLyricsLineSpacing(it) } },
+                                )
+                                SettingsToggleRow("Show Remaining Time", "Display remaining duration instead of total on the right", showRemainingTime) {
+                                    scope.launch { prefs.setShowRemainingTime(it) }
+                                }
+                                SettingsToggleRow("Show Next Song", "Show upcoming track name below the seekbar", showNextSongInPlayer) {
+                                    scope.launch { prefs.setShowNextSongInPlayer(it) }
+                                }
+                                SettingsToggleRow("Show Equalizer Button", "Display equalizer shortcut in player footer", showEqualizerInPlayer) {
+                                    scope.launch { prefs.setShowEqualizerInPlayer(it) }
+                                }
 
-                        item {
-                            Text(
-                                "Mini Player",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
-                            )
-                        }
-                        settingsToggle("Show Progress Bar", "Display a thin progress line at the bottom of the mini player", miniPlayerShowProgress) {
-                            scope.launch { prefs.setMiniPlayerShowProgress(it) }
-                        }
-                        settingsToggle("Show Skip Button", "Show skip-next button in the mini player", miniPlayerShowSkipBtn) {
-                            scope.launch { prefs.setMiniPlayerShowSkipBtn(it) }
+                                SectionDivider()
+                                SectionSubHeader("Mini Player")
+                                SettingsToggleRow("Show Progress Bar", "Display a thin progress line at the bottom of the mini player", miniPlayerShowProgress) {
+                                    scope.launch { prefs.setMiniPlayerShowProgress(it) }
+                                }
+                                SettingsToggleRow("Show Skip Button", "Show skip-next button in the mini player", miniPlayerShowSkipBtn) {
+                                    scope.launch { prefs.setMiniPlayerShowSkipBtn(it) }
+                                }
+                            }
                         }
                     }
 
                     SettingsCategory.Playback -> {
-                        settingsToggle("Gapless Playback", "Smooth transition between tracks", gapless) {
-                            scope.launch { prefs.setGaplessEnabled(it) }
-                        }
-                        settingsToggle("Skip Silence", "Automatically skip silent parts of tracks", skipSilence) {
-                            scope.launch { prefs.setSkipSilence(it) }
-                        }
                         item {
-                            SettingsSliderItem(
-                                title = "Crossfade Duration",
-                                value = crossfadeMs.toFloat(),
-                                range = 0f..10000f,
-                                label = if (crossfadeMs == 0) "Disabled" else "${crossfadeMs / 1000}s",
-                                steps = 10,
-                                onValueChange = { newValue ->
-                                    val step = 1000f
-                                    val rounded = (newValue / step).roundToInt() * step
-                                    scope.launch { prefs.setCrossfadeDuration(rounded.toInt()) }
-                                },
-                            )
-                        }
-                        item {
-                            SettingsSliderItem(
-                                title = "Playback Speed",
-                                value = playbackSpeed,
-                                range = 0.5f..2.0f,
-                                label = "${playbackSpeed}x",
-                                steps = 6,
-                                onValueChange = { newValue ->
-                                    val step = 0.25f
-                                    val rounded = (newValue / step).roundToInt() * step
-                                    scope.launch { prefs.setPlaybackSpeed(rounded.coerceIn(0.5f, 2.0f)) }
-                                },
-                            )
-                        }
-                        item {
-                            SettingsSliderItem(
-                                title = "Playback Pitch",
-                                value = playbackPitch,
-                                range = 0.5f..2.0f,
-                                label = "${playbackPitch}x",
-                                steps = 6,
-                                onValueChange = { newValue ->
-                                    val step = 0.25f
-                                    val rounded = (newValue / step).roundToInt() * step
-                                    scope.launch { prefs.setPlaybackPitch(rounded.coerceIn(0.5f, 2.0f)) }
-                                },
-                            )
-                        }
-                        settingsToggle("Resume on Headphones", "Continue playback when headphones are connected", resumeOnHeadphones) {
-                            scope.launch { prefs.setResumeOnHeadphones(it) }
-                        }
-                        settingsToggle("Pause on Disconnect", "Stop playback when headphones are removed", pauseOnHeadphonesOut) {
-                            scope.launch { prefs.setPauseOnHeadphonesOut(it) }
-                        }
-                        settingsToggle("Audio Ducking", "Lower volume when other apps play sound", duckAudio) {
-                            scope.launch { prefs.setDuckAudioOnFocusLoss(it) }
-                        }
-                        settingsToggle("Smart Shuffle", "Prioritise higher rated and recent tracks", smartShuffle) {
-                            scope.launch { prefs.setSmartShuffleEnabled(it) }
+                            SectionCard(icon = Icons.Rounded.PlayCircle, title = "Playback", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                SettingsToggleRow("Gapless Playback", "Smooth transition between tracks", gapless) {
+                                    scope.launch { prefs.setGaplessEnabled(it) }
+                                }
+                                SettingsToggleRow("Skip Silence", "Automatically skip silent parts of tracks", skipSilence) {
+                                    scope.launch { prefs.setSkipSilence(it) }
+                                }
+                                SettingsSliderItem(
+                                    title = "Crossfade Duration",
+                                    value = crossfadeMs.toFloat(),
+                                    range = 0f..10000f,
+                                    label = if (crossfadeMs == 0) "Disabled" else "${crossfadeMs / 1000}s",
+                                    steps = 10,
+                                    onValueChange = { newValue ->
+                                        val step = 1000f
+                                        val rounded = (newValue / step).roundToInt() * step
+                                        scope.launch { prefs.setCrossfadeDuration(rounded.toInt()) }
+                                    },
+                                )
+                                SettingsSliderItem(
+                                    title = "Playback Speed",
+                                    value = playbackSpeed,
+                                    range = 0.5f..2.0f,
+                                    label = "${playbackSpeed}x",
+                                    steps = 6,
+                                    onValueChange = { newValue ->
+                                        val step = 0.25f
+                                        val rounded = (newValue / step).roundToInt() * step
+                                        scope.launch { prefs.setPlaybackSpeed(rounded.coerceIn(0.5f, 2.0f)) }
+                                    },
+                                )
+                                SettingsSliderItem(
+                                    title = "Playback Pitch",
+                                    value = playbackPitch,
+                                    range = 0.5f..2.0f,
+                                    label = "${playbackPitch}x",
+                                    steps = 6,
+                                    onValueChange = { newValue ->
+                                        val step = 0.25f
+                                        val rounded = (newValue / step).roundToInt() * step
+                                        scope.launch { prefs.setPlaybackPitch(rounded.coerceIn(0.5f, 2.0f)) }
+                                    },
+                                )
+                                SettingsToggleRow("Resume on Headphones", "Continue playback when headphones are connected", resumeOnHeadphones) {
+                                    scope.launch { prefs.setResumeOnHeadphones(it) }
+                                }
+                                SettingsToggleRow("Pause on Disconnect", "Stop playback when headphones are removed", pauseOnHeadphonesOut) {
+                                    scope.launch { prefs.setPauseOnHeadphonesOut(it) }
+                                }
+                                SettingsToggleRow("Audio Ducking", "Lower volume when other apps play sound", duckAudio) {
+                                    scope.launch { prefs.setDuckAudioOnFocusLoss(it) }
+                                }
+                                SettingsToggleRow("Smart Shuffle", "Prioritise higher rated and recent tracks", smartShuffle) {
+                                    scope.launch { prefs.setSmartShuffleEnabled(it) }
+                                }
+                            }
                         }
                     }
 
                     SettingsCategory.Audio -> {
                         item {
-                            SegmentedSettingsItem(
-                                title = "ReplayGain Mode",
-                                options = listOf("Off" to "OFF", "Track" to "TRACK", "Album" to "ALBUM"),
-                                selected = replayGainMode,
-                                onSelect = { scope.launch { prefs.setReplayGainMode(it) } },
-                            )
-                        }
-                        item {
-                            SettingsSliderItem(
-                                title = "ReplayGain Preamp",
-                                value = replayGainPreamp,
-                                range = -15f..15f,
-                                label = when (val db = replayGainPreamp.roundToInt()) {
-                                    0 -> "0 dB"
-                                    else -> if (db > 0) "+$db dB" else "$db dB"
-                                },
-                                steps = 30,
-                                onValueChange = { scope.launch { prefs.setReplayGainPreamp(it) } },
-                            )
-                        }
-                        settingsToggle("Volume Normalisation", "Equalise loudness across all tracks", volumeNorm) {
-                            scope.launch { prefs.setVolumeNormalization(it) }
-                        }
-                        item {
-                            SettingsTextItem(
-                                title = "Equalizer",
-                                subtitle = "Adjust frequency bands",
-                                icon = Icons.Rounded.GraphicEq,
-                                onClick = onNavigateToEqualizer,
-                            )
+                            SectionCard(icon = Icons.Rounded.GraphicEq, title = "Audio", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                SegmentedSettingsItem(
+                                    title = "ReplayGain Mode",
+                                    options = listOf("Off" to "OFF", "Track" to "TRACK", "Album" to "ALBUM"),
+                                    selected = replayGainMode,
+                                    onSelect = { scope.launch { prefs.setReplayGainMode(it) } },
+                                )
+                                SettingsSliderItem(
+                                    title = "ReplayGain Preamp",
+                                    value = replayGainPreamp,
+                                    range = -15f..15f,
+                                    label = when (val db = replayGainPreamp.roundToInt()) {
+                                        0 -> "0 dB"
+                                        else -> if (db > 0) "+$db dB" else "$db dB"
+                                    },
+                                    steps = 30,
+                                    onValueChange = { scope.launch { prefs.setReplayGainPreamp(it) } },
+                                )
+                                SettingsToggleRow("Volume Normalisation", "Equalise loudness across all tracks", volumeNorm) {
+                                    scope.launch { prefs.setVolumeNormalization(it) }
+                                }
+                                SettingsTextItem(
+                                    title = "Equalizer",
+                                    subtitle = "Adjust frequency bands",
+                                    icon = Icons.Rounded.GraphicEq,
+                                    onClick = onNavigateToEqualizer,
+                                )
+                            }
                         }
                     }
 
                     SettingsCategory.Library -> {
                         item {
-                            ScanLibraryItem(isSyncing) {
-                                libraryViewModel.syncLibrary()
-                            }
-                        }
-                        item {
-                            SettingsSliderItem(
-                                title = "Minimum Track Duration",
-                                value = (minDurationMs / 1000f),
-                                range = 0f..300f,
-                                label = if (minDurationMs == 0L) "No filter" else "${minDurationMs / 1000}s",
-                                steps = 30,
-                                onValueChange = { newValue ->
-                                    val step = 10f
-                                    val rounded = (newValue / step).roundToInt() * step
-                                    scope.launch { prefs.setMinTrackDuration((rounded.toLong() * 1000).coerceAtLeast(0)) }
-                                },
-                            )
-                        }
-                        settingsToggle("Show Artwork in Lists", "Display album art thumbnails in song lists", showArtworkList) {
-                            scope.launch { prefs.setShowArtworkInList(it) }
-                        }
-                        settingsToggle("Group by Album Artist", "Use album artist for grouping (not track artist)", groupByAlbumArtist) {
-                            scope.launch { prefs.setGroupByAlbumArtist(it) }
-                        }
-                        settingsToggle("Show Filename as Title", "Fall back to filename when title tag is missing", showFilenameTitle) {
-                            scope.launch { prefs.setShowFilenameAsTitle(it) }
-                        }
-                        settingsToggle("Ignore Articles in Sort", "Sort \"The Beatles\" as \"Beatles\"", ignoreArticles) {
-                            scope.launch { prefs.setIgnoreArticles(it) }
-                        }
-                        item {
                             var showDelimiterDialog by remember { mutableStateOf(false) }
-                            SettingsTextItem(
-                                title = "Artist Delimiter",
-                                subtitle = "Characters that split multi-artist tags: $artistDelimiter",
-                                onClick = { showDelimiterDialog = true },
-                            )
+                            var showIncludedDialog by remember { mutableStateOf(false) }
+                            var showExcludedDialog by remember { mutableStateOf(false) }
+
+                            SectionCard(icon = Icons.Rounded.LibraryMusic, title = "Library", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                ScanLibraryItem(isSyncing) {
+                                    libraryViewModel.syncLibrary()
+                                }
+                                SettingsSliderItem(
+                                    title = "Minimum Track Duration",
+                                    value = (minDurationMs / 1000f),
+                                    range = 0f..300f,
+                                    label = if (minDurationMs == 0L) "No filter" else "${minDurationMs / 1000}s",
+                                    steps = 30,
+                                    onValueChange = { newValue ->
+                                        val step = 10f
+                                        val rounded = (newValue / step).roundToInt() * step
+                                        scope.launch { prefs.setMinTrackDuration((rounded.toLong() * 1000).coerceAtLeast(0)) }
+                                    },
+                                )
+                                SettingsToggleRow("Show Artwork in Lists", "Display album art thumbnails in song lists", showArtworkList) {
+                                    scope.launch { prefs.setShowArtworkInList(it) }
+                                }
+                                SettingsToggleRow("Group by Album Artist", "Use album artist for grouping (not track artist)", groupByAlbumArtist) {
+                                    scope.launch { prefs.setGroupByAlbumArtist(it) }
+                                }
+                                SettingsToggleRow("Show Filename as Title", "Fall back to filename when title tag is missing", showFilenameTitle) {
+                                    scope.launch { prefs.setShowFilenameAsTitle(it) }
+                                }
+                                SettingsToggleRow("Ignore Articles in Sort", "Sort \"The Beatles\" as \"Beatles\"", ignoreArticles) {
+                                    scope.launch { prefs.setIgnoreArticles(it) }
+                                }
+                                SettingsTextItem(
+                                    title = "Artist Delimiter",
+                                    subtitle = "Characters that split multi-artist tags: $artistDelimiter",
+                                    onClick = { showDelimiterDialog = true },
+                                )
+                                SegmentedSettingsItem(
+                                    title = "Auto Scan Interval",
+                                    options = listOf("Off" to "0", "1 hr" to "1", "6 hrs" to "6", "24 hrs" to "24"),
+                                    selected = autoScanHours.toString(),
+                                    onSelect = { scope.launch { prefs.setAutoScanIntervalHours(it.toInt()) } },
+                                )
+                                SettingsTextItem(
+                                    title = "Included Folders",
+                                    subtitle = if (includedFolders.isEmpty()) "All folders (scan everything)"
+                                               else "${includedFolders.size} folder${if (includedFolders.size != 1) "s" else ""} included",
+                                    onClick = { showIncludedDialog = true },
+                                )
+                                SettingsTextItem(
+                                    title = "Excluded Folders",
+                                    subtitle = if (excludedFolders.isEmpty()) "No folders excluded"
+                                               else "${excludedFolders.size} folder${if (excludedFolders.size != 1) "s" else ""} excluded",
+                                    onClick = { showExcludedDialog = true },
+                                )
+                            }
+
                             if (showDelimiterDialog) {
                                 var delimiterInput by remember { mutableStateOf(artistDelimiter) }
                                 AlertDialog(
@@ -971,23 +925,6 @@ fun SettingsScreen(
                                     },
                                 )
                             }
-                        }
-                        item {
-                            SegmentedSettingsItem(
-                                title = "Auto Scan Interval",
-                                options = listOf("Off" to "0", "1 hr" to "1", "6 hrs" to "6", "24 hrs" to "24"),
-                                selected = autoScanHours.toString(),
-                                onSelect = { scope.launch { prefs.setAutoScanIntervalHours(it.toInt()) } },
-                            )
-                        }
-                        item {
-                            var showIncludedDialog by remember { mutableStateOf(false) }
-                            SettingsTextItem(
-                                title = "Included Folders",
-                                subtitle = if (includedFolders.isEmpty()) "All folders (scan everything)"
-                                           else "${includedFolders.size} folder${if (includedFolders.size != 1) "s" else ""} included",
-                                onClick = { showIncludedDialog = true },
-                            )
                             if (showIncludedDialog) {
                                 IncludedFoldersDialog(
                                     allFolders = allFolders,
@@ -999,15 +936,6 @@ fun SettingsScreen(
                                     onDismiss = { showIncludedDialog = false },
                                 )
                             }
-                        }
-                        item {
-                            var showExcludedDialog by remember { mutableStateOf(false) }
-                            SettingsTextItem(
-                                title = "Excluded Folders",
-                                subtitle = if (excludedFolders.isEmpty()) "No folders excluded"
-                                           else "${excludedFolders.size} folder${if (excludedFolders.size != 1) "s" else ""} excluded",
-                                onClick = { showExcludedDialog = true },
-                            )
                             if (showExcludedDialog) {
                                 ExcludedFoldersDialog(
                                     allFolders = allFolders,
@@ -1045,34 +973,19 @@ fun SettingsScreen(
 
                     SettingsCategory.OnlineServices -> {
                         item {
-                            Text(
-                                "Lyrics",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
-                            )
+                            SectionCard(icon = Icons.Rounded.Lyrics, title = "Lyrics & Artist Images", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                SettingsToggleRow(
+                                    title = "Fetch Lyrics",
+                                    subtitle = "Auto-download time-synced lyrics from LRC Library",
+                                    checked = fetchLyrics,
+                                ) { scope.launch { prefs.setFetchLyrics(it) } }
+                                SettingsToggleRow(
+                                    title = "Fetch Artist Images",
+                                    subtitle = "Load artist photos from Last.fm in the Artists list",
+                                    checked = fetchArtistImages,
+                                ) { scope.launch { prefs.setFetchArtistImages(it) } }
+                            }
                         }
-                        settingsToggle(
-                            title = "Fetch Lyrics",
-                            subtitle = "Auto-download time-synced lyrics from LRC Library",
-                            checked = fetchLyrics,
-                        ) { scope.launch { prefs.setFetchLyrics(it) } }
-
-                        item {
-                            Text(
-                                "Artist Images",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
-                            )
-                        }
-                        settingsToggle(
-                            title = "Fetch Artist Images",
-                            subtitle = "Load artist photos from Last.fm in the Artists list",
-                            checked = fetchArtistImages,
-                        ) { scope.launch { prefs.setFetchArtistImages(it) } }
 
                         item {
                             Text(
@@ -1129,66 +1042,78 @@ fun SettingsScreen(
                                 onSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
                             )
                         }
+
+                        item {
+                            SectionCard(icon = null, title = "Internet Share", titleStyle = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 8.dp)) {
+                                RemoteShareSection(
+                                    serverUrl = remoteShareServerUrl,
+                                    uploadToken = remoteShareUploadToken,
+                                    onSave = { url, token -> settingsViewModel.saveRemoteShareConfig(url, token) },
+                                )
+                            }
+                        }
                     }
 
                     SettingsCategory.Notification -> {
-                        settingsToggle("Show Artwork on Lock Screen", "Display album art on lock screen controls", lockscreenArtwork) {
-                            scope.launch { prefs.setLockscreenArtwork(it) }
-                        }
-                        settingsToggle("Show Skip Buttons", "Include previous/next in notification shade", showSkipButtons) {
-                            scope.launch { prefs.setShowSkipButtons(it) }
+                        item {
+                            SectionCard(icon = Icons.Rounded.Notifications, title = "Notification & Lock Screen", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                SettingsToggleRow("Show Artwork on Lock Screen", "Display album art on lock screen controls", lockscreenArtwork) {
+                                    scope.launch { prefs.setLockscreenArtwork(it) }
+                                }
+                                SettingsToggleRow("Show Skip Buttons", "Include previous/next in notification shade", showSkipButtons) {
+                                    scope.launch { prefs.setShowSkipButtons(it) }
+                                }
+                            }
                         }
                     }
 
                     SettingsCategory.History -> {
-                        settingsToggle("Track Play History", "Record which tracks you've listened to", historyEnabled) {
-                            scope.launch { prefs.setHistoryEnabled(it) }
-                        }
-                        if (historyEnabled) {
-                            item {
-                                SettingsSliderItem(
-                                    title = "Minimum Listen Duration",
-                                    value = minListenSecs.toFloat(),
-                                    range = 10f..120f,
-                                    label = "${minListenSecs}s",
-                                    steps = 11,
-                                    onValueChange = { newValue ->
-                                        val step = 10f
-                                        val rounded = (newValue / step).roundToInt() * step
-                                        val finalSecs = rounded.toInt().coerceIn(10, 120)
-                                        scope.launch { prefs.setListenThresholds(finalSecs, minListenPct) }
-                                    },
-                                )
-                            }
-                            item {
-                                SettingsSliderItem(
-                                    title = "Minimum Listen Percentage",
-                                    value = minListenPct,
-                                    range = 0.1f..1.0f,
-                                    label = "${(minListenPct * 100).roundToInt()}%",
-                                    steps = 9,
-                                    onValueChange = { newValue ->
-                                        val step = 0.1f
-                                        val rounded = (newValue / step).roundToInt() * step
-                                        val finalPct = rounded.coerceIn(0.1f, 1.0f)
-                                        scope.launch { prefs.setListenThresholds(minListenSecs, finalPct) }
-                                    },
-                                )
-                            }
-                            item {
-                                SettingsSliderItem(
-                                    title = "Max History Items",
-                                    value = maxHistory.toFloat(),
-                                    range = 100f..5000f,
-                                    label = "$maxHistory items",
-                                    steps = 49,
-                                    onValueChange = { newValue ->
-                                        val step = 100f
-                                        val rounded = (newValue / step).roundToInt() * step
-                                        val final = rounded.toInt().coerceIn(100, 5000)
-                                        scope.launch { prefs.setMaxHistoryItems(final) }
-                                    },
-                                )
+                        item {
+                            SectionCard(icon = Icons.Rounded.History, title = "Listening History", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                SettingsToggleRow("Track Play History", "Record which tracks you've listened to", historyEnabled) {
+                                    scope.launch { prefs.setHistoryEnabled(it) }
+                                }
+                                if (historyEnabled) {
+                                    SettingsSliderItem(
+                                        title = "Minimum Listen Duration",
+                                        value = minListenSecs.toFloat(),
+                                        range = 10f..120f,
+                                        label = "${minListenSecs}s",
+                                        steps = 11,
+                                        onValueChange = { newValue ->
+                                            val step = 10f
+                                            val rounded = (newValue / step).roundToInt() * step
+                                            val finalSecs = rounded.toInt().coerceIn(10, 120)
+                                            scope.launch { prefs.setListenThresholds(finalSecs, minListenPct) }
+                                        },
+                                    )
+                                    SettingsSliderItem(
+                                        title = "Minimum Listen Percentage",
+                                        value = minListenPct,
+                                        range = 0.1f..1.0f,
+                                        label = "${(minListenPct * 100).roundToInt()}%",
+                                        steps = 9,
+                                        onValueChange = { newValue ->
+                                            val step = 0.1f
+                                            val rounded = (newValue / step).roundToInt() * step
+                                            val finalPct = rounded.coerceIn(0.1f, 1.0f)
+                                            scope.launch { prefs.setListenThresholds(minListenSecs, finalPct) }
+                                        },
+                                    )
+                                    SettingsSliderItem(
+                                        title = "Max History Items",
+                                        value = maxHistory.toFloat(),
+                                        range = 100f..5000f,
+                                        label = "$maxHistory items",
+                                        steps = 49,
+                                        onValueChange = { newValue ->
+                                            val step = 100f
+                                            val rounded = (newValue / step).roundToInt() * step
+                                            val final = rounded.toInt().coerceIn(100, 5000)
+                                            scope.launch { prefs.setMaxHistoryItems(final) }
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -1197,6 +1122,10 @@ fun SettingsScreen(
                         item {
                             val backupViewModel: BackupViewModel = hiltViewModel()
                             val backupState by backupViewModel.state.collectAsState()
+                            val shareViewModel: ShareViewModel = hiltViewModel()
+                            val diagState by shareViewModel.diagnosticState.collectAsState()
+                            var showClearHistoryDialog by remember { mutableStateOf(false) }
+                            val isClearingHistory by libraryViewModel.isClearingHistory.collectAsState()
 
                             val exportLauncher = rememberLauncherForActivityResult(
                                 ActivityResultContracts.CreateDocument("application/json")
@@ -1206,22 +1135,43 @@ fun SettingsScreen(
                                 ActivityResultContracts.OpenDocument()
                             ) { uri -> uri?.let { backupViewModel.importBackup(it) } }
 
-                            SettingsTextItem(
-                                title = "Export Backup",
-                                subtitle = "Save liked songs and playlists to a file",
-                                icon = Icons.Rounded.FileUpload,
-                                onClick = {
-                                    exportLauncher.launch("resonance_backup.json")
-                                }
-                            )
-                            SettingsTextItem(
-                                title = "Import Backup",
-                                subtitle = "Restore liked songs and playlists from a file",
-                                icon = Icons.Rounded.FileDownload,
-                                onClick = {
-                                    importLauncher.launch(arrayOf("application/json", "*/*"))
-                                }
-                            )
+                            SectionCard(icon = Icons.Rounded.Save, title = "Data & Backup", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                SettingsTextItem(
+                                    title = "Export Backup",
+                                    subtitle = "Save liked songs and playlists to a file",
+                                    icon = Icons.Rounded.FileUpload,
+                                    onClick = {
+                                        exportLauncher.launch("resonance_backup.json")
+                                    }
+                                )
+                                SettingsTextItem(
+                                    title = "Import Backup",
+                                    subtitle = "Restore liked songs and playlists from a file",
+                                    icon = Icons.Rounded.FileDownload,
+                                    onClick = {
+                                        importLauncher.launch(arrayOf("application/json", "*/*"))
+                                    }
+                                )
+
+                                SectionDivider()
+                                SectionSubHeader("Diagnostics")
+                                SettingsTextItem(
+                                    title = "Resonance Share Test",
+                                    subtitle = "Verify Nearby and QR transfer systems",
+                                    icon = Icons.Rounded.WifiTethering,
+                                    onClick = { shareViewModel.runDiagnostics() }
+                                )
+
+                                SectionDivider()
+                                SectionSubHeader("Danger Zone")
+                                SettingsTextItem(
+                                    title = "Clear Playback History",
+                                    subtitle = if (isClearingHistory) "Clearing…" else "Permanently delete all history records",
+                                    icon = Icons.Rounded.DeleteForever,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    onClick = { if (!isClearingHistory) showClearHistoryDialog = true },
+                                )
+                            }
 
                             when (val s = backupState) {
                                 is BackupUiState.Working -> {
@@ -1267,18 +1217,6 @@ fun SettingsScreen(
                                 }
                                 else -> {}
                             }
-                        }
-
-                        item {
-                            val shareViewModel: ShareViewModel = hiltViewModel()
-                            val diagState by shareViewModel.diagnosticState.collectAsState()
-
-                            SettingsTextItem(
-                                title = "Resonance Share Test",
-                                subtitle = "Verify Nearby and QR transfer systems",
-                                icon = Icons.Rounded.WifiTethering,
-                                onClick = { shareViewModel.runDiagnostics() }
-                            )
 
                             if (diagState !is ShareViewModel.DiagnosticState.Idle) {
                                 AlertDialog(
@@ -1311,19 +1249,6 @@ fun SettingsScreen(
                                     }
                                 )
                             }
-                        }
-
-                        item {
-                            var showClearHistoryDialog by remember { mutableStateOf(false) }
-                            val isClearingHistory by libraryViewModel.isClearingHistory.collectAsState()
-
-                            SettingsTextItem(
-                                title = "Clear Playback History",
-                                subtitle = if (isClearingHistory) "Clearing…" else "Permanently delete all history records",
-                                icon = Icons.Rounded.DeleteForever,
-                                tint = MaterialTheme.colorScheme.error,
-                                onClick = { if (!isClearingHistory) showClearHistoryDialog = true },
-                            )
 
                             if (showClearHistoryDialog) {
                                 AlertDialog(
@@ -1373,39 +1298,34 @@ fun SettingsScreen(
 
                     SettingsCategory.About -> {
                         item {
-                            SettingsTextItem(
-                                title = "Resonance",
-                                subtitle = "v$APP_VERSION",
-                                icon = Icons.Rounded.MusicNote,
-                            )
-                        }
-                        item {
                             val uriHandler = LocalUriHandler.current
-                            SettingsTextItem(
-                                title = "GitHub Repository",
-                                subtitle = "View source code and report issues",
-                                icon = Icons.AutoMirrored.Rounded.OpenInNew,
-                                trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
-                                onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance") },
-                            )
-                        }
-                        item {
-                            val uriHandler = LocalUriHandler.current
-                            SettingsTextItem(
-                                title = "App License",
-                                subtitle = "View Resonance's open source license",
-                                icon = Icons.Rounded.Gavel,
-                                trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
-                                onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance/blob/main/LICENSE") },
-                            )
-                        }
-                        item {
-                            SettingsTextItem(
-                                title = "Third-Party Licenses",
-                                subtitle = "Open source libraries used in this project",
-                                icon = Icons.Rounded.Description,
-                                onClick = onNavigateToLicenses,
-                            )
+                            SectionCard(icon = Icons.Rounded.Info, title = "About", modifier = Modifier.padding(horizontal = 8.dp)) {
+                                SettingsTextItem(
+                                    title = "Resonance",
+                                    subtitle = "v$APP_VERSION",
+                                    icon = Icons.Rounded.MusicNote,
+                                )
+                                SettingsTextItem(
+                                    title = "GitHub Repository",
+                                    subtitle = "View source code and report issues",
+                                    icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                                    trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
+                                    onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance") },
+                                )
+                                SettingsTextItem(
+                                    title = "App License",
+                                    subtitle = "View Resonance's open source license",
+                                    icon = Icons.Rounded.Gavel,
+                                    trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
+                                    onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance/blob/main/LICENSE") },
+                                )
+                                SettingsTextItem(
+                                    title = "Third-Party Licenses",
+                                    subtitle = "Open source libraries used in this project",
+                                    icon = Icons.Rounded.Description,
+                                    onClick = onNavigateToLicenses,
+                                )
+                            }
                         }
                     }
                 }
@@ -1443,7 +1363,7 @@ private fun LastFmSection(
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
+            shape = MaterialTheme.shapes.large,
             colors = CardDefaults.cardColors(
                 containerColor = when (authState) {
                     is LastFmAuthState.Authenticated -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
@@ -1535,7 +1455,7 @@ private fun LastFmSection(
                     }
                     else -> {
                         Button(onClick = { showLoginDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Rounded.Login, null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Rounded.Login, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("Sign In to Last.fm")
                         }
@@ -1653,6 +1573,66 @@ private fun LastFmLoginDialog(
 }
 
 @Composable
+private fun RemoteShareSection(
+    serverUrl: String,
+    uploadToken: String,
+    onSave: (String, String) -> Unit,
+) {
+    var url by remember(serverUrl) { mutableStateOf(serverUrl) }
+    var token by remember(uploadToken) { mutableStateOf(uploadToken) }
+    var tokenVisible by remember { mutableStateOf(false) }
+    val isConfigured = serverUrl.isNotBlank() && uploadToken.isNotBlank()
+    val isDirty = url.trim() != serverUrl || token != uploadToken
+
+    Column {
+        Text(
+            "\"Share over the Internet\" works out of the box using Resonance's default relay server — " +
+                "no setup needed. If you'd rather use your own self-hosted server (e.g. behind a Cloudflare " +
+                "Tunnel), enter its details below.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = url,
+            onValueChange = { url = it },
+            label = { Text("Custom server URL (optional)") },
+            placeholder = { Text("https://share.example.com") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = token,
+            onValueChange = { token = it },
+            label = { Text("Upload token (optional)") },
+            singleLine = true,
+            visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                    Icon(if (tokenVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, null)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { onSave(url.trim(), token) },
+                enabled = isDirty,
+                shape = MaterialTheme.shapes.medium,
+            ) { Text("Save") }
+            Text(
+                if (isConfigured) "Using your custom server" else "Using default server",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.align(Alignment.CenterVertically).padding(start = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun MalojaSection(
     isConfigured: Boolean,
     serverUrl: String,
@@ -1675,7 +1655,7 @@ private fun MalojaSection(
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
+            shape = MaterialTheme.shapes.large,
             colors = CardDefaults.cardColors(
                 containerColor = when {
                     isConfigured && enabled -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
@@ -2064,20 +2044,28 @@ private fun LazyListScope.settingsToggle(
     checked: Boolean,
     onToggle: (Boolean) -> Unit,
 ) {
-    item {
-        ListItem(
-            modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 1.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .clickable { onToggle(!checked) },
-            headlineContent = { Text(title, fontWeight = FontWeight.Medium) },
-            supportingContent = { Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant) },
-            trailingContent = {
-                Switch(checked = checked, onCheckedChange = onToggle)
-            },
-            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        )
-    }
+    item { SettingsToggleRow(title, subtitle, checked, onToggle) }
+}
+
+@Composable
+private fun SettingsToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
+    ListItem(
+        modifier = Modifier
+            .padding(horizontal = 8.dp, vertical = 1.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { onToggle(!checked) },
+        headlineContent = { Text(title, fontWeight = FontWeight.Medium) },
+        supportingContent = { Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        trailingContent = {
+            Switch(checked = checked, onCheckedChange = onToggle)
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
 }
 
 @Composable
@@ -2225,9 +2213,12 @@ private fun NavidromeSetupScreen(
             AnimatedContent(
                 targetState = showSyncPage,
                 transitionSpec = {
-                    (slideInHorizontally { it } + fadeIn()).togetherWith(
-                        slideOutHorizontally { -it } + fadeOut()
-                    )
+                    (slideInHorizontally(tween(500, easing = EmphasizedDecelerate)) { it } +
+                        fadeIn(tween(500, delayMillis = 50, easing = EmphasizedDecelerate)))
+                        .togetherWith(
+                            slideOutHorizontally(tween(400, easing = EmphasizedAccelerate)) { -it } +
+                                fadeOut(tween(200, easing = EmphasizedAccelerate))
+                        )
                 },
                 label = "navidrome-setup-step",
             ) { isSyncPage ->

@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
@@ -35,6 +36,7 @@ import dev.yuwixx.resonance.data.model.Playlist
 import dev.yuwixx.resonance.data.model.RepeatMode
 import dev.yuwixx.resonance.data.model.SleepTimer
 import dev.yuwixx.resonance.data.model.Song
+import dev.yuwixx.resonance.data.repository.ArtworkComposeColors
 import dev.yuwixx.resonance.data.repository.LyricsResult
 import dev.yuwixx.resonance.presentation.components.*
 import dev.yuwixx.resonance.presentation.components.EaseInOutSine
@@ -76,6 +78,7 @@ fun PlayerScreen(
     val lyricsResult by playerViewModel.lyricsResult.collectAsState()
     val activeLyricIndex by playerViewModel.activeLyricIndex.collectAsState()
     val isTrackLoved by playerViewModel.isCurrentSongLiked.collectAsState()
+    val artworkColors by playerViewModel.artworkColors.collectAsState()
     val queue by playerViewModel.queue.collectAsState()
     val currentQueueIndex by playerViewModel.currentQueueIndex.collectAsState()
 
@@ -113,7 +116,6 @@ fun PlayerScreen(
                 onBack = onBack,
                 onQueueClick = onQueueClick,
                 onSleepTimer = { showSleepTimerDialog = true },
-                onShare = { showShareSheet = true },
                 sleepTimer = sleepTimer,
             )
 
@@ -149,6 +151,7 @@ fun PlayerScreen(
                 seekbarStyle = seekbarStyle,
                 isTrackLoved = isTrackLoved,
                 nextSong = queue.getOrNull(currentQueueIndex + 1),
+                artworkColors = artworkColors,
                 onPlayPause = { playerViewModel.playPause() },
                 onNext = { playerViewModel.skipNext() },
                 onPrevious = { playerViewModel.skipPrevious() },
@@ -221,15 +224,19 @@ fun PlayerScreen(
                 },
                 onAddToPlaylist = onAddToPlaylist,
                 onCreatePlaylist = onCreatePlaylist,
+                onShare = {
+                    showOptionsSheet = false
+                    showShareSheet = true
+                },
             )
         }
 
         if (showShareSheet) {
             ShareSheet(
-                viewModel   = shareViewModel,
-                currentSong = song,
-                onDismiss   = { showShareSheet = false },
-                onPlayNow   = { receivedSong ->
+                viewModel    = shareViewModel,
+                currentSongs = listOf(song),
+                onDismiss    = { showShareSheet = false },
+                onPlayNow    = { receivedSong ->
                     playerViewModel.play(listOf(receivedSong), 0)
                     showShareSheet = false
                 },
@@ -267,7 +274,6 @@ private fun PlayerHeader(
     onBack: () -> Unit,
     onQueueClick: () -> Unit,
     onSleepTimer: () -> Unit,
-    onShare: () -> Unit,
     sleepTimer: SleepTimer,
     modifier: Modifier = Modifier,
 ) {
@@ -305,9 +311,6 @@ private fun PlayerHeader(
                 tint = if (sleepActive) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.onSurface,
             )
-        }
-        BouncyIconButton(onClick = onShare) {
-            Icon(Icons.Rounded.Share, "Share", modifier = Modifier.size(24.dp))
         }
         CastButton(modifier = Modifier.size(48.dp))
         BouncyIconButton(onClick = onQueueClick) {
@@ -391,6 +394,7 @@ private fun PlaybackControls(
     seekbarStyle: String,
     isTrackLoved: Boolean,
     nextSong: Song? = null,
+    artworkColors: ArtworkComposeColors? = null,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -401,11 +405,33 @@ private fun PlaybackControls(
 ) {
     val positionMs by remember { derivedStateOf { positionProvider() } }
     val config = LocalAppearanceConfig.current
-    val seekbarPlayedColor = when (config.seekbarColor) {
-        "SECONDARY" -> MaterialTheme.colorScheme.secondary
-        "TERTIARY" -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.primary
-    }
+    // The user's Seekbar Colour setting picks which palette channel to prefer once artwork
+    // is available; without artwork (or on extraction failure) it falls back to the
+    // equivalent fixed theme color, exactly as before.
+    val seekbarPlayedColor by animateColorAsState(
+        targetValue = when (config.seekbarColor) {
+            "SECONDARY" -> artworkColors?.muted ?: MaterialTheme.colorScheme.secondary
+            "TERTIARY" -> artworkColors?.darkVibrant ?: MaterialTheme.colorScheme.tertiary
+            else -> artworkColors?.vibrant ?: MaterialTheme.colorScheme.primary
+        },
+        animationSpec = tween(400),
+        label = "seekbar_accent",
+    )
+    val playButtonColor by animateColorAsState(
+        targetValue = artworkColors?.vibrant ?: MaterialTheme.colorScheme.primary,
+        animationSpec = tween(400),
+        label = "play_button_accent",
+    )
+    val playButtonContentColor by animateColorAsState(
+        targetValue = artworkColors?.onVibrant ?: MaterialTheme.colorScheme.onPrimary,
+        animationSpec = tween(400),
+        label = "play_button_content_accent",
+    )
+    val nextSongAccent by animateColorAsState(
+        targetValue = artworkColors?.vibrant?.copy(alpha = 0.75f) ?: MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        animationSpec = tween(400),
+        label = "next_song_accent",
+    )
 
     Column(
         modifier = Modifier
@@ -518,8 +544,8 @@ private fun PlaybackControls(
                     onValueChange = { onSeek(it.toLong()) },
                     valueRange = 0f..durationMs.toFloat().coerceAtLeast(1f),
                     colors = SliderDefaults.colors(
-                        thumbColor = MaterialTheme.colorScheme.primary,
-                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        thumbColor = seekbarPlayedColor,
+                        activeTrackColor = seekbarPlayedColor,
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -554,13 +580,13 @@ private fun PlaybackControls(
                     Icons.Rounded.SkipNext,
                     contentDescription = null,
                     modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    tint = nextSongAccent,
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     "Next: ${nextSong.title}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    color = nextSongAccent,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -615,8 +641,8 @@ private fun PlaybackControls(
                     .preferredFrameRateSafe(120f)
                     .scale(playScale),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = playButtonColor,
+                contentColor = playButtonContentColor,
                 shadowElevation = if (isPlaying) 10.dp else 4.dp,
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -669,7 +695,7 @@ private fun PlayerFooter(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (footerConfig.showEqualizerInPlayer) {
@@ -679,8 +705,6 @@ private fun PlayerFooter(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        } else {
-            Spacer(modifier = Modifier.size(48.dp))
         }
 
         if (showLyricsButton) {
@@ -726,8 +750,6 @@ private fun PlayerFooter(
                     }
                 }
             }
-        } else {
-            Spacer(modifier = Modifier.size(40.dp))
         }
 
         BouncyIconButton(onClick = onMoreOptions) {
@@ -750,6 +772,7 @@ private fun PlayerOptionsSheet(
     onAddToQueue: () -> Unit,
     onAddToPlaylist: (Playlist) -> Unit,
     onCreatePlaylist: (String) -> Unit,
+    onShare: () -> Unit,
 ) {
     var page by remember { mutableStateOf(OptionsPage.Main) }
     var showCreatePlaylist by remember { mutableStateOf(false) }
@@ -777,6 +800,7 @@ private fun PlayerOptionsSheet(
                     onAddToQueue = onAddToQueue,
                     onOpenPlaylists = { page = OptionsPage.Playlist },
                     onOpenInfo = { page = OptionsPage.Info },
+                    onShare = onShare,
                 )
                 OptionsPage.Playlist -> SheetPlaylistPage(
                     playlists = playlists,
@@ -804,6 +828,7 @@ private fun SheetMainPage(
     onAddToQueue: () -> Unit,
     onOpenPlaylists: () -> Unit,
     onOpenInfo: () -> Unit,
+    onShare: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(bottom = 28.dp)) {
         ListItem(
@@ -879,6 +904,14 @@ private fun SheetMainPage(
                 )
             },
         )
+
+        ListItem(
+            modifier = Modifier.clickable(onClick = onShare),
+            headlineContent = { Text("Share") },
+            leadingContent = {
+                Icon(Icons.Rounded.Share, null, tint = MaterialTheme.colorScheme.primary)
+            },
+        )
     }
 }
 
@@ -900,7 +933,7 @@ private fun SheetPlaylistPage(
                 .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back") }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
             Text(
                 "Add to Playlist",
                 style = MaterialTheme.typography.titleLarge,
@@ -912,7 +945,7 @@ private fun SheetPlaylistPage(
 
         AnimatedVisibility(
             visible = showCreatePlaylist,
-            enter = expandVertically(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessLow)) + fadeIn(tween(300, easing = Emphasized)),
+            enter = expandVertically(tween(300, easing = Emphasized)) + fadeIn(tween(300, easing = Emphasized)),
             exit = shrinkVertically(tween(300, easing = Emphasized)) + fadeOut(tween(200, easing = Emphasized)),
         ) {
             Row(
@@ -996,7 +1029,7 @@ private fun SheetInfoPage(
                 .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back") }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
             Text(
                 "Info",
                 style = MaterialTheme.typography.titleLarge,

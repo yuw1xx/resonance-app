@@ -5,9 +5,10 @@ package dev.yuwixx.resonance.data.service
 import android.app.Activity
 import android.content.Context
 import android.location.LocationManager
-import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.OpenableColumns
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.nearby.Nearby
@@ -390,10 +391,10 @@ class NearbyShareManager @Inject constructor(
                         incomingFilePayloadId = null
                         incomingPendingPayload = null
                         incomingPendingSender = ""
-                        val tempFile = payload?.asFile()?.asJavaFile() ?: return
+                        val tempUri = payload?.asFile()?.asUri() ?: return
                         val (title, artist) = pendingIncomingMeta.remove(endpointId)
-                            ?: (tempFile.nameWithoutExtension to "Unknown artist")
-                        scope.launch { saveAndPublishIncomingFile(tempFile, sender, title, artist) }
+                            ?: (displayNameWithoutExtension(tempUri) to "Unknown artist")
+                        scope.launch { saveAndPublishIncomingFile(tempUri, sender, title, artist) }
                     }
                     PayloadTransferUpdate.Status.FAILURE -> {
                         incomingFilePayloadId = null
@@ -408,20 +409,22 @@ class NearbyShareManager @Inject constructor(
     }
 
     private suspend fun saveAndPublishIncomingFile(
-        tempFile: File,
+        tempUri: Uri,
         senderName: String,
         title: String,
         artist: String,
     ) {
         try {
-            val destDir = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
-                "Resonance"
-            ).also { it.mkdirs() }
-            val ext = tempFile.extension.ifEmpty { "mp3" }
-            val destFile = File(destDir, "$title.$ext")
-            tempFile.copyTo(destFile, overwrite = true)
-            MediaScannerConnection.scanFile(context, arrayOf(destFile.absolutePath), null, null)
+            val ext = displayName(tempUri)?.substringAfterLast('.', "")?.ifEmpty { null } ?: "mp3"
+            val destFile = context.contentResolver.openInputStream(tempUri)?.use { input ->
+                dev.yuwixx.resonance.data.util.IncomingFileStorage.saveIncoming(
+                    context = context,
+                    input = input,
+                    title = title,
+                    ext = ext,
+                    mimeType = "audio/$ext",
+                )
+            } ?: throw Exception("Could not open received file")
             _incomingFile.value = IncomingFile(
                 senderName = senderName,
                 songTitle  = title,
@@ -433,6 +436,15 @@ class NearbyShareManager @Inject constructor(
             _state.value = NearbyState.Error("Could not save received file: ${e.message}")
         }
     }
+
+    private fun displayName(uri: Uri): String? {
+        return context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+    }
+
+    private fun displayNameWithoutExtension(uri: Uri): String =
+        displayName(uri)?.substringBeforeLast('.') ?: "Unknown"
 
     private fun isLocationEnabled(): Boolean {
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager

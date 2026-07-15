@@ -37,7 +37,7 @@ class ShareViewModel @Inject constructor(
     fun clearIncoming()               = nearbyManager.clearIncoming()
 
     fun sendViaNearby(endpointId: String) {
-        val song = _selectedSong.value ?: return
+        val song = _selectedSongs.value.singleOrNull() ?: return
         nearbyManager.sendSong(song, endpointId)
     }
 
@@ -49,14 +49,34 @@ class ShareViewModel @Inject constructor(
     fun prepareTransfer(song: Song) {
         transferManager.prepareTransfer(song)
     }
+    private val _remoteTtlHours = MutableStateFlow(24)
+    val remoteTtlHours: StateFlow<Int> = _remoteTtlHours.asStateFlow()
+    fun setRemoteTtlHours(hours: Int) { _remoteTtlHours.value = hours }
+
+    /** Shares whatever's currently selected — a single song via the existing one-song relay
+     *  path, or multiple songs via the manifest-linked multi-song path. Capped to match the
+     *  relay's own per-manifest song limit so a huge selection fails fast instead of
+     *  uploading everything and only then being rejected when the manifest is created. */
+    fun prepareRemoteTransfer() {
+        val songs = _selectedSongs.value.take(MAX_SHARE_SONGS)
+        if (songs.isEmpty()) return
+        if (songs.size == 1) transferManager.prepareRemoteTransfer(songs.first(), _remoteTtlHours.value)
+        else transferManager.prepareRemoteMultiTransfer(songs, _remoteTtlHours.value)
+    }
+
     fun cancelTransfer()            = transferManager.cancel()
     fun dismissNoWifi()             = transferManager.dismissNoWifi()
 
-    private val _selectedSong = MutableStateFlow<Song?>(null)
-    val selectedSong: StateFlow<Song?> = _selectedSong.asStateFlow()
+    private val _selectedSongs = MutableStateFlow<List<Song>>(emptyList())
+    val selectedSongs: StateFlow<List<Song>> = _selectedSongs.asStateFlow()
 
-    fun preselectSong(song: Song?) { if (_selectedSong.value == null) _selectedSong.value = song }
-    fun selectSong(song: Song)     { _selectedSong.value = song }
+    fun preselectSongs(songs: List<Song>) { if (_selectedSongs.value.isEmpty()) _selectedSongs.value = songs }
+    fun selectSong(song: Song)            { _selectedSongs.value = listOf(song) }
+    fun clearSelection()                  { _selectedSongs.value = emptyList() }
+
+    companion object {
+        const val MAX_SHARE_SONGS = 50
+    }
 
     val allSongs: StateFlow<List<Song>> = musicRepository.allSongs
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())

@@ -28,6 +28,12 @@ class WaveformExtractor @Inject constructor(
 
     private val diskDir = File(context.cacheDir, "waveforms").also { it.mkdirs() }
 
+    /** Synchronous, in-memory-only lookup — lets callers show already-precomputed data
+     *  immediately instead of nulling the UI out while a redundant (but cheap) re-extract
+     *  round-trips through a coroutine. Does not touch disk; a disk-cache hit still goes
+     *  through [extract]. */
+    fun peekCached(songId: Long): WaveformData? = memCache[songId]
+
     suspend fun extract(songId: Long, uri: Uri, resolution: Int = 200): WaveformData? =
         withContext(Dispatchers.Default) {
             memCache[songId]?.let { return@withContext it }

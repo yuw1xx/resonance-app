@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -46,12 +47,17 @@ fun SetupScreen(onComplete: () -> Unit) {
     val lastFmAuthState by settingsViewModel.lastFmAuthState.collectAsState()
     val navidromeConnectionState by settingsViewModel.navidromeConnectionState.collectAsState()
 
-    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.READ_MEDIA_AUDIO
-    } else {
-        Manifest.permission.READ_EXTERNAL_STORAGE
+    val permissions = remember {
+        buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.READ_MEDIA_AUDIO)
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
     }
-    val permissionState = rememberPermissionState(permission)
+    val permissionState = rememberMultiplePermissionsState(permissions)
 
     fun advance() {
         val next = currentStep + 1
@@ -154,7 +160,7 @@ fun SetupScreen(onComplete: () -> Unit) {
                         ) {
                             Text("Continue")
                             Icon(
-                                Icons.Rounded.ArrowForward, null,
+                                Icons.AutoMirrored.Rounded.ArrowForward, null,
                                 modifier = Modifier.padding(start = 8.dp).size(18.dp)
                             )
                         }
@@ -165,8 +171,8 @@ fun SetupScreen(onComplete: () -> Unit) {
                         onClick = {
                             when {
                                 currentStep < TOTAL_STEPS - 1 -> {
-                                    if (currentStep == 2 && !permissionState.status.isGranted) {
-                                        permissionState.launchPermissionRequest()
+                                    if (currentStep == 2 && !permissionState.allPermissionsGranted) {
+                                        permissionState.launchMultiplePermissionRequest()
                                     } else {
                                         advance()
                                     }
@@ -179,7 +185,7 @@ fun SetupScreen(onComplete: () -> Unit) {
                         Text(if (currentStep == TOTAL_STEPS - 1) "Get Started" else "Continue")
                         if (currentStep < TOTAL_STEPS - 1) {
                             Icon(
-                                Icons.Rounded.ArrowForward, null,
+                                Icons.AutoMirrored.Rounded.ArrowForward, null,
                                 modifier = Modifier.padding(start = 8.dp).size(18.dp)
                             )
                         }
@@ -189,8 +195,8 @@ fun SetupScreen(onComplete: () -> Unit) {
         }
     }
 
-    LaunchedEffect(permissionState.status.isGranted) {
-        if (currentStep == 2 && permissionState.status.isGranted) {
+    LaunchedEffect(permissionState.allPermissionsGranted) {
+        if (currentStep == 2 && permissionState.allPermissionsGranted) {
             advance()
         }
     }
@@ -328,7 +334,7 @@ private fun SourceCard(
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-private fun PermissionStep(permissionState: PermissionState) {
+private fun PermissionStep(permissionState: MultiplePermissionsState) {
     SetupContent(
         icon = Icons.Rounded.Storage,
         title = "Library Access",

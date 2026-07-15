@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.*
@@ -24,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.yuwixx.resonance.data.database.dao.HourPlayCount
+import dev.yuwixx.resonance.presentation.components.AppSectionHeader
 import dev.yuwixx.resonance.presentation.viewmodel.StatsPeriod
 import dev.yuwixx.resonance.presentation.viewmodel.StatisticsData
 import dev.yuwixx.resonance.presentation.viewmodel.StatisticsViewModel
@@ -74,7 +76,7 @@ fun StatisticsScreen(
 
                 if (data.hourlyActivity.isNotEmpty()) {
                     item {
-                        SectionLabel("Activity by Hour")
+                        AppSectionHeader("Activity by Hour", Icons.Rounded.AccessTime)
                         HourlyChart(
                             data = data.hourlyActivity,
                             modifier = Modifier
@@ -86,7 +88,7 @@ fun StatisticsScreen(
                 }
 
                 if (data.topSongs.isNotEmpty()) {
-                    item { SectionLabel("Top Songs") }
+                    item { AppSectionHeader("Top Songs", Icons.Rounded.MusicNote) }
                     items(data.topSongs) { (song, count) ->
                         ListItem(
                             headlineContent = {
@@ -114,7 +116,7 @@ fun StatisticsScreen(
                 }
 
                 if (data.topArtists.isNotEmpty()) {
-                    item { SectionLabel("Top Artists") }
+                    item { AppSectionHeader("Top Artists", Icons.Rounded.Person) }
                     items(data.topArtists) { (artist, count) ->
                         ListItem(
                             headlineContent = {
@@ -209,17 +211,6 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
             Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-    )
 }
 
 @Composable

@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,6 +42,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.service.NearbyShareManager
 import dev.yuwixx.resonance.data.service.ShareTransferManager
+import dev.yuwixx.resonance.presentation.components.SectionCard
 import dev.yuwixx.resonance.presentation.viewmodel.ShareViewModel
 import kotlin.math.*
 
@@ -48,12 +50,13 @@ import kotlin.math.*
 @Composable
 fun ShareSheet(
     viewModel: ShareViewModel,
-    currentSong: Song?,
+    currentSongs: List<Song>,
     onDismiss: () -> Unit,
     onPlayNow: (Song) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    LaunchedEffect(currentSong) { viewModel.preselectSong(currentSong) }
+    LaunchedEffect(currentSongs) { viewModel.preselectSongs(currentSongs) }
+    DisposableEffect(Unit) { onDispose { viewModel.clearSelection() } }
 
     ModalBottomSheet(
         onDismissRequest = {
@@ -136,11 +139,13 @@ private fun ShareMain(
 ) {
     val nearbyState     by viewModel.nearbyState.collectAsState()
     val devices         by viewModel.nearbyDevices.collectAsState()
-    val selectedSong    by viewModel.selectedSong.collectAsState()
+    val selectedSongs   by viewModel.selectedSongs.collectAsState()
+    val selectedSong    = selectedSongs.singleOrNull()
     val transferState   by viewModel.transferState.collectAsState()
     val allSongs        by viewModel.allSongs.collectAsState()
     val incomingRequest by viewModel.incomingRequest.collectAsState()
     val incomingFile    by viewModel.incomingFile.collectAsState()
+    val remoteTtlHours  by viewModel.remoteTtlHours.collectAsState()
 
     val haptics = LocalHapticFeedback.current
     var showSongPicker by remember { mutableStateOf(false) }
@@ -161,7 +166,7 @@ private fun ShareMain(
         AlertDialog(
             onDismissRequest = { viewModel.rejectNearbyRequest(req.endpointId) },
             title = { Text("Accept incoming song?") },
-            text = { Text("${req.senderName} wants to send you\n${req.songTitle} · ${req.songArtist}\n\nConnected via Bluetooth, Wi-Fi or NFC — tap Accept to receive.") },
+            text = { Text("${req.senderName} wants to send you\n${req.songTitle} · ${req.songArtist}\n\nConnected via Bluetooth or Wi-Fi — tap Accept to receive.") },
             confirmButton = { Button(onClick = { viewModel.acceptNearbyRequest(req.endpointId) }) { Text("Accept") } },
             dismissButton = { TextButton(onClick = { viewModel.rejectNearbyRequest(req.endpointId) }) { Text("Decline") } }
         )
@@ -229,15 +234,26 @@ private fun ShareMain(
 
     val readyState = transferState as? ShareTransferManager.TransferState.Ready
     val servingState = transferState as? ShareTransferManager.TransferState.Serving
-    val showQrDialog = readyState != null || servingState != null
+    val uploadingState = transferState as? ShareTransferManager.TransferState.Uploading
+    val transferErrorState = transferState as? ShareTransferManager.TransferState.Error
+    // NoWifi has its own dedicated dialog (NoWifiDialog below) — don't double up on it here.
+    val showQrDialog = readyState != null || servingState != null || uploadingState != null || transferErrorState != null
 
-    if (showQrDialog) QrTransferDialog(song = selectedSong, transferState = transferState, onDismiss = { viewModel.cancelTransfer() })
+    if (showQrDialog) QrTransferDialog(song = selectedSong, songCount = selectedSongs.size, transferState = transferState, ttlHours = remoteTtlHours, onDismiss = { viewModel.cancelTransfer() })
     if (nearbyState is NearbyShareManager.NearbyState.LocationDisabled) LocationDisabledDialog(onDismiss = { viewModel.disconnectNearby() })
     if (transferState is ShareTransferManager.TransferState.NoWifi) NoWifiDialog(onDismiss = { viewModel.dismissNoWifi() })
 
     if (showSongPicker) {
         SongPickerSheet(songs = allSongs, selectedSong = selectedSong, onSongPicked = { viewModel.selectSong(it); showSongPicker = false }, onDismiss = { showSongPicker = false })
     }
+
+    val connectedState = nearbyState as? NearbyShareManager.NearbyState.Connected
+    val sendingState   = nearbyState as? NearbyShareManager.NearbyState.Sending
+    val awaitingState  = nearbyState as? NearbyShareManager.NearbyState.AwaitingAcceptance
+    val idleForRemote  = transferState is ShareTransferManager.TransferState.Idle ||
+        transferState is ShareTransferManager.TransferState.Error ||
+        transferState is ShareTransferManager.TransferState.NoWifi ||
+        transferState is ShareTransferManager.TransferState.Rejected
 
     Column(
         modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 24.dp),
@@ -250,216 +266,217 @@ private fun ShareMain(
             Spacer(Modifier.width(8.dp))
             Text("Resonance Share", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { selectedSong?.let { viewModel.prepareTransfer(it) } }, enabled = selectedSong != null) {
-                Icon(Icons.Rounded.QrCode, "Share via QR Code")
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Rounded.Close, "Close")
             }
         }
 
         Spacer(Modifier.height(4.dp))
 
-        Box(modifier = Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
-            if (nearbyState is NearbyShareManager.NearbyState.GpsUnavailable) {
-                GpsUnavailableBanner(isGrapheneOs = viewModel.isGrapheneOs)
-            } else {
-                RadarAnimation(devices = devices, nearbyState = nearbyState, localName = viewModel.localName, onDeviceTapped = { device ->
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    viewModel.connectTo(device.endpointId)
-                })
-            }
+        // What you're sharing, up front — before how you're sharing it.
+        if (selectedSongs.size > 1) {
+            MultiSongSummary(songs = selectedSongs, modifier = Modifier.padding(horizontal = 20.dp))
+        } else {
+            SongPickerRow(song = selectedSong, onClick = { showSongPicker = true }, modifier = Modifier.padding(horizontal = 20.dp))
         }
 
-        val statusText = when (val s = nearbyState) {
-            is NearbyShareManager.NearbyState.Idle -> if (transferState is ShareTransferManager.TransferState.Rejected) "The receiver declined the transfer." else "Tap the QR button to share"
-            is NearbyShareManager.NearbyState.LocationDisabled -> "Location services are disabled"
-            is NearbyShareManager.NearbyState.GpsUnavailable -> "QR Code works without Google Play Services"
-            is NearbyShareManager.NearbyState.Scanning -> if (devices.isEmpty()) "Scanning via Bluetooth, Wi-Fi & NFC…" else "${devices.size} device${if (devices.size > 1) "s" else ""} nearby — tap to connect"
-            is NearbyShareManager.NearbyState.Connecting -> "Connecting…"
-            is NearbyShareManager.NearbyState.Connected -> "Connected to ${s.deviceName}"
-            is NearbyShareManager.NearbyState.AwaitingAcceptance -> "Waiting for receiver to accept…"
-            is NearbyShareManager.NearbyState.Sending -> "Sending… ${(s.progress * 100).toInt()}%"
-            is NearbyShareManager.NearbyState.SendSuccess -> "Sent! ✓"
-            is NearbyShareManager.NearbyState.Rejected -> "The receiver declined the transfer."
-            is NearbyShareManager.NearbyState.Receiving -> "Receiving… ${(s.progress * 100).toInt()}%"
-            is NearbyShareManager.NearbyState.Error -> s.message
-        }
-
-        AnimatedContent(
-            targetState = statusText,
-            transitionSpec = { (fadeIn(tween(200)) + slideInVertically { -it / 3 }).togetherWith(fadeOut(tween(150))) },
-            label = "status_text",
-        ) { text ->
-            Text(text = text, style = MaterialTheme.typography.bodySmall, color = when {
-                nearbyState is NearbyShareManager.NearbyState.Error -> MaterialTheme.colorScheme.error
-                nearbyState is NearbyShareManager.NearbyState.Rejected || transferState is ShareTransferManager.TransferState.Rejected -> MaterialTheme.colorScheme.error
-                nearbyState is NearbyShareManager.NearbyState.SendSuccess -> MaterialTheme.colorScheme.primary
-                nearbyState is NearbyShareManager.NearbyState.Receiving -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            }, modifier = Modifier.padding(horizontal = 24.dp), textAlign = TextAlign.Center)
-        }
-
-        val receivingState = nearbyState as? NearbyShareManager.NearbyState.Receiving
-        AnimatedVisibility(
-            visible = receivingState != null,
-            enter   = fadeIn(tween(300)) + expandVertically(tween(300)),
-            exit    = fadeOut(tween(200)) + shrinkVertically(tween(200)),
-        ) {
-            LinearProgressIndicator(
-                progress   = { receivingState?.progress ?: 0f },
-                modifier   = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 6.dp).height(4.dp),
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
-        }
-
-        val errorMessage = (nearbyState as? NearbyShareManager.NearbyState.Error)?.message ?: ""
-        val isWifiError = nearbyState is NearbyShareManager.NearbyState.Error &&
-            errorMessage.lowercase().contains("wi-fi is off")
-        val isPermissionError = nearbyState is NearbyShareManager.NearbyState.Error && !isWifiError &&
-            (errorMessage.contains("8029") || errorMessage.lowercase().contains("permission"))
-
-        AnimatedVisibility(
-            visible = nearbyState is NearbyShareManager.NearbyState.Error
-                   || (nearbyState is NearbyShareManager.NearbyState.GpsUnavailable && !viewModel.isGrapheneOs),
-            enter = fadeIn(tween(300)) + expandVertically(tween(300)),
-            exit  = fadeOut(tween(200)) + shrinkVertically(tween(200)),
-        ) {
-            Row(
-                modifier = Modifier.padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TextButton(
-                    onClick = {
-                        viewModel.stopScanning()
-                        viewModel.startScanning(activity)
-                    },
-                ) {
-                    Icon(Icons.Rounded.Refresh, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Retry", style = MaterialTheme.typography.labelMedium)
-                }
-                if (isWifiError) {
-                    TextButton(
-                        onClick = { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) },
-                    ) {
-                        Icon(Icons.Rounded.Wifi, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Wi-Fi Settings", style = MaterialTheme.typography.labelMedium)
-                    }
-                } else if (isPermissionError) {
-                    TextButton(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = Uri.fromParts("package", context.packageName, null)
-                            }
-                            context.startActivity(intent)
-                        },
-                    ) {
-                        Icon(Icons.Rounded.AppSettingsAlt, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Open Settings", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = nearbyState is NearbyShareManager.NearbyState.Scanning && devices.isEmpty(),
-            enter = fadeIn(tween(300)) + expandVertically(tween(300)),
-            exit  = fadeOut(tween(200)) + shrinkVertically(tween(200)),
-        ) {
-            Surface(
-                modifier = Modifier.padding(top = 12.dp, start = 24.dp, end = 24.dp),
-                shape    = MaterialTheme.shapes.medium,
-                color    = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
-            ) {
-                Row(
-                    modifier              = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(
-                        Icons.Rounded.Nfc,
-                        contentDescription = null,
-                        tint     = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Column {
-                        Text(
-                            "Tap phones together",
-                            style      = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color      = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                        Text(
-                            "Both devices need Resonance open. NFC connects instantly without searching.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(20.dp))
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
         Spacer(Modifier.height(16.dp))
 
-        Text("Song to share", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp))
-        Spacer(Modifier.height(8.dp))
-
-        SongPickerRow(song = selectedSong, onClick = { showSongPicker = true }, modifier = Modifier.padding(horizontal = 16.dp))
-
-        Spacer(Modifier.height(20.dp))
-
-        val connectedState = nearbyState as? NearbyShareManager.NearbyState.Connected
-        val sendingState   = nearbyState as? NearbyShareManager.NearbyState.Sending
-        val awaitingState  = nearbyState as? NearbyShareManager.NearbyState.AwaitingAcceptance
-
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(modifier = Modifier.weight(1f)) {
-                OutlinedButton(
-                    onClick  = { selectedSong?.let { viewModel.prepareTransfer(it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled  = selectedSong != null && (transferState is ShareTransferManager.TransferState.Idle || transferState is ShareTransferManager.TransferState.Error || transferState is ShareTransferManager.TransferState.NoWifi || transferState is ShareTransferManager.TransferState.Rejected),
-                    shape    = MaterialTheme.shapes.medium,
-                ) {
-                    if (transferState is ShareTransferManager.TransferState.Preparing) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Preparing…")
-                    } else {
-                        Icon(Icons.Rounded.QrCode2, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("QR Code")
-                    }
-                }
-                AnimatedVisibility(visible = transferState is ShareTransferManager.TransferState.NoWifi) {
-                    Text("Requires Wi-Fi or Wi-Fi Direct", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp))
+        SectionCard(icon = Icons.Rounded.Devices, title = "Nearby", modifier = Modifier.padding(horizontal = 16.dp)) {
+            Box(modifier = Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+                if (nearbyState is NearbyShareManager.NearbyState.GpsUnavailable) {
+                    GpsUnavailableBanner(isGrapheneOs = viewModel.isGrapheneOs)
+                } else {
+                    RadarAnimation(devices = devices, nearbyState = nearbyState, localName = viewModel.localName, onDeviceTapped = { device ->
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        viewModel.connectTo(device.endpointId)
+                    })
                 }
             }
 
-            Button(
-                onClick  = { connectedState?.let { viewModel.sendViaNearby(it.endpointId) } },
-                modifier = Modifier.weight(1f),
-                enabled  = connectedState != null && selectedSong != null && sendingState == null && awaitingState == null,
-                shape    = MaterialTheme.shapes.medium,
+            val statusText = when (val s = nearbyState) {
+                is NearbyShareManager.NearbyState.Idle -> if (transferState is ShareTransferManager.TransferState.Rejected) "The receiver declined the transfer." else "Tap QR Code or wait for a nearby device"
+                is NearbyShareManager.NearbyState.LocationDisabled -> "Location services are disabled"
+                is NearbyShareManager.NearbyState.GpsUnavailable -> "QR Code works without Google Play Services"
+                is NearbyShareManager.NearbyState.Scanning -> if (devices.isEmpty()) "Scanning via Bluetooth & Wi-Fi…" else "${devices.size} device${if (devices.size > 1) "s" else ""} nearby — tap to connect"
+                is NearbyShareManager.NearbyState.Connecting -> "Connecting…"
+                is NearbyShareManager.NearbyState.Connected -> "Connected to ${s.deviceName}"
+                is NearbyShareManager.NearbyState.AwaitingAcceptance -> "Waiting for receiver to accept…"
+                is NearbyShareManager.NearbyState.Sending -> "Sending… ${(s.progress * 100).toInt()}%"
+                is NearbyShareManager.NearbyState.SendSuccess -> "Sent! ✓"
+                is NearbyShareManager.NearbyState.Rejected -> "The receiver declined the transfer."
+                is NearbyShareManager.NearbyState.Receiving -> "Receiving… ${(s.progress * 100).toInt()}%"
+                is NearbyShareManager.NearbyState.Error -> s.message
+            }
+
+            AnimatedContent(
+                targetState = statusText,
+                transitionSpec = { (fadeIn(tween(200)) + slideInVertically { -it / 3 }).togetherWith(fadeOut(tween(150))) },
+                label = "status_text",
+            ) { text ->
+                Text(text = text, style = MaterialTheme.typography.bodySmall, color = when {
+                    nearbyState is NearbyShareManager.NearbyState.Error -> MaterialTheme.colorScheme.error
+                    nearbyState is NearbyShareManager.NearbyState.Rejected || transferState is ShareTransferManager.TransferState.Rejected -> MaterialTheme.colorScheme.error
+                    nearbyState is NearbyShareManager.NearbyState.SendSuccess -> MaterialTheme.colorScheme.primary
+                    nearbyState is NearbyShareManager.NearbyState.Receiving -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            }
+
+            val receivingState = nearbyState as? NearbyShareManager.NearbyState.Receiving
+            AnimatedVisibility(
+                visible = receivingState != null,
+                enter   = fadeIn(tween(300)) + expandVertically(tween(300)),
+                exit    = fadeOut(tween(200)) + shrinkVertically(tween(200)),
             ) {
-                when {
-                    sendingState != null || awaitingState != null -> {
-                        CircularProgressIndicator(progress = { sendingState?.progress ?: 0f }, modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary, trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f))
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (awaitingState != null) "Waiting…" else "Sending…")
+                LinearProgressIndicator(
+                    progress   = { receivingState?.progress ?: 0f },
+                    modifier   = Modifier.fillMaxWidth().padding(vertical = 6.dp).height(4.dp),
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+            }
+
+            val errorMessage = (nearbyState as? NearbyShareManager.NearbyState.Error)?.message ?: ""
+            val isWifiError = nearbyState is NearbyShareManager.NearbyState.Error &&
+                errorMessage.lowercase().contains("wi-fi is off")
+            val isPermissionError = nearbyState is NearbyShareManager.NearbyState.Error && !isWifiError &&
+                (errorMessage.contains("8029") || errorMessage.lowercase().contains("permission"))
+
+            AnimatedVisibility(
+                visible = nearbyState is NearbyShareManager.NearbyState.Error
+                       || (nearbyState is NearbyShareManager.NearbyState.GpsUnavailable && !viewModel.isGrapheneOs),
+                enter = fadeIn(tween(300)) + expandVertically(tween(300)),
+                exit  = fadeOut(tween(200)) + shrinkVertically(tween(200)),
+            ) {
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextButton(
+                        onClick = {
+                            viewModel.stopScanning()
+                            viewModel.startScanning(activity)
+                        },
+                    ) {
+                        Icon(Icons.Rounded.Refresh, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Retry", style = MaterialTheme.typography.labelMedium)
                     }
-                    nearbyState is NearbyShareManager.NearbyState.SendSuccess -> {
-                        Icon(Icons.Rounded.CheckCircle, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Sent!")
-                    }
-                    else -> {
-                        Icon(Icons.Rounded.Send, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Send")
+                    if (isWifiError) {
+                        TextButton(
+                            onClick = { context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) },
+                        ) {
+                            Icon(Icons.Rounded.Wifi, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Wi-Fi Settings", style = MaterialTheme.typography.labelMedium)
+                        }
+                    } else if (isPermissionError) {
+                        TextButton(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                                context.startActivity(intent)
+                            },
+                        ) {
+                            Icon(Icons.Rounded.AppSettingsAlt, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Open Settings", style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
+            }
+
+            if (selectedSongs.size > 1) {
+                Text(
+                    "Nearby only sends one song at a time — pick a single song above to use it.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick  = { selectedSong?.let { viewModel.prepareTransfer(it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled  = selectedSong != null && idleForRemote,
+                        shape    = MaterialTheme.shapes.medium,
+                    ) {
+                        if (transferState is ShareTransferManager.TransferState.Preparing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Preparing…")
+                        } else {
+                            Icon(Icons.Rounded.QrCode2, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("QR Code")
+                        }
+                    }
+                    AnimatedVisibility(visible = transferState is ShareTransferManager.TransferState.NoWifi) {
+                        Text("Requires Wi-Fi or Wi-Fi Direct", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp))
+                    }
+                }
+
+                Button(
+                    onClick  = { connectedState?.let { viewModel.sendViaNearby(it.endpointId) } },
+                    modifier = Modifier.weight(1f),
+                    enabled  = connectedState != null && selectedSong != null && sendingState == null && awaitingState == null,
+                    shape    = MaterialTheme.shapes.medium,
+                ) {
+                    when {
+                        sendingState != null || awaitingState != null -> {
+                            CircularProgressIndicator(progress = { sendingState?.progress ?: 0f }, modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary, trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f))
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (awaitingState != null) "Waiting…" else "Sending…")
+                        }
+                        nearbyState is NearbyShareManager.NearbyState.SendSuccess -> {
+                            Icon(Icons.Rounded.CheckCircle, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Sent!")
+                        }
+                        else -> {
+                            Icon(Icons.AutoMirrored.Rounded.Send, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Send")
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        SectionCard(icon = Icons.Rounded.Public, title = "Internet Link", modifier = Modifier.padding(horizontal = 16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(1, 24, 72).forEach { hours ->
+                    FilterChip(
+                        selected = remoteTtlHours == hours,
+                        onClick  = { viewModel.setRemoteTtlHours(hours) },
+                        label    = { Text(if (hours == 1) "1 hour" else "$hours hours") },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                onClick  = { viewModel.prepareRemoteTransfer() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled  = selectedSongs.isNotEmpty() && idleForRemote,
+                shape    = MaterialTheme.shapes.medium,
+            ) {
+                Icon(Icons.Rounded.Public, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    if (selectedSongs.size > 1) "Share ${selectedSongs.size} songs over the internet"
+                    else "Share over the internet"
+                )
             }
         }
     }
@@ -741,6 +758,39 @@ private fun SongPickerRow(
     }
 }
 
+@Composable
+private fun MultiSongSummary(
+    songs: List<Song>,
+    modifier: Modifier = Modifier,
+) {
+    val maxShown = 4
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            songs.take(maxShown).forEach { song ->
+                Text(
+                    "${song.title} · ${song.displayArtist}",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(vertical = 2.dp),
+                )
+            }
+            if (songs.size > maxShown) {
+                Text(
+                    "+${songs.size - maxShown} more",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 2.dp),
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SongPickerSheet(
@@ -882,19 +932,44 @@ private fun NoWifiDialog(onDismiss: () -> Unit) {
 @Composable
 private fun QrTransferDialog(
     song          : Song?,
+    songCount     : Int = 0,
     transferState : ShareTransferManager.TransferState,
+    ttlHours      : Int,
     onDismiss     : () -> Unit,
 ) {
-    val readyState   = transferState as? ShareTransferManager.TransferState.Ready
-    val servingState = transferState as? ShareTransferManager.TransferState.Serving
-    val isDone       = transferState is ShareTransferManager.TransferState.Done
+    val readyState     = transferState as? ShareTransferManager.TransferState.Ready
+    val servingState   = transferState as? ShareTransferManager.TransferState.Serving
+    val uploadingState = transferState as? ShareTransferManager.TransferState.Uploading
+    val errorState     = transferState as? ShareTransferManager.TransferState.Error
+    val isDone         = transferState is ShareTransferManager.TransferState.Done
+    val isMulti        = readyState?.mode == "remote-multi" || (uploadingState?.totalSongs ?: 1) > 1
+    val isShareableLink = readyState?.mode == "remote" || readyState?.mode == "remote-multi"
+    val context = LocalContext.current
+
+    if (errorState != null) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            icon = { Icon(Icons.Rounded.ErrorOutline, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Transfer failed") },
+            text = {
+                Text(
+                    errorState.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            },
+            confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        )
+        return
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         icon             = {
             when {
                 isDone       -> Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
-                servingState != null -> Icon(Icons.Rounded.CloudUpload, null)
+                servingState != null || uploadingState != null -> Icon(Icons.Rounded.CloudUpload, null)
                 else         -> Icon(Icons.Rounded.QrCode2, null)
             }
         },
@@ -902,6 +977,8 @@ private fun QrTransferDialog(
             Text(when {
                 isDone       -> "Transfer complete"
                 servingState != null -> "Sending…"
+                uploadingState != null -> "Uploading…"
+                readyState?.mode == "remote" || isMulti -> "Link ready"
                 readyState?.mode == "p2p" -> "Scan to join & receive"
                 else         -> "Scan to receive"
             })
@@ -911,7 +988,13 @@ private fun QrTransferDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (song != null) {
+                if (isMulti) {
+                    Text(
+                        "$songCount songs",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (song != null) {
                     Text(
                         "${song.title} · ${song.displayArtist}",
                         style = MaterialTheme.typography.bodySmall,
@@ -919,24 +1002,78 @@ private fun QrTransferDialog(
                     )
                 }
 
-                AnimatedContent(
-                    targetState = readyState?.qrContent,
-                    transitionSpec = { fadeIn(tween(300)).togetherWith(fadeOut(tween(200))) },
-                    label = "qr_content",
-                ) { content ->
-                    if (content != null) {
-                        MaterialQrCode(
-                            content = content,
-                            modifier = Modifier
-                                .padding(vertical = 12.dp)
-                                .size(240.dp)
+                if (uploadingState != null) {
+                    Box(
+                        modifier         = Modifier.size(240.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Rounded.CloudUpload, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(64.dp))
+                    }
+                } else {
+                    AnimatedContent(
+                        targetState = readyState?.qrContent,
+                        transitionSpec = { fadeIn(tween(300)).togetherWith(fadeOut(tween(200))) },
+                        label = "qr_content",
+                    ) { content ->
+                        if (content != null) {
+                            MaterialQrCode(
+                                content = content,
+                                modifier = Modifier
+                                    .padding(vertical = 12.dp)
+                                    .size(240.dp)
+                            )
+                        } else {
+                            Box(
+                                modifier         = Modifier.size(240.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                            }
+                        }
+                    }
+                }
+
+                if (isShareableLink && readyState?.qrContent != null) {
+                    val link = readyState.qrContent
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            link,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         )
-                    } else {
-                        Box(
-                            modifier         = Modifier.size(240.dp),
-                            contentAlignment = Alignment.Center,
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Resonance share link", link))
+                            },
+                            shape = MaterialTheme.shapes.medium,
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                            Icon(Icons.Rounded.ContentCopy, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Copy link")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, link)
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, null))
+                            },
+                            shape = MaterialTheme.shapes.medium,
+                        ) {
+                            Icon(Icons.AutoMirrored.Rounded.Send, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Share link")
                         }
                     }
                 }
@@ -954,9 +1091,34 @@ private fun QrTransferDialog(
                     )
                 }
 
+                if (uploadingState != null) {
+                    LinearProgressIndicator(
+                        progress   = { uploadingState.progress },
+                        modifier   = Modifier.fillMaxWidth().height(6.dp),
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
+                    Text(
+                        if (uploadingState.totalSongs > 1)
+                            "Song ${(uploadingState.completedSongs + 1).coerceAtMost(uploadingState.totalSongs)} of ${uploadingState.totalSongs} · ${(uploadingState.progress * 100).toInt()}% uploaded"
+                        else
+                            "${(uploadingState.progress * 100).toInt()}% uploaded",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
                 val hint = when {
                     isDone               -> "The file was received successfully."
                     servingState != null -> "Keep this screen open until the transfer finishes."
+                    uploadingState != null -> "Keep this screen open until the upload finishes."
+                    readyState?.mode == "remote" -> {
+                        val ttlText = if (ttlHours == 1) "1 hour" else "$ttlHours hours"
+                        "Share this QR code or link with anyone, anywhere. It expires after one download or $ttlText."
+                    }
+                    isMulti -> {
+                        val ttlText = if (ttlHours == 1) "1 hour" else "$ttlHours hours"
+                        "Share this QR code or link with anyone, anywhere. Each song can be downloaded once; the list stays available for $ttlText."
+                    }
                     readyState?.mode == "p2p" ->
                         "The receiver will temporarily join your Wi-Fi Direct hotspot. " +
                                 "No internet connection is required on either device."
@@ -973,13 +1135,14 @@ private fun QrTransferDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(if (isDone) "Done" else "Cancel")
+                Text(if (isDone || readyState?.mode == "remote" || isMulti) "Done" else "Cancel")
             }
         },
     )
 }
 
 @Composable
+
 private fun PermissionPrompt(
     isPermanentlyDenied: Boolean,
     onRequest: () -> Unit,

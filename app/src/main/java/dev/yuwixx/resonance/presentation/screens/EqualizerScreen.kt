@@ -9,6 +9,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.yuwixx.resonance.data.service.EqStateHolder
+import dev.yuwixx.resonance.presentation.components.SectionCard
 import dev.yuwixx.resonance.presentation.viewmodel.EqPreset
 import dev.yuwixx.resonance.presentation.viewmodel.EqualizerViewModel
 import kotlin.math.roundToInt
@@ -56,16 +60,21 @@ fun EqualizerScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             if (capabilities == null) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                    ),
+                Surface(
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
-                    Text(
-                        "Equalizer is not available on this device.\nStart playing a song to initialize it.",
+                    Row(
                         modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Rounded.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            "Equalizer is not available on this device.\nStart playing a song to initialize it.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             } else {
                 val caps = capabilities!!
@@ -79,54 +88,43 @@ fun EqualizerScreen(
                     Switch(checked = enabled, onCheckedChange = viewModel::setEnabled)
                 }
 
-                HorizontalDivider()
-
-                Text(
-                    "Presets",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(EqPreset.entries) { preset ->
-                        AssistChip(
-                            onClick = {
-                                viewModel.applyPreset(preset)
-                                if (!enabled) viewModel.setEnabled(true)
-                            },
-                            label = { Text(preset.label) },
-                            enabled = caps.bandCount > 0,
-                        )
+                SectionCard(icon = Icons.Rounded.Tune, title = "Presets") {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(EqPreset.entries) { preset ->
+                            AssistChip(
+                                onClick = {
+                                    viewModel.applyPreset(preset)
+                                    if (!enabled) viewModel.setEnabled(true)
+                                },
+                                label = { Text(preset.label) },
+                                enabled = caps.bandCount > 0,
+                            )
+                        }
                     }
                 }
 
-                HorizontalDivider()
-
-                Text(
-                    "Bands",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    bandLevels.forEachIndexed { index, level ->
-                        if (index >= caps.bandCount) return@forEachIndexed
-                        val freqHz = caps.centerFreqs.getOrNull(index) ?: 0
-                        BandSlider(
-                            band = index,
-                            level = level,
-                            min = caps.minLevel,
-                            max = caps.maxLevel,
-                            freqLabel = formatFreq(freqHz),
-                            enabled = enabled,
-                            onLevelChange = { newLevel -> viewModel.setBandLevel(index, newLevel) },
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                        )
+                SectionCard(icon = Icons.Rounded.GraphicEq, title = "Bands") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        bandLevels.forEachIndexed { index, level ->
+                            if (index >= caps.bandCount) return@forEachIndexed
+                            val freqHz = caps.centerFreqs.getOrNull(index) ?: 0
+                            BandSlider(
+                                band = index,
+                                level = level,
+                                min = caps.minLevel,
+                                max = caps.maxLevel,
+                                freqLabel = formatFreq(freqHz),
+                                enabled = enabled,
+                                onLevelChange = { newLevel -> viewModel.setBandLevel(index, newLevel) },
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                        }
                     }
                 }
             }

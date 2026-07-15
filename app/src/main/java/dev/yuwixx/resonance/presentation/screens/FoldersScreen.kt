@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.yuwixx.resonance.data.model.Song
+import dev.yuwixx.resonance.presentation.components.AppSectionHeader
 import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 
@@ -60,7 +62,7 @@ fun FoldersScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { if (currentPath != null) navigateUp() else onBack() }) {
-                        Icon(Icons.Rounded.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                     }
                 },
                 actions = {
@@ -113,12 +115,7 @@ fun FoldersScreen(
 
             if (songsHere.isNotEmpty() && subfolders.isNotEmpty()) {
                 item {
-                    Text(
-                        "Songs in this folder",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
+                    AppSectionHeader("Songs in this folder", Icons.Rounded.MusicNote)
                 }
             }
             items(songsHere, key = { it.id }) { song ->

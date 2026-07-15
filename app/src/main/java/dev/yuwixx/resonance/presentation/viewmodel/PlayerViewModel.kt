@@ -45,6 +45,7 @@ class PlayerViewModel @Inject constructor(
     private val navidromePreloader: NavidromePreloader,
     private val castManager: CastManager,
     private val localAudioServer: LocalAudioServer,
+    private val artworkRepository: ArtworkRepository,
 ) : ViewModel() {
 
     private var _controller: MediaController? = null
@@ -85,6 +86,15 @@ class PlayerViewModel @Inject constructor(
             if (song == null) flowOf(false)
             else likedSongsDao.getLikedSongIds().map { ids -> song.id in ids }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    // Artwork-derived accent colors for the player (seekbar, play button, next-song text).
+    // Null means "no artwork to sample" — callers fall back to the fixed theme accent.
+    val artworkColors: StateFlow<ArtworkComposeColors?> = _currentSong
+        .flatMapLatest { song ->
+            val uri = song?.artworkUri
+            if (song == null || uri == null) flowOf<ArtworkComposeColors?>(null)
+            else flow { emit(artworkRepository.extractArtworkColors(song.albumId, uri).toComposeColors()) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val partyMode = prefs.partyMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -327,6 +337,17 @@ class PlayerViewModel @Inject constructor(
             castManager.castSong(song.castUrl(), song, artworkUrl = song.castArtworkUrl())
             _controller?.pause()
         } else {
+            // Start the waveform decode for the song that's about to play (and the one right
+            // after it) immediately, in parallel with handing off to ExoPlayer, instead of
+            // waiting for onMediaItemTransition to fire — that was the only trigger before,
+            // so the very first song of a queue never got a head start.
+            songs.getOrNull(startIndex)?.let { song ->
+                viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
+            }
+            songs.getOrNull(startIndex + 1)?.let { song ->
+                viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
+            }
+
             _controller?.let { ctrl ->
                 navidromePreloader.reset()
                 ctrl.setMediaItems(songs.map { it.toMediaItem() }, startIndex, 0)
@@ -431,6 +452,7 @@ class PlayerViewModel @Inject constructor(
 
     fun addToQueueEnd(song: Song) {
         _controller?.addMediaItem(song.toMediaItem())
+        viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
     }
 
     fun addToQueueNext(song: Song) {
@@ -439,6 +461,7 @@ class PlayerViewModel @Inject constructor(
                 .coerceAtMost(ctrl.mediaItemCount)
             ctrl.addMediaItem(insertIndex, song.toMediaItem())
         }
+        viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
     }
 
     private val _queue = MutableStateFlow<List<Song>>(emptyList())
@@ -536,7 +559,11 @@ class PlayerViewModel @Inject constructor(
                         ?: mediaItem?.toSong()
                     if (song != null) {
                         _currentSong.value = song
-                        _waveformData.value = null
+                        // If play()'s or the previous transition's prefetch already warmed the
+                        // in-memory cache, show it immediately instead of flashing the
+                        // placeholder waveform while a redundant (cache-hit) extract() call
+                        // round-trips through a coroutine.
+                        _waveformData.value = waveformExtractor.peekCached(song.id)
                         _lyricsResult.value = dev.yuwixx.resonance.data.repository.LyricsResult.Loading
                         _activeLyricIndex.value = -1
 
