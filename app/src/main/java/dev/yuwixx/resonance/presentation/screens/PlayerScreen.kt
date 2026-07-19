@@ -35,6 +35,7 @@ import dev.yuwixx.resonance.data.model.LyricLine
 import dev.yuwixx.resonance.data.model.Playlist
 import dev.yuwixx.resonance.data.model.RepeatMode
 import dev.yuwixx.resonance.data.model.SleepTimer
+import dev.yuwixx.resonance.data.model.SmartQueueReason
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.repository.ArtworkComposeColors
 import dev.yuwixx.resonance.data.repository.LyricsResult
@@ -59,6 +60,7 @@ fun PlayerScreen(
     playlists: List<Playlist> = emptyList(),
     onAddToPlaylist: (Playlist) -> Unit = {},
     onCreatePlaylist: (String) -> Unit = {},
+    onArtistClick: (String) -> Unit = {},
 ) {
     val currentSong by playerViewModel.currentSong.collectAsState()
     val isPlaying by playerViewModel.isPlaying.collectAsState()
@@ -79,8 +81,10 @@ fun PlayerScreen(
     val activeLyricIndex by playerViewModel.activeLyricIndex.collectAsState()
     val isTrackLoved by playerViewModel.isCurrentSongLiked.collectAsState()
     val artworkColors by playerViewModel.artworkColors.collectAsState()
-    val queue by playerViewModel.queue.collectAsState()
-    val currentQueueIndex by playerViewModel.currentQueueIndex.collectAsState()
+    val nextSong by playerViewModel.nextSong.collectAsState()
+    val visualizerBars by playerViewModel.visualizerBars.collectAsState()
+    val isLoadingSmartQueue by playerViewModel.isLoadingSmartQueue.collectAsState()
+    val smartQueueError by playerViewModel.smartQueueError.collectAsState()
 
     val playerLayout by playerViewModel.playerLayout.collectAsState()
     val showLyricsButton by playerViewModel.showLyricsButton.collectAsState()
@@ -93,10 +97,18 @@ fun PlayerScreen(
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showOptionsSheet by remember { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // Close the lyrics overlay whenever the song changes so stale lyrics never show.
     LaunchedEffect(song.id) {
         showLyricsOverlay = false
+    }
+
+    LaunchedEffect(smartQueueError) {
+        smartQueueError?.let {
+            snackbarHostState.showSnackbar(it)
+            playerViewModel.clearSmartQueueError()
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -136,6 +148,7 @@ fun PlayerScreen(
                 modifier = Modifier
                     .padding(horizontal = artworkPadding)
                     .aspectRatio(1f),
+                onArtworkMissing = { playerViewModel.getSongArtworkUrl(song) },
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -150,8 +163,10 @@ fun PlayerScreen(
                 waveformData = waveformData,
                 seekbarStyle = seekbarStyle,
                 isTrackLoved = isTrackLoved,
-                nextSong = queue.getOrNull(currentQueueIndex + 1),
+                nextSong = nextSong,
                 artworkColors = artworkColors,
+                visualizerBars = visualizerBars,
+                onVisualizerActiveChanged = { playerViewModel.setVisualizerActive(it) },
                 onPlayPause = { playerViewModel.playPause() },
                 onNext = { playerViewModel.skipNext() },
                 onPrevious = { playerViewModel.skipPrevious() },
@@ -159,6 +174,7 @@ fun PlayerScreen(
                 onRepeatModeChange = { playerViewModel.toggleRepeat() },
                 onShuffleToggle = { playerViewModel.toggleShuffle() },
                 onLoveTrack = { playerViewModel.toggleLike() },
+                onArtistClick = { onArtistClick(song.artists.firstOrNull() ?: song.artist) },
             )
 
             PlayerFooter(
@@ -228,6 +244,12 @@ fun PlayerScreen(
                     showOptionsSheet = false
                     showShareSheet = true
                 },
+                onArtworkMissing = { playerViewModel.getSongArtworkUrl(song) },
+                isLoadingSmartQueue = isLoadingSmartQueue,
+                onSelectSmartQueueReason = { reason ->
+                    playerViewModel.loadSmartQueue(reason)
+                    showOptionsSheet = false
+                },
             )
         }
 
@@ -242,6 +264,13 @@ fun PlayerScreen(
                 },
             )
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding(),
+        )
     }
 }
 
@@ -328,6 +357,7 @@ private fun ArtworkPanel(
     sharedTransitionScope: SharedTransitionScope? = null,
     animatedVisibilityScope: AnimatedVisibilityScope? = null,
     modifier: Modifier = Modifier,
+    onArtworkMissing: (suspend () -> String?)? = null,
 ) {
     val config = LocalAppearanceConfig.current
     val artworkCorner = when (config.playerArtworkShape) {
@@ -377,6 +407,7 @@ private fun ArtworkPanel(
                 contentDescription = song.album,
                 modifier = Modifier.fillMaxSize(),
                 cornerRadius = 0.dp,
+                onArtworkMissing = onArtworkMissing,
             )
         }
     }
@@ -395,6 +426,8 @@ private fun PlaybackControls(
     isTrackLoved: Boolean,
     nextSong: Song? = null,
     artworkColors: ArtworkComposeColors? = null,
+    visualizerBars: FloatArray = FloatArray(0),
+    onVisualizerActiveChanged: (Boolean) -> Unit = {},
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -402,6 +435,7 @@ private fun PlaybackControls(
     onRepeatModeChange: () -> Unit,
     onShuffleToggle: () -> Unit,
     onLoveTrack: () -> Unit,
+    onArtistClick: () -> Unit = {},
 ) {
     val positionMs by remember { derivedStateOf { positionProvider() } }
     val config = LocalAppearanceConfig.current
@@ -468,6 +502,7 @@ private fun PlaybackControls(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable(onClick = onArtistClick),
                     )
                     if (config.showBitrateInfo && song.mimeType.isNotBlank()) {
                         val fmt = when {
@@ -532,6 +567,22 @@ private fun PlaybackControls(
                     durationMs = durationMs,
                     onSeek = onSeek,
                     isPlaying = isPlaying,
+                    playedColor = seekbarPlayedColor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                )
+            }
+            "CAVA" -> {
+                DisposableEffect(Unit) {
+                    onVisualizerActiveChanged(true)
+                    onDispose { onVisualizerActiveChanged(false) }
+                }
+                CavaSeekbar(
+                    magnitudes = visualizerBars,
+                    positionProvider = positionProvider,
+                    durationMs = durationMs,
+                    onSeek = onSeek,
                     playedColor = seekbarPlayedColor,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -761,7 +812,7 @@ private fun PlayerFooter(
     }
 }
 
-private enum class OptionsPage { Main, Playlist, Info }
+private enum class OptionsPage { Main, Playlist, Info, SmartQueue }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -773,6 +824,9 @@ private fun PlayerOptionsSheet(
     onAddToPlaylist: (Playlist) -> Unit,
     onCreatePlaylist: (String) -> Unit,
     onShare: () -> Unit,
+    onArtworkMissing: (suspend () -> String?)? = null,
+    isLoadingSmartQueue: Boolean = false,
+    onSelectSmartQueueReason: (SmartQueueReason) -> Unit = {},
 ) {
     var page by remember { mutableStateOf(OptionsPage.Main) }
     var showCreatePlaylist by remember { mutableStateOf(false) }
@@ -800,7 +854,9 @@ private fun PlayerOptionsSheet(
                     onAddToQueue = onAddToQueue,
                     onOpenPlaylists = { page = OptionsPage.Playlist },
                     onOpenInfo = { page = OptionsPage.Info },
+                    onOpenSmartQueue = { page = OptionsPage.SmartQueue },
                     onShare = onShare,
+                    onArtworkMissing = onArtworkMissing,
                 )
                 OptionsPage.Playlist -> SheetPlaylistPage(
                     playlists = playlists,
@@ -816,6 +872,12 @@ private fun PlayerOptionsSheet(
                 OptionsPage.Info -> SheetInfoPage(
                     song = song,
                     onBack = { page = OptionsPage.Main },
+                    onArtworkMissing = onArtworkMissing,
+                )
+                OptionsPage.SmartQueue -> SheetSmartQueuePage(
+                    onBack = { page = OptionsPage.Main },
+                    isLoading = isLoadingSmartQueue,
+                    onSelectReason = onSelectSmartQueueReason,
                 )
             }
         }
@@ -828,7 +890,9 @@ private fun SheetMainPage(
     onAddToQueue: () -> Unit,
     onOpenPlaylists: () -> Unit,
     onOpenInfo: () -> Unit,
+    onOpenSmartQueue: () -> Unit = {},
     onShare: () -> Unit,
+    onArtworkMissing: (suspend () -> String?)? = null,
 ) {
     Column(modifier = Modifier.padding(bottom = 28.dp)) {
         ListItem(
@@ -856,6 +920,7 @@ private fun SheetMainPage(
                         contentDescription = song.album,
                         modifier = Modifier.size(52.dp),
                         cornerRadius = 10.dp,
+                        onArtworkMissing = onArtworkMissing,
                     )
                 }
             },
@@ -870,6 +935,20 @@ private fun SheetMainPage(
                 Icon(
                     Icons.AutoMirrored.Rounded.QueueMusic, null,
                     tint = MaterialTheme.colorScheme.primary,
+                )
+            },
+        )
+
+        ListItem(
+            modifier = Modifier.clickable(onClick = onOpenSmartQueue),
+            headlineContent = { Text("Smart Queue") },
+            leadingContent = {
+                Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
+            },
+            trailingContent = {
+                Icon(
+                    Icons.Rounded.ChevronRight, null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             },
         )
@@ -912,6 +991,58 @@ private fun SheetMainPage(
                 Icon(Icons.Rounded.Share, null, tint = MaterialTheme.colorScheme.primary)
             },
         )
+    }
+}
+
+private data class SmartQueueOption(val reason: SmartQueueReason, val label: String)
+
+private val smartQueueOptions = listOf(
+    SmartQueueOption(SmartQueueReason.RELATED_BY_HISTORY, "Related by history"),
+    SmartQueueOption(SmartQueueReason.SIMILAR_RELEASE_DATE, "Similar release date"),
+    SmartQueueOption(SmartQueueReason.SAME_GENRE, "Same genre"),
+    SmartQueueOption(SmartQueueReason.SAME_ERA, "From this era"),
+    SmartQueueOption(SmartQueueReason.RANDOM_DISCOVERY, "Random discovery"),
+    SmartQueueOption(SmartQueueReason.MOST_PLAYED, "Most played"),
+    SmartQueueOption(SmartQueueReason.LOST_MEMORIES, "Songs you haven't heard in a while"),
+)
+
+@Composable
+private fun SheetSmartQueuePage(
+    onBack: () -> Unit,
+    isLoading: Boolean,
+    onSelectReason: (SmartQueueReason) -> Unit,
+) {
+    Column(modifier = Modifier.padding(bottom = 28.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
+            Text(
+                "Smart Queue",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp).padding(end = 12.dp),
+                    strokeWidth = 2.dp,
+                )
+            }
+        }
+
+        smartQueueOptions.forEach { option ->
+            ListItem(
+                modifier = Modifier.clickable(enabled = !isLoading) { onSelectReason(option.reason) },
+                headlineContent = { Text(option.label) },
+                leadingContent = {
+                    Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
+                },
+            )
+        }
     }
 }
 
@@ -1021,6 +1152,7 @@ private fun SheetPlaylistPage(
 private fun SheetInfoPage(
     song: Song,
     onBack: () -> Unit,
+    onArtworkMissing: (suspend () -> String?)? = null,
 ) {
     Column(modifier = Modifier.padding(bottom = 32.dp)) {
         Row(
@@ -1050,6 +1182,7 @@ private fun SheetInfoPage(
                     contentDescription = song.album,
                     modifier = Modifier.size(72.dp),
                     cornerRadius = 14.dp,
+                    onArtworkMissing = onArtworkMissing,
                 )
             }
             Column(modifier = Modifier.weight(1f)) {

@@ -10,6 +10,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.model.RepeatMode
 import dev.yuwixx.resonance.data.model.SortOrder
+import dev.yuwixx.resonance.data.security.SecureCredentialStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -21,7 +22,8 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 @Singleton
 class ResonancePreferences @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val secureCredentialStore: SecureCredentialStore,
 ) {
     private val ds = context.dataStore
 
@@ -58,6 +60,7 @@ class ResonancePreferences @Inject constructor(
         val AUTO_SCAN_INTERVAL_HOURS = intPreferencesKey("auto_scan_interval_hours")
         val FETCH_ARTIST_IMAGES = booleanPreferencesKey("fetch_artist_images")
         val FETCH_LYRICS        = booleanPreferencesKey("fetch_lyrics")
+        val FETCH_ALBUM_ART     = booleanPreferencesKey("fetch_album_art")
 
         val DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
         val PRESET_COLOR = intPreferencesKey("preset_color")
@@ -87,6 +90,8 @@ class ResonancePreferences @Inject constructor(
         val NAVIDROME_SERVER_URL    = stringPreferencesKey("navidrome_server_url")
         val NAVIDROME_USERNAME      = stringPreferencesKey("navidrome_username")
         val NAVIDROME_PASSWORD      = stringPreferencesKey("navidrome_password")
+
+        val DOWNLOAD_WIFI_ONLY      = booleanPreferencesKey("download_wifi_only")
 
         val EQ_ENABLED = booleanPreferencesKey("eq_enabled")
         val EQ_BAND_LEVELS = stringPreferencesKey("eq_band_levels")
@@ -223,11 +228,15 @@ class ResonancePreferences @Inject constructor(
     val autoScanIntervalHours: Flow<Int> = ds.data.map { it[AUTO_SCAN_INTERVAL_HOURS] ?: 0 }
     suspend fun setAutoScanIntervalHours(hours: Int) { ds.edit { it[AUTO_SCAN_INTERVAL_HOURS] = hours } }
 
-    val fetchArtistImages: Flow<Boolean> = ds.data.map { it[FETCH_ARTIST_IMAGES] ?: true }
+    // All Online Services default to disabled — the user must opt in from Settings.
+    val fetchArtistImages: Flow<Boolean> = ds.data.map { it[FETCH_ARTIST_IMAGES] ?: false }
     suspend fun setFetchArtistImages(enabled: Boolean) { ds.edit { it[FETCH_ARTIST_IMAGES] = enabled } }
 
-    val fetchLyrics: Flow<Boolean> = ds.data.map { it[FETCH_LYRICS] ?: true }
+    val fetchLyrics: Flow<Boolean> = ds.data.map { it[FETCH_LYRICS] ?: false }
     suspend fun setFetchLyrics(enabled: Boolean) { ds.edit { it[FETCH_LYRICS] = enabled } }
+
+    val fetchAlbumArt: Flow<Boolean> = ds.data.map { it[FETCH_ALBUM_ART] ?: false }
+    suspend fun setFetchAlbumArt(enabled: Boolean) { ds.edit { it[FETCH_ALBUM_ART] = enabled } }
 
     val dynamicColorEnabled: Flow<Boolean> = ds.data.map { it[DYNAMIC_COLOR_ENABLED] ?: true }
     suspend fun setDynamicColorEnabled(enabled: Boolean) { ds.edit { it[DYNAMIC_COLOR_ENABLED] = enabled } }
@@ -307,15 +316,34 @@ class ResonancePreferences @Inject constructor(
     val navidromeUsername: Flow<String?> = ds.data.map { it[NAVIDROME_USERNAME] }
     suspend fun setNavidromeUsername(username: String) { ds.edit { it[NAVIDROME_USERNAME] = username } }
 
-    val navidromePassword: Flow<String?> = ds.data.map { it[NAVIDROME_PASSWORD] }
-    suspend fun setNavidromePassword(password: String) { ds.edit { it[NAVIDROME_PASSWORD] = password } }
+    // Migrated out of plain DataStore into Keystore-backed encrypted storage (see
+    // SecureCredentialStore). navidromePassword used to be a Flow<String?>, but every caller
+    // only ever read it with .first() — never .collect() — so a plain suspend getter is a
+    // smaller, equally-correct change than building a Flow bridge over EncryptedSharedPreferences
+    // (which has no native cold-flow/change-listener mechanism the way DataStore does).
+    @Volatile private var navidromePasswordMigrated = false
+
+    suspend fun getNavidromePassword(): String? {
+        if (!navidromePasswordMigrated) {
+            navidromePasswordMigrated = true
+            val legacyPlaintext = ds.data.map { it[NAVIDROME_PASSWORD] }.first()
+            if (!legacyPlaintext.isNullOrEmpty()) {
+                secureCredentialStore.setNavidromePassword(legacyPlaintext)
+                ds.edit { it.remove(NAVIDROME_PASSWORD) }
+            }
+        }
+        return secureCredentialStore.getNavidromePassword()
+    }
+
+    suspend fun setNavidromePassword(password: String) { secureCredentialStore.setNavidromePassword(password) }
 
     suspend fun setNavidromeCredentials(url: String, username: String, password: String) {
         ds.edit {
             it[NAVIDROME_SERVER_URL] = url
             it[NAVIDROME_USERNAME]   = username
-            it[NAVIDROME_PASSWORD]   = password
         }
+        navidromePasswordMigrated = true
+        secureCredentialStore.setNavidromePassword(password)
     }
 
     suspend fun clearNavidromeCredentials() {
@@ -325,7 +353,11 @@ class ResonancePreferences @Inject constructor(
             it.remove(NAVIDROME_PASSWORD)
             it[MUSIC_SOURCE] = MusicSource.LOCAL.name
         }
+        secureCredentialStore.clearNavidromePassword()
     }
+
+    val downloadWifiOnly: Flow<Boolean> = ds.data.map { it[DOWNLOAD_WIFI_ONLY] ?: true }
+    suspend fun setDownloadWifiOnly(wifiOnly: Boolean) { ds.edit { it[DOWNLOAD_WIFI_ONLY] = wifiOnly } }
 
     val eqEnabled: Flow<Boolean> = ds.data.map { it[EQ_ENABLED] ?: false }
     suspend fun setEqEnabled(enabled: Boolean) { ds.edit { it[EQ_ENABLED] = enabled } }

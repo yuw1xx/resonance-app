@@ -481,6 +481,7 @@ fun ResonanceNavGraph(
                         onCreatePlaylist = { name ->
                             libraryViewModel.createPlaylist(name)
                         },
+                        onArtistClick = { name -> navController.navigate(Screen.ArtistDetail.createRoute(name)) },
                     )
                 }
 
@@ -518,6 +519,7 @@ fun ResonanceNavGraph(
                         onBack = { navController.popBackStack() },
                         onNavigateToPlayer = navigateToPlayer,
                         onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
+                        onArtistClick = { name -> navController.navigate(Screen.ArtistDetail.createRoute(name)) },
                     )
                 }
 

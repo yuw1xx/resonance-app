@@ -26,11 +26,14 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.accompanist.permissions.*
 import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.repository.LastFmAuthState
 import dev.yuwixx.resonance.data.repository.NavidromeConnectionState
+import dev.yuwixx.resonance.data.repository.NavidromeSyncState
 import dev.yuwixx.resonance.presentation.viewmodel.SettingsViewModel
 
 private const val TOTAL_STEPS = 5
@@ -46,6 +49,7 @@ fun SetupScreen(onComplete: () -> Unit) {
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val lastFmAuthState by settingsViewModel.lastFmAuthState.collectAsState()
     val navidromeConnectionState by settingsViewModel.navidromeConnectionState.collectAsState()
+    val navidromeSyncState by settingsViewModel.navidromeSyncState.collectAsState()
 
     val permissions = remember {
         buildList {
@@ -103,12 +107,14 @@ fun SetupScreen(onComplete: () -> Unit) {
                     3 -> NavidromeSetupStep(
                         visible = chosenSource == MusicSource.NAVIDROME,
                         connectionState = navidromeConnectionState,
+                        syncState = navidromeSyncState,
                         onTest = { url, user, pass ->
                             settingsViewModel.testNavidromeConnection(url, user, pass)
                         },
                         onSave = { url, user, pass ->
                             settingsViewModel.saveNavidromeAndSwitch(url, user, pass)
                         },
+                        onResetSync = { settingsViewModel.resetNavidromeSyncState() },
                         lastFmAuthState = lastFmAuthState,
                         onLastFmLogin = { u, p -> settingsViewModel.lastFmLogin(u, p) },
                     )
@@ -346,13 +352,21 @@ private fun PermissionStep(permissionState: MultiplePermissionsState) {
 private fun NavidromeSetupStep(
     visible: Boolean,
     connectionState: NavidromeConnectionState,
+    syncState: NavidromeSyncState,
     onTest: (String, String, String) -> Unit,
     onSave: (String, String, String) -> Unit,
+    onResetSync: () -> Unit,
     lastFmAuthState: LastFmAuthState,
     onLastFmLogin: (String, String) -> Unit,
 ) {
     if (visible) {
-        NavidromeStep(connectionState = connectionState, onTest = onTest, onSave = onSave)
+        NavidromeStep(
+            connectionState = connectionState,
+            syncState = syncState,
+            onTest = onTest,
+            onSave = onSave,
+            onResetSync = onResetSync,
+        )
     } else {
         LastFmStep(authState = lastFmAuthState, onLogin = onLastFmLogin)
     }
@@ -361,17 +375,41 @@ private fun NavidromeSetupStep(
 @Composable
 private fun NavidromeStep(
     connectionState: NavidromeConnectionState,
+    syncState: NavidromeSyncState,
     onTest: (String, String, String) -> Unit,
     onSave: (String, String, String) -> Unit,
+    onResetSync: () -> Unit,
 ) {
     var serverUrl by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
+    // Flip immediately when the connection succeeds — don't derive from syncState (which
+    // starts at Idle before the new sync begins), same reasoning as NavidromeSetupScreen's
+    // showSyncPage in SettingsScreen.kt.
+    var showSyncDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(connectionState) {
         if (connectionState is NavidromeConnectionState.Connected) {
+            onResetSync()
+            showSyncDialog = true
             onSave(serverUrl, username, password)
+        }
+    }
+
+    if (showSyncDialog) {
+        Dialog(
+            onDismissRequest = { if (syncState !is NavidromeSyncState.Syncing) showSyncDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = MaterialTheme.shapes.extraLarge,
+                tonalElevation = 6.dp,
+            ) {
+                NavidromeSyncPage(syncState = syncState, onDone = { showSyncDialog = false })
+            }
         }
     }
 

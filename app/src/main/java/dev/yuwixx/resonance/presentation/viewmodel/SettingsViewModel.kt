@@ -13,7 +13,9 @@ import dev.yuwixx.resonance.data.repository.LastFmAuthState
 import dev.yuwixx.resonance.data.repository.LastFmRepository
 import dev.yuwixx.resonance.data.repository.MalojaRepository
 import dev.yuwixx.resonance.data.repository.NavidromeConnectionState
+import dev.yuwixx.resonance.data.repository.NavidromeDownloadRepository
 import dev.yuwixx.resonance.data.repository.NavidromeRepository
+import dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -37,7 +40,28 @@ class SettingsViewModel @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val navidromeRepository: NavidromeRepository,
     private val navidromeApiProvider: NavidromeApiProvider,
+    private val navidromeDownloadRepository: NavidromeDownloadRepository,
+    private val navidromeSyncRepository: NavidromeSyncRepository,
 ) : ViewModel() {
+
+    val downloadWifiOnly: StateFlow<Boolean> = prefs.downloadWifiOnly
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun setDownloadWifiOnly(wifiOnly: Boolean) {
+        viewModelScope.launch { prefs.setDownloadWifiOnly(wifiOnly) }
+    }
+
+    val downloadsStorageUsed: StateFlow<Long> = navidromeDownloadRepository.downloadStates
+        .map { it.values.sumOf { d -> d.fileSizeBytes } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
+    val downloadedSongCount: StateFlow<Int> = navidromeDownloadRepository.downloadStates
+        .map { states -> states.values.count { it.state == dev.yuwixx.resonance.data.database.entity.DownloadState.DOWNLOADED } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    fun removeAllDownloads() {
+        viewModelScope.launch { navidromeDownloadRepository.removeAll() }
+    }
 
     sealed class UpdateState {
         data object Idle : UpdateState()
@@ -319,12 +343,14 @@ class SettingsViewModel @Inject constructor(
 
         fun saveNavidromeAndSwitch(serverUrl: String, username: String, password: String) {
         viewModelScope.launch {
-            val effectivePassword = password.ifBlank { prefs.navidromePassword.first() ?: password }
+            val effectivePassword = password.ifBlank { prefs.getNavidromePassword() ?: password }
             prefs.setNavidromeCredentials(serverUrl, username, effectivePassword)
             prefs.setMusicSource(MusicSource.NAVIDROME)
             navidromeApiProvider.rebuild(serverUrl, username, effectivePassword)
             navidromeRepository.resetSyncState()
             navidromeRepository.syncLibrary()
+            navidromeSyncRepository.pullStarredFromServer()
+            navidromeSyncRepository.pullPlaylistsFromServer()
         }
     }
 

@@ -42,6 +42,9 @@ interface SongDao {
     @Upsert
     suspend fun upsertSongs(songs: List<SongEntity>)
 
+    @Query("UPDATE songs SET replayGainTrack = :track, replayGainAlbum = :album WHERE id = :id")
+    suspend fun updateReplayGain(id: Long, track: Float?, album: Float?)
+
     @Query("SELECT id FROM songs")
     suspend fun getAllSongIds(): List<Long>
 
@@ -124,6 +127,9 @@ interface PlaylistDao {
         ORDER BY ps.position ASC
     """)
     suspend fun getSongPathsForPlaylist(playlistId: Long): List<String>
+
+    @Query("SELECT * FROM playlists WHERE navidromePlaylistId = :navidromePlaylistId LIMIT 1")
+    suspend fun getPlaylistByNavidromeId(navidromePlaylistId: String): PlaylistEntity?
 }
 
 @Dao
@@ -235,6 +241,72 @@ interface ArtworkDao {
 
     @Upsert
     suspend fun upsertArtistArtwork(artwork: ArtistArtworkEntity)
+
+    @Query("SELECT * FROM album_artwork WHERE albumId = :albumId")
+    suspend fun getAlbumArtwork(albumId: Long): AlbumArtworkEntity?
+
+    @Upsert
+    suspend fun upsertAlbumArtwork(artwork: AlbumArtworkEntity)
+}
+
+@Dao
+interface PendingScrobbleDao {
+    @Insert
+    suspend fun insert(entity: PendingScrobbleEntity): Long
+
+    @Query("SELECT * FROM pending_scrobbles WHERE service = :service")
+    suspend fun getAllForService(service: String): List<PendingScrobbleEntity>
+
+    @Query("DELETE FROM pending_scrobbles WHERE service = :service")
+    suspend fun deleteAllForService(service: String)
+}
+
+@Dao
+interface PendingStarActionDao {
+    @Insert
+    suspend fun insert(entity: PendingStarActionEntity): Long
+
+    @Query("SELECT * FROM pending_star_actions")
+    suspend fun getAll(): List<PendingStarActionEntity>
+
+    @Query("SELECT DISTINCT songId FROM pending_star_actions")
+    suspend fun getPendingSongIds(): List<Long>
+
+    @Query("DELETE FROM pending_star_actions WHERE songId = :songId")
+    suspend fun deleteForSong(songId: Long)
+
+    @Query("DELETE FROM pending_star_actions")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface SongDownloadDao {
+    @Query("SELECT * FROM song_downloads")
+    fun getAll(): Flow<List<SongDownloadEntity>>
+
+    @Query("SELECT * FROM song_downloads WHERE songId = :songId")
+    suspend fun getBySongId(songId: Long): SongDownloadEntity?
+
+    @Query("SELECT * FROM song_downloads WHERE songId IN (:songIds)")
+    suspend fun getBySongIds(songIds: List<Long>): List<SongDownloadEntity>
+
+    @Upsert
+    suspend fun upsert(entity: SongDownloadEntity)
+
+    @Query("UPDATE song_downloads SET state = :state, errorMessage = :error WHERE songId = :songId")
+    suspend fun updateState(songId: Long, state: String, error: String? = null)
+
+    @Query("DELETE FROM song_downloads WHERE songId = :songId")
+    suspend fun delete(songId: Long)
+
+    @Query("DELETE FROM song_downloads")
+    suspend fun deleteAll()
+
+    @Query("SELECT COALESCE(SUM(fileSizeBytes), 0) FROM song_downloads WHERE state = 'DOWNLOADED'")
+    suspend fun sumDownloadedBytes(): Long
+
+    @Query("SELECT COUNT(*) FROM song_downloads WHERE state = :state")
+    suspend fun countByState(state: String): Int
 }
 
 @Dao

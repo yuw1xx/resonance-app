@@ -18,6 +18,10 @@ import dagger.hilt.components.SingletonComponent
 import dev.yuwixx.resonance.data.database.MIGRATION_1_3
 import dev.yuwixx.resonance.data.database.MIGRATION_2_3
 import dev.yuwixx.resonance.data.database.MIGRATION_3_4
+import dev.yuwixx.resonance.data.database.MIGRATION_4_5
+import dev.yuwixx.resonance.data.database.MIGRATION_5_6
+import dev.yuwixx.resonance.data.database.MIGRATION_6_7
+import dev.yuwixx.resonance.data.database.MIGRATION_7_8
 import dev.yuwixx.resonance.data.database.ResonanceDatabase
 import dev.yuwixx.resonance.data.database.dao.*
 import dev.yuwixx.resonance.data.network.DeezerApi
@@ -25,6 +29,8 @@ import dev.yuwixx.resonance.data.network.GitHubApi
 import dev.yuwixx.resonance.data.network.LastFmApi
 import dev.yuwixx.resonance.data.network.LrclibApi
 import dev.yuwixx.resonance.data.network.NavidromeApiProvider
+import dev.yuwixx.resonance.data.network.SpotifyApi
+import dev.yuwixx.resonance.data.network.SpotifyAuthApi
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -39,7 +45,7 @@ object DatabaseModule {
     @Singleton @Provides
     fun provideDatabase(@ApplicationContext ctx: Context): ResonanceDatabase =
         Room.databaseBuilder(ctx, ResonanceDatabase::class.java, "resonance.db")
-            .addMigrations(MIGRATION_1_3, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_3, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .build()
 
     @Provides fun provideSongDao(db: ResonanceDatabase): SongDao = db.songDao()
@@ -47,11 +53,14 @@ object DatabaseModule {
     @Provides fun provideHistoryDao(db: ResonanceDatabase): HistoryDao = db.historyDao()
     @Provides fun provideLyricsDao(db: ResonanceDatabase): LyricsDao = db.lyricsDao()
     @Provides fun provideArtworkDao(db: ResonanceDatabase): ArtworkDao = db.artworkDao()
+    @Provides fun providePendingScrobbleDao(db: ResonanceDatabase): PendingScrobbleDao = db.pendingScrobbleDao()
     @Provides fun provideQueueDao(db: ResonanceDatabase): QueueDao = db.queueDao()
     @Provides fun provideLikedSongsDao(db: ResonanceDatabase): LikedSongsDao = db.likedSongsDao()
     @Provides fun provideNavidromeSongDao(db: ResonanceDatabase): NavidromeSongDao = db.navidromeSongDao()
     @Provides fun provideNavidromeAlbumDao(db: ResonanceDatabase): NavidromeAlbumDao = db.navidromeAlbumDao()
     @Provides fun provideMixNavidromeSongDao(db: ResonanceDatabase): MixNavidromeSongDao = db.mixNavidromeSongDao()
+    @Provides fun provideSongDownloadDao(db: ResonanceDatabase): SongDownloadDao = db.songDownloadDao()
+    @Provides fun providePendingStarActionDao(db: ResonanceDatabase): PendingStarActionDao = db.pendingStarActionDao()
 }
 
 @Module
@@ -90,6 +99,16 @@ object NetworkModule {
         Retrofit.Builder().baseUrl("https://ws.audioscrobbler.com/")
             .client(okHttp).addConverterFactory(MoshiConverterFactory.create(moshi)).build()
 
+    @Singleton @Provides @Named("spotify-accounts")
+    fun provideSpotifyAccountsRetrofit(okHttp: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder().baseUrl("https://accounts.spotify.com/")
+            .client(okHttp).addConverterFactory(MoshiConverterFactory.create(moshi)).build()
+
+    @Singleton @Provides @Named("spotify-api")
+    fun provideSpotifyApiRetrofit(okHttp: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder().baseUrl("https://api.spotify.com/")
+            .client(okHttp).addConverterFactory(MoshiConverterFactory.create(moshi)).build()
+
     @Singleton @Provides
     fun provideGitHubApi(@Named("github") retrofit: Retrofit): GitHubApi =
         retrofit.create(GitHubApi::class.java)
@@ -105,6 +124,14 @@ object NetworkModule {
     @Singleton @Provides
     fun provideLastFmApi(@Named("lastfm") retrofit: Retrofit): LastFmApi =
         retrofit.create(LastFmApi::class.java)
+
+    @Singleton @Provides
+    fun provideSpotifyAuthApi(@Named("spotify-accounts") retrofit: Retrofit): SpotifyAuthApi =
+        retrofit.create(SpotifyAuthApi::class.java)
+
+    @Singleton @Provides
+    fun provideSpotifyApi(@Named("spotify-api") retrofit: Retrofit): SpotifyApi =
+        retrofit.create(SpotifyApi::class.java)
 }
 
 @Module

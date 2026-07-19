@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
@@ -118,8 +119,8 @@ fun FoldersScreen(
                     AppSectionHeader("Songs in this folder", Icons.Rounded.MusicNote)
                 }
             }
-            items(songsHere, key = { it.id }) { song ->
-                SongRow(song = song, onClick = { playerViewModel.play(songsHere, songsHere.indexOf(song)) })
+            itemsIndexed(songsHere, key = { _, s -> s.id }) { index, song ->
+                SongRow(song = song, onClick = { playerViewModel.play(songsHere, index) })
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             }
         }

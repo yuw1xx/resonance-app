@@ -45,6 +45,10 @@ data class PlaylistEntity(
     val mixSource: String? = null,
     val mixType: String? = null,
     val lastMixGenerated: Long = 0L,
+    // Set once this playlist has been pushed to (or pulled from) Navidrome — only playlists
+    // created in Resonance sync both ways; a playlist that already exists only on the server
+    // stays visible through the existing read-only browse view instead of being auto-imported.
+    val navidromePlaylistId: String? = null,
 )
 
 @Entity(tableName = "mix_navidrome_songs", primaryKeys = ["playlistId", "navidromeSongId"])
@@ -76,6 +80,67 @@ data class ArtistArtworkEntity(
     val artworkUrl: String?,
     val fetchedAt: Long = System.currentTimeMillis(),
 )
+
+@Entity(tableName = "album_artwork")
+data class AlbumArtworkEntity(
+    @PrimaryKey val albumId: Long,
+    val artworkUrl: String?,
+    val fetchedAt: Long = System.currentTimeMillis(),
+)
+
+// Durable backup for the in-memory pending-scrobble queues in LastFmRepository/MalojaRepository
+// — a killed process shouldn't silently lose scrobbles queued while offline.
+@Entity(tableName = "pending_scrobbles")
+data class PendingScrobbleEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val service: String,       // "LASTFM" or "MALOJA"
+    val artists: String,       // comma-joined (Maloja supports multiple artists per scrobble)
+    val title: String,
+    val album: String?,
+    val durationSec: Int?,
+    val trackNumber: Int?,
+    val timestamp: Long,
+)
+
+// Durable retry queue for star/unstar actions not yet pushed to Navidrome (offline, or the
+// push failed) — mirrors PendingScrobbleEntity's pattern. Its mere presence for a songId means
+// "not yet synced"; a pull from the server skips any song with a pending row here, so a local
+// action always wins over a stale remote read instead of needing timestamp-based merging.
+@Entity(tableName = "pending_star_actions")
+data class PendingStarActionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val songId: Long,
+    val navidromeId: String,
+    val action: String, // STAR | UNSTAR
+    val timestamp: Long,
+)
+
+object StarAction {
+    const val STAR = "STAR"
+    const val UNSTAR = "UNSTAR"
+}
+
+// Offline-download tracking for Navidrome songs. Kept as its own table (not extra columns on
+// NavidromeSongEntity) because NavidromeRepository.syncLibrary() wipes and rebuilds
+// navidrome_songs wholesale on every sync — download state needs an independent lifecycle.
+@Entity(tableName = "song_downloads")
+data class SongDownloadEntity(
+    @PrimaryKey val songId: Long,
+    val navidromeId: String,
+    val localFilePath: String,
+    val state: String,       // QUEUED | DOWNLOADING | DOWNLOADED | FAILED
+    val fileSizeBytes: Long = 0L,
+    val requestedAt: Long,
+    val downloadedAt: Long = 0L,
+    val errorMessage: String? = null,
+)
+
+object DownloadState {
+    const val QUEUED = "QUEUED"
+    const val DOWNLOADING = "DOWNLOADING"
+    const val DOWNLOADED = "DOWNLOADED"
+    const val FAILED = "FAILED"
+}
 
 @Entity(tableName = "lyrics")
 data class LyricsEntity(

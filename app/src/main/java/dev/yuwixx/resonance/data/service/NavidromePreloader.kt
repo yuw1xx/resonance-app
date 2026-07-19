@@ -49,10 +49,4 @@ class NavidromePreloader @Inject constructor() {
     }
 
         fun reset() { warmed.clear() }
-
-    fun destroy() {
-        scope.cancel()
-        client.dispatcher.executorService.shutdown()
-        client.connectionPool.evictAll()
-    }
 }

@@ -167,3 +167,66 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         """.trimIndent())
     }
 }
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `album_artwork` (
+                `albumId` INTEGER NOT NULL,
+                `artworkUrl` TEXT,
+                `fetchedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`albumId`)
+            )
+        """.trimIndent())
+    }
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `pending_scrobbles` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `service` TEXT NOT NULL,
+                `artists` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `album` TEXT,
+                `durationSec` INTEGER,
+                `trackNumber` INTEGER,
+                `timestamp` INTEGER NOT NULL
+            )
+        """.trimIndent())
+    }
+}
+
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `song_downloads` (
+                `songId` INTEGER NOT NULL,
+                `navidromeId` TEXT NOT NULL,
+                `localFilePath` TEXT NOT NULL,
+                `state` TEXT NOT NULL,
+                `fileSizeBytes` INTEGER NOT NULL DEFAULT 0,
+                `requestedAt` INTEGER NOT NULL,
+                `downloadedAt` INTEGER NOT NULL DEFAULT 0,
+                `errorMessage` TEXT,
+                PRIMARY KEY(`songId`)
+            )
+        """.trimIndent())
+    }
+}
+
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE playlists ADD COLUMN navidromePlaylistId TEXT")
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `pending_star_actions` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `songId` INTEGER NOT NULL,
+                `navidromeId` TEXT NOT NULL,
+                `action` TEXT NOT NULL,
+                `timestamp` INTEGER NOT NULL
+            )
+        """.trimIndent())
+    }
+}

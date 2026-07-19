@@ -95,6 +95,7 @@ fun HomeScreen(
                             isPlaying = isPlaying,
                             onClick = { onNavigateTo(Screen.Player) },
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            onArtworkMissing = { libraryViewModel.getSongArtworkUrl(song) },
                         )
                     }
                 }
@@ -142,16 +143,17 @@ fun HomeScreen(
                     )
                 }
                 item {
+                    val topMostPlayed = mostPlayed.take(10)
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(mostPlayed.take(10), key = { it.id }) { song ->
+                        itemsIndexed(topMostPlayed, key = { _, s -> s.id }) { index, song ->
                             CompactArtworkCard(
                                 title = song.title,
                                 subtitle = song.displayArtist,
                                 artworkUri = song.artworkUri,
-                                onClick = { playerViewModel.play(mostPlayed, mostPlayed.indexOf(song)) },
+                                onClick = { playerViewModel.play(topMostPlayed, index) },
                             )
                         }
                     }
@@ -171,12 +173,12 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(recentlyAdded, key = { it.id }) { song ->
+                        itemsIndexed(recentlyAdded, key = { _, s -> s.id }) { index, song ->
                             CompactArtworkCard(
                                 title = song.title,
                                 subtitle = song.displayArtist,
                                 artworkUri = song.artworkUri,
-                                onClick = { playerViewModel.play(recentlyAdded, recentlyAdded.indexOf(song)) },
+                                onClick = { playerViewModel.play(recentlyAdded, index) },
                             )
                         }
                     }
@@ -193,6 +195,7 @@ private fun ResumeCard(
     isPlaying: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onArtworkMissing: (suspend () -> String?)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -223,6 +226,7 @@ private fun ResumeCard(
                 modifier = Modifier.size(64.dp),
                 cornerRadius = 16.dp,
                 isAnimating = isPlaying,
+                onArtworkMissing = onArtworkMissing,
             )
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {

@@ -34,7 +34,7 @@ class NavidromeApiProvider @Inject constructor(
         suspend fun initFromPrefs(prefs: ResonancePreferences) {
         val url  = prefs.navidromeServerUrl.first() ?: return
         val user = prefs.navidromeUsername.first()   ?: return
-        val pass = prefs.navidromePassword.first()   ?: return
+        val pass = prefs.getNavidromePassword()       ?: return
         rebuild(url, user, pass)
     }
 

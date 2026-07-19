@@ -8,6 +8,7 @@ import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import dev.yuwixx.resonance.data.network.NavidromeApiProvider
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
 import dev.yuwixx.resonance.data.worker.AutoScanManager
 import dev.yuwixx.resonance.data.worker.MixGeneratorManager
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +23,7 @@ class ResonanceApp : Application(), Configuration.Provider {
     @Inject lateinit var autoScanManager: AutoScanManager
     @Inject lateinit var mixGeneratorManager: MixGeneratorManager
     @Inject lateinit var navidromeApiProvider: NavidromeApiProvider
+    @Inject lateinit var navidromeSyncRepository: NavidromeSyncRepository
     @Inject lateinit var prefs: ResonancePreferences
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -37,6 +39,10 @@ class ResonanceApp : Application(), Configuration.Provider {
         mixGeneratorManager.scheduleWeekly()
         applicationScope.launch {
             navidromeApiProvider.initFromPrefs(prefs)
+            if (navidromeApiProvider.currentApi() != null) {
+                navidromeSyncRepository.pullStarredFromServer()
+                navidromeSyncRepository.pullPlaylistsFromServer()
+            }
         }
     }
 }

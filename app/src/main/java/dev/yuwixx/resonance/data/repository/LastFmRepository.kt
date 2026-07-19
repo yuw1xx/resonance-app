@@ -8,6 +8,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.yuwixx.resonance.data.database.dao.PendingScrobbleDao
+import dev.yuwixx.resonance.data.database.entity.PendingScrobbleEntity
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.network.LastFmApi
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
@@ -57,28 +59,87 @@ class LastFmRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: LastFmApi,
     private val mainPrefs: ResonancePreferences,
+    private val pendingScrobbleDao: PendingScrobbleDao,
+    private val secureCredentialStore: dev.yuwixx.resonance.data.security.SecureCredentialStore,
 ) {
     private val store = context.lastFmStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val pendingScrobbles = java.util.concurrent.CopyOnWriteArrayList<PendingScrobble>()
 
-    val sessionKey: Flow<String>  = store.data.map { it[LastFmKeys.SESSION_KEY] ?: "" }
     val username: Flow<String>    = store.data.map { it[LastFmKeys.USERNAME]    ?: "" }
     val isEnabled: Flow<Boolean>  = store.data.map { it[LastFmKeys.ENABLED]     ?: false }
     val nowPlaying: Flow<Boolean> = store.data.map { it[LastFmKeys.NOW_PLAYING] ?: true }
     val onlyWifi: Flow<Boolean>   = store.data.map { it[LastFmKeys.ONLY_WIFI]   ?: false }
+
+    // Migrated out of plain DataStore into Keystore-backed encrypted storage (see
+    // SecureCredentialStore). Was a Flow<String> before, but every use in this file only ever
+    // read it with .firstOrNull() — never .collect() — so a plain suspend getter is a smaller,
+    // equally-correct change than bridging a Flow over EncryptedSharedPreferences.
+    @Volatile private var sessionKeyMigrated = false
+
+    private suspend fun getSessionKey(): String {
+        if (!sessionKeyMigrated) {
+            sessionKeyMigrated = true
+            val legacyPlaintext = store.data.map { it[LastFmKeys.SESSION_KEY] }.firstOrNull()
+            if (!legacyPlaintext.isNullOrEmpty()) {
+                secureCredentialStore.setLastFmSessionKey(legacyPlaintext)
+                store.edit { it.remove(LastFmKeys.SESSION_KEY) }
+            }
+        }
+        return secureCredentialStore.getLastFmSessionKey() ?: ""
+    }
 
     private val _authState = MutableStateFlow<LastFmAuthState>(LastFmAuthState.Idle)
     val authState: StateFlow<LastFmAuthState> = _authState.asStateFlow()
 
     init {
         scope.launch {
-            val sk  = sessionKey.firstOrNull() ?: ""
+            val sk  = getSessionKey()
             val usr = username.firstOrNull()   ?: ""
             if (sk.isNotBlank() && usr.isNotBlank()) {
                 fetchUserInfo(usr)
             }
+        }
+        // Restore any scrobbles that were queued but not yet flushed before the process died,
+        // then try to flush them right away (flushPendingScrobbles() no-ops gracefully if
+        // there's no network or the session isn't ready).
+        scope.launch {
+            val restored = pendingScrobbleDao.getAllForService("LASTFM").map {
+                PendingScrobble(
+                    artist = it.artists,
+                    track = it.title,
+                    album = it.album ?: "",
+                    timestamp = it.timestamp,
+                    duration = it.durationSec ?: 0,
+                    trackNumber = it.trackNumber ?: 0,
+                )
+            }
+            if (restored.isNotEmpty()) {
+                pendingScrobbles.addAll(restored)
+                flushPendingScrobbles()
+                persistPendingToDb()
+            }
+        }
+    }
+
+    // Mirrors the current in-memory pendingScrobbles list into the DB so a killed process
+    // doesn't lose whatever's still unflushed. Delete-all-then-reinsert instead of per-row
+    // tracking — simpler, and flushes are already infrequent/batched.
+    private suspend fun persistPendingToDb() {
+        pendingScrobbleDao.deleteAllForService("LASTFM")
+        pendingScrobbles.forEach { p ->
+            pendingScrobbleDao.insert(
+                PendingScrobbleEntity(
+                    service = "LASTFM",
+                    artists = p.artist,
+                    title = p.track,
+                    album = p.album,
+                    durationSec = p.duration,
+                    trackNumber = p.trackNumber,
+                    timestamp = p.timestamp,
+                )
+            )
         }
     }
 
@@ -127,8 +188,9 @@ class LastFmRepository @Inject constructor(
                 return
             }
 
+            sessionKeyMigrated = true
+            secureCredentialStore.setLastFmSessionKey(sk)
             store.edit {
-                it[LastFmKeys.SESSION_KEY] = sk
                 it[LastFmKeys.USERNAME]    = username
                 it[LastFmKeys.ENABLED]     = true
             }
@@ -142,8 +204,8 @@ class LastFmRepository @Inject constructor(
     }
 
     suspend fun logout() {
+        secureCredentialStore.clearLastFmSessionKey()
         store.edit { prefs ->
-            prefs.remove(LastFmKeys.SESSION_KEY)
             prefs.remove(LastFmKeys.USERNAME)
             prefs[LastFmKeys.ENABLED] = false
         }
@@ -214,6 +276,7 @@ class LastFmRepository @Inject constructor(
                 )
             )
             flushPendingScrobbles()
+            persistPendingToDb()
         }
     }
 
@@ -288,7 +351,7 @@ class LastFmRepository @Inject constructor(
 
     private suspend fun isScrobbleReady(): Boolean {
         val enabled = isEnabled.firstOrNull() ?: false
-        val sk = sessionKey.firstOrNull() ?: ""
+        val sk = getSessionKey()
         return enabled && sk.isNotBlank()
     }
 
@@ -304,7 +367,7 @@ class LastFmRepository @Inject constructor(
         extraParams: Map<String, String> = emptyMap(),
     ): Triple<String, String, String>? {
         val (apiKey, apiSecret) = getCredentials()
-        val sk = sessionKey.firstOrNull()?.takeIf { it.isNotBlank() } ?: return null
+        val sk = getSessionKey().takeIf { it.isNotBlank() } ?: return null
 
         val allParams = buildMap {
             put("method",  method)

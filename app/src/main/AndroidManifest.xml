@@ -2,6 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Signature-level: only this app (or another app signed with the same key) can send
+         the home-screen widget's playback-control broadcasts. -->
+    <permission
+        android:name="dev.yuwixx.resonance.permission.WIDGET_CONTROL"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="dev.yuwixx.resonance.permission.WIDGET_CONTROL" />
+
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
@@ -65,6 +72,12 @@
             </intent-filter>
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaLibraryService" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
             </intent-filter>
             <meta-data
                 android:name="com.google.android.gms.car.application"

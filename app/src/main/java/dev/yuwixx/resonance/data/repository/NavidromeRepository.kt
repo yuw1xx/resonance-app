@@ -195,7 +195,7 @@ class NavidromeRepository @Inject constructor(
             api.getPlaylists().response.playlists?.playlist?.map { summary ->
                 val detail = runCatching { api.getPlaylist(summary.id).response.playlist }.getOrNull()
                 Playlist(
-                    id       = summary.id.hashCode().toLong(),
+                    id       = summary.id.toLongOrNull() ?: stableLongId(summary.id),
                     name     = summary.name,
                     songs    = detail?.entry?.map { it.toSongDomain(creds) } ?: emptyList(),
                     isReadOnly = false,
@@ -218,6 +218,13 @@ class NavidromeRepository @Inject constructor(
         runCatching { api.scrobble(id = songId, timeMs = playedAtMs, submission = true) }
     }
 
+    // Untranscoded original (rest/download), not rest/stream — the right choice for a
+    // permanent offline copy, since stream.view may be transcoded per server config.
+    suspend fun buildDownloadUrl(songId: String): String? {
+        val creds = navidromeApiProvider.currentCredentials() ?: return null
+        return buildDownloadUrl(creds.serverUrl, creds.username, creds.password, songId)
+    }
+
 }
 
 private fun buildStreamUrl(
@@ -234,6 +241,20 @@ private fun buildStreamUrl(
             "?id=$songId&u=$username&t=$token&s=$salt&v=1.16.1&c=Resonance&f=json"
 }
 
+private fun buildDownloadUrl(
+    serverUrl: String,
+    username: String,
+    password: String,
+    songId: String,
+): String {
+    val salt  = UUID.randomUUID().toString().replace("-", "").take(12)
+    val token = MessageDigest.getInstance("MD5")
+        .digest("$password$salt".toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+    return "${serverUrl.trimEnd('/')}/rest/download" +
+            "?id=$songId&u=$username&t=$token&s=$salt&v=1.16.1&c=Resonance&f=json"
+}
+
 private fun coverArtUrl(creds: NavidromeApiProvider.Credentials, id: String): String {
     val salt  = UUID.randomUUID().toString().replace("-", "").take(12)
     val token = MessageDigest.getInstance("MD5")
@@ -243,12 +264,29 @@ private fun coverArtUrl(creds: NavidromeApiProvider.Credentials, id: String): St
             "?id=$id&u=${creds.username}&t=$token&s=$salt&v=1.16.1&c=Resonance&f=json"
 }
 
+// Subsonic/Navidrome IDs are opaque strings (usually UUIDs), but the shared Song/Album domain
+// models use a Long id to stay compatible with local MediaStore songs, so non-numeric ids need
+// mapping to a Long. String.hashCode() is only 32 bits — collisions become likely well within
+// the size of a real library (~1% chance already at ~10k items, per the birthday bound), which
+// would silently merge two different songs' identity (queue persistence, playback, DB lookups
+// all key off this id). FNV-1a's 64-bit output makes collisions practically impossible instead.
+// Not private: NavidromeDownloadRepository needs the same string->Long mapping to match a
+// domain-model album/song id back to its raw Subsonic string id.
+internal fun stableLongId(s: String): Long {
+    var hash = -3750763034362895579L // FNV-1a 64-bit offset basis
+    for (b in s.toByteArray(Charsets.UTF_8)) {
+        hash = hash xor (b.toLong() and 0xff)
+        hash *= 1099511628211L // FNV-1a 64-bit prime
+    }
+    return hash
+}
+
 private fun SubsonicSong.toEntity(creds: NavidromeApiProvider.Credentials): NavidromeSongEntity {
     val streamUrl = buildStreamUrl(creds.serverUrl, creds.username, creds.password, id)
     val cover     = coverArt?.let { coverArtUrl(creds, it) }
     return NavidromeSongEntity(
         navidromeId  = id,
-        numericId    = id.toLongOrNull() ?: id.hashCode().toLong(),
+        numericId    = id.toLongOrNull() ?: stableLongId(id),
         streamUrl    = streamUrl,
         title        = title,
         artist       = artist       ?: "Unknown Artist",
@@ -273,7 +311,7 @@ private fun SubsonicAlbum.toEntity(creds: NavidromeApiProvider.Credentials): Nav
     val cover = coverArt?.let { coverArtUrl(creds, it) }
     return NavidromeAlbumEntity(
         navidromeId = id,
-        numericId   = id.toLongOrNull() ?: id.hashCode().toLong(),
+        numericId   = id.toLongOrNull() ?: stableLongId(id),
         name        = name,
         artist      = artist     ?: "Unknown Artist",
         artistId    = artistId,
@@ -292,7 +330,7 @@ internal fun NavidromeSongEntity.toDomain(): Song = Song(
     artists       = listOf(artist),
     albumArtist   = albumArtist,
     album         = album,
-    albumId       = albumId.toLongOrNull() ?: albumId.hashCode().toLong(),
+    albumId       = albumId.toLongOrNull() ?: stableLongId(albumId),
     genre         = genre,
     duration      = durationMs,
     size          = size,
@@ -311,6 +349,7 @@ internal fun NavidromeSongEntity.toDomain(): Song = Song(
     artworkUri    = coverArtUrl?.let { Uri.parse(it) },
     listenCount   = playCount.toInt(),
     lastListened  = 0L,
+    navidromeId   = navidromeId,
 )
 
 internal fun NavidromeAlbumEntity.toDomain(songs: List<Song> = emptyList()): Album = Album(
@@ -327,14 +366,14 @@ internal fun SubsonicSong.toSongDomain(creds: NavidromeApiProvider.Credentials):
     val streamUrl = buildStreamUrl(creds.serverUrl, creds.username, creds.password, id)
     val cover     = coverArt?.let { coverArtUrl(creds, it) }
     return Song(
-        id            = id.toLongOrNull() ?: id.hashCode().toLong(),
+        id            = id.toLongOrNull() ?: stableLongId(id),
         uri           = Uri.parse(streamUrl),
         title         = title,
         artist        = artist       ?: "Unknown Artist",
         artists       = listOf(artist ?: "Unknown Artist"),
         albumArtist   = albumArtist  ?: artist ?: "Unknown Artist",
         album         = album        ?: "Unknown Album",
-        albumId       = albumId?.toLongOrNull() ?: (albumId?.hashCode()?.toLong() ?: 0L),
+        albumId       = albumId?.toLongOrNull() ?: albumId?.let { stableLongId(it) } ?: 0L,
         genre         = genre        ?: "",
         duration      = (duration    ?: 0) * 1000L,
         size          = size         ?: 0L,
@@ -353,13 +392,14 @@ internal fun SubsonicSong.toSongDomain(creds: NavidromeApiProvider.Credentials):
         artworkUri    = cover?.let { Uri.parse(it) },
         listenCount   = playCount?.toInt() ?: 0,
         lastListened  = 0L,
+        navidromeId   = id,
     )
 }
 
 internal fun SubsonicAlbum.toAlbumDomain(creds: NavidromeApiProvider.Credentials): Album {
     val cover = coverArt?.let { coverArtUrl(creds, it) }
     return Album(
-        id        = id.toLongOrNull() ?: id.hashCode().toLong(),
+        id        = id.toLongOrNull() ?: stableLongId(id),
         title     = name,
         artist    = artist   ?: "Unknown Artist",
         year      = year     ?: 0,

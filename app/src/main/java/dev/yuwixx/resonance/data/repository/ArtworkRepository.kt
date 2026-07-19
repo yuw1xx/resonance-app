@@ -11,6 +11,7 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.database.dao.ArtworkDao
+import dev.yuwixx.resonance.data.database.entity.AlbumArtworkEntity
 import dev.yuwixx.resonance.data.database.entity.ArtistArtworkEntity
 import dev.yuwixx.resonance.data.network.DeezerApi
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,7 @@ import javax.inject.Singleton
 class ArtworkRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val deezerApi: DeezerApi,
+    private val spotifyRepository: SpotifyRepository,
     private val artworkDao: ArtworkDao,
     private val imageLoader: ImageLoader,
 ) {
@@ -46,6 +48,22 @@ class ArtworkRepository @Inject constructor(
             null
         }
     }
+
+    // Called only when a song's local embedded artwork fails to load. Looks up the track on
+    // Spotify by title + artist and caches the result (including misses) for a week so a
+    // song with no match isn't re-queried on every screen visit.
+    suspend fun getSongArtworkUrl(albumId: Long, title: String, artist: String): String? =
+        withContext(Dispatchers.IO) {
+            val cached = artworkDao.getAlbumArtwork(albumId)
+            val cacheAgeMs = 7L * 24 * 60 * 60 * 1000
+            if (cached != null && System.currentTimeMillis() - cached.fetchedAt < cacheAgeMs) {
+                return@withContext cached.artworkUrl
+            }
+
+            val url = spotifyRepository.searchAlbumArt(title, artist)
+            artworkDao.upsertAlbumArtwork(AlbumArtworkEntity(albumId = albumId, artworkUrl = url))
+            url
+        }
 
         suspend fun extractArtworkColors(albumId: Long, artworkUri: Any): ArtworkColors =
         withContext(Dispatchers.IO) {

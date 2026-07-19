@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.*
 import androidx.mediarouter.media.MediaRouter
 import androidx.mediarouter.media.MediaRouteSelector
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
 import com.google.android.gms.cast.framework.CastContext
 import dev.yuwixx.resonance.data.model.MixType
 import dev.yuwixx.resonance.data.model.Song
@@ -446,6 +447,98 @@ fun WaveformSeekbar(
     }
 }
 
+// Cava-style spectrum analyzer doubling as a seekbar: bars grow up from the baseline driven
+// by live FFT magnitudes from VisualizerStateHolder, colored played/remaining like the other
+// seekbar styles, with drag-to-seek support.
+@Composable
+fun CavaSeekbar(
+    magnitudes: FloatArray,
+    positionProvider: () -> Long,
+    durationMs: Long,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+    playedColor: Color = MaterialTheme.colorScheme.primary,
+    remainingColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
+    barSpacingDp: Dp = 3.dp,
+    minHeightFraction: Float = 0.04f,
+) {
+    val haptics = LocalHapticFeedback.current
+    val config = LocalAppearanceConfig.current
+    val positionMs by remember { derivedStateOf { positionProvider() } }
+
+    val targetProgress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    val animatedProgress by animateFloatAsState(
+        targetValue = targetProgress,
+        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing),
+        label = "cava_progress",
+    )
+
+    var isDragging by remember { mutableStateOf(false) }
+    var dragProgress by remember { mutableFloatStateOf(0f) }
+    val displayProgress = if (isDragging) dragProgress else animatedProgress
+
+    // Gravity-style smoothing: bars jump up instantly on a new peak but fall back down
+    // gradually — this alone is most of what makes a spectrum analyzer read as "cava" rather
+    // than a jittery bar chart, since raw FFT captures are noisy frame to frame.
+    val smoothedRef = remember { FloatArray(magnitudes.size) }
+    val smoothed = remember(magnitudes) {
+        for (i in magnitudes.indices) {
+            val target = magnitudes[i]
+            smoothedRef[i] = if (target > smoothedRef[i]) target else smoothedRef[i] * 0.82f
+        }
+        smoothedRef.copyOf()
+    }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .preferredFrameRateSafe(120f)
+            .pointerInput(durationMs) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull() ?: continue
+                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                        dragProgress = fraction
+                        if (change.pressed) {
+                            isDragging = true
+                            onSeek((fraction * durationMs).toLong())
+                            if (config.hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        } else {
+                            isDragging = false
+                        }
+                    }
+                }
+            }
+            .drawWithCache {
+                onDrawWithContent {
+                    val count = smoothed.size.coerceAtLeast(1)
+                    val gap = barSpacingDp.toPx()
+                    val barW = ((size.width - gap * (count - 1)) / count).coerceAtLeast(1f)
+                    val step = barW + gap
+                    val splitX = displayProgress * size.width
+
+                    for (i in 0 until count) {
+                        val barCX = i * step + barW / 2f
+                        val amp = smoothed[i].coerceAtLeast(minHeightFraction)
+                        val barH = (amp * size.height).coerceIn(size.height * minHeightFraction, size.height)
+                        val color = if (barCX <= splitX) playedColor else remainingColor
+
+                        drawLine(
+                            color = color,
+                            start = Offset(barCX, size.height),
+                            end = Offset(barCX, size.height - barH),
+                            strokeWidth = barW,
+                            cap = StrokeCap.Round,
+                        )
+                    }
+                }
+            },
+    ) {
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SongCard(
@@ -457,6 +550,7 @@ fun SongCard(
     onLongClick: (() -> Unit)? = null,
     onLeadingClick: (() -> Unit)? = null,
     trailingContent: @Composable (() -> Unit)? = null,
+    onArtworkMissing: (suspend () -> String?)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val scale by animateFloatAsState(
@@ -555,6 +649,7 @@ fun SongCard(
                             modifier = Modifier.fillMaxSize(),
                             cornerRadius = 12.dp,
                             isAnimating = isPlaying,
+                            onArtworkMissing = onArtworkMissing,
                         )
                     }
                 }
@@ -615,17 +710,37 @@ fun ArtworkImage(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 16.dp,
     isAnimating: Boolean = false,
+    // Invoked once, lazily, only if the primary `uri` fails to load (e.g. no embedded art) —
+    // lets a caller resolve a fallback image URL (Spotify search, etc.) without fetching it
+    // for songs that already have real artwork.
+    onArtworkMissing: (suspend () -> String?)? = null,
 ) {
+    var primaryFailed by remember(uri) { mutableStateOf(false) }
+    var fallbackAttempted by remember(uri) { mutableStateOf(false) }
+    var fallbackUrl by remember(uri) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(uri, primaryFailed) {
+        if (primaryFailed && !fallbackAttempted && onArtworkMissing != null) {
+            fallbackAttempted = true
+            fallbackUrl = onArtworkMissing()
+        }
+    }
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(cornerRadius))
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
         AsyncImage(
-            model = uri,
+            model = fallbackUrl ?: uri,
             contentDescription = contentDescription,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
+            onState = { state ->
+                if (!primaryFailed && fallbackUrl == null && state is AsyncImagePainter.State.Error) {
+                    primaryFailed = true
+                }
+            },
         )
     }
 }
@@ -734,11 +849,12 @@ fun MiniPlayer(
                         }
                     } else artworkModifier
                 ) {
-                    AsyncImage(
-                        model = song.artworkUri,
+                    ArtworkImage(
+                        uri = song.artworkUri,
                         contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        cornerRadius = 0.dp,
+                        onArtworkMissing = { playerViewModel.getSongArtworkUrl(song) },
                     )
                 }
 

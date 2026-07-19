@@ -22,8 +22,18 @@ object IncomingFileStorage {
             .ifBlank { "Unknown" }
             .take(200)
 
+    // title/ext arrive from an externally-reachable deep link (resonance://receive, exported —
+    // reachable by any app, QR code, or webpage, not just Resonance's own P2P sender), so both
+    // must be sanitized. ext in particular must never contain a path separator: on API < 29 it
+    // flows straight into File(destDir, fileName), where "../../x" would traverse outside the
+    // intended folder.
+    private fun sanitizeExtension(ext: String): String {
+        val cleaned = ext.trim().trimStart('.').replace(Regex("[^A-Za-z0-9]"), "")
+        return cleaned.ifBlank { "mp3" }.take(10)
+    }
+
     fun saveIncoming(context: Context, input: InputStream, title: String, ext: String, mimeType: String): File {
-        val fileName = "${sanitizeFileName(title)}.${ext.ifBlank { "mp3" }}"
+        val fileName = "${sanitizeFileName(title)}.${sanitizeExtension(ext)}"
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = context.contentResolver

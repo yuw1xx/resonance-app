@@ -59,6 +59,32 @@ interface NavidromeApi {
         @Query("size") size: Int = 500,
         @Query("musicFolderId") folderId: String? = null,
     ): SubsonicResponse
+
+    @GET("rest/star.view")
+    suspend fun star(@Query("id") id: String): SubsonicResponse
+
+    @GET("rest/unstar.view")
+    suspend fun unstar(@Query("id") id: String): SubsonicResponse
+
+    @GET("rest/getStarred2.view")
+    suspend fun getStarred2(): SubsonicResponse
+
+    @GET("rest/createPlaylist.view")
+    suspend fun createPlaylist(
+        @Query("name") name: String,
+        @Query("songId") songIds: List<String> = emptyList(),
+    ): SubsonicResponse
+
+    @GET("rest/updatePlaylist.view")
+    suspend fun updatePlaylist(
+        @Query("playlistId") playlistId: String,
+        @Query("name") name: String? = null,
+        @Query("songIdToAdd") songIdsToAdd: List<String> = emptyList(),
+        @Query("songIdToRemove") songIdsToRemove: List<String> = emptyList(),
+    ): SubsonicResponse
+
+    @GET("rest/deletePlaylist.view")
+    suspend fun deletePlaylist(@Query("id") id: String): SubsonicResponse
 }
 
 @JsonClass(generateAdapter = true)
@@ -80,6 +106,13 @@ data class SubsonicResponseBody(
     val playlists: SubsonicPlaylists? = null,
     val playlist: SubsonicPlaylistWithSongs? = null,
     val searchResult3: SubsonicSearchResult? = null,
+    val starred2: SubsonicStarred2? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class SubsonicStarred2(
+    val song: List<SubsonicSong> = emptyList(),
+    val album: List<SubsonicAlbum> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)

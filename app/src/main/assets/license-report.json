@@ -1043,6 +1043,13 @@
             "moduleLicenseUrl": "http://www.apache.org/licenses/LICENSE-2.0.txt"
         },
         {
+            "moduleName": "androidx.security:security-crypto",
+            "moduleUrl": "https://developer.android.com/jetpack/androidx/releases/security#1.1.0-alpha06",
+            "moduleVersion": "1.1.0-alpha06",
+            "moduleLicense": "The Apache Software License, Version 2.0",
+            "moduleLicenseUrl": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+        },
+        {
             "moduleName": "androidx.sqlite:sqlite",
             "moduleUrl": "https://developer.android.com/jetpack/androidx/releases/sqlite#2.5.0",
             "moduleVersion": "2.5.0",
@@ -1240,6 +1247,20 @@
             "moduleUrl": "http://findbugs.sourceforge.net/",
             "moduleVersion": "3.0.2",
             "moduleLicense": "The Apache Software License, Version 2.0",
+            "moduleLicenseUrl": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+        },
+        {
+            "moduleName": "com.google.code.gson:gson",
+            "moduleUrl": "https://github.com/google/gson/gson",
+            "moduleVersion": "2.8.9",
+            "moduleLicense": "Apache-2.0",
+            "moduleLicenseUrl": "https://www.apache.org/licenses/LICENSE-2.0.txt"
+        },
+        {
+            "moduleName": "com.google.crypto.tink:tink-android",
+            "moduleUrl": "http://github.com/tink-crypto/tink-java",
+            "moduleVersion": "1.8.0",
+            "moduleLicense": "Apache License, Version 2.0",
             "moduleLicenseUrl": "http://www.apache.org/licenses/LICENSE-2.0.txt"
         },
         {

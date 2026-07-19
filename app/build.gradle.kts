@@ -38,8 +38,8 @@ android {
         applicationId = "dev.yuwixx.resonance"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "2.1.0"
+        versionCode = 7
+        versionName = "2.2.0"
     }
 
     buildTypes {
@@ -159,4 +159,6 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     // ── Tag Editing ──────────────────────────────────────────────────────────
     implementation("net.jthink:jaudiotagger:3.0.1")
+    // ── Secure Storage (Keystore-backed encryption for Navidrome password / Last.fm session key) ──
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

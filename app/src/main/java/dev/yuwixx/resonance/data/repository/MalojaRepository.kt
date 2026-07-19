@@ -8,6 +8,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.squareup.moshi.Moshi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.BuildConfig
+import dev.yuwixx.resonance.data.database.dao.PendingScrobbleDao
+import dev.yuwixx.resonance.data.database.entity.PendingScrobbleEntity
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.network.MalojaApi
 import dev.yuwixx.resonance.data.network.MalojaScrobbleRequest
@@ -46,6 +48,7 @@ private data class PendingMalojaScrobble(
 class MalojaRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val moshi: Moshi,
+    private val pendingScrobbleDao: PendingScrobbleDao,
 ) {
     private val store = context.malojaStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -65,6 +68,44 @@ class MalojaRepository @Inject constructor(
                 currentApi = if (url.isBlank()) null else buildApi(url)
                 currentApiUrl = url
             }
+        }
+        // Restore any scrobbles queued but not yet flushed before the process died, then try
+        // to flush them right away (flush() no-ops gracefully if the server isn't configured).
+        scope.launch {
+            val restored = pendingScrobbleDao.getAllForService("MALOJA").map {
+                PendingMalojaScrobble(
+                    artists = it.artists.split(",").filter { a -> a.isNotBlank() },
+                    title = it.title,
+                    album = it.album,
+                    length = it.durationSec,
+                    time = it.timestamp,
+                )
+            }
+            if (restored.isNotEmpty()) {
+                pending.addAll(restored)
+                flush()
+                persistPendingToDb()
+            }
+        }
+    }
+
+    // Mirrors the current in-memory pending list into the DB so a killed process doesn't lose
+    // whatever's still unflushed. Delete-all-then-reinsert instead of per-row tracking —
+    // simpler, and flushes are already infrequent/batched.
+    private suspend fun persistPendingToDb() {
+        pendingScrobbleDao.deleteAllForService("MALOJA")
+        pending.forEach { p ->
+            pendingScrobbleDao.insert(
+                PendingScrobbleEntity(
+                    service = "MALOJA",
+                    artists = p.artists.joinToString(","),
+                    title = p.title,
+                    album = p.album,
+                    durationSec = p.length,
+                    trackNumber = null,
+                    timestamp = p.time,
+                )
+            )
         }
     }
 
@@ -105,6 +146,7 @@ class MalojaRepository @Inject constructor(
                 )
             )
             flush()
+            persistPendingToDb()
         }
     }
 

@@ -12,9 +12,11 @@ import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.model.Playlist
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.data.database.entity.SongDownloadEntity
 import dev.yuwixx.resonance.data.repository.ArtworkRepository
 import dev.yuwixx.resonance.data.repository.MixRepository
 import dev.yuwixx.resonance.data.repository.MusicRepository
+import dev.yuwixx.resonance.data.repository.NavidromeDownloadRepository
 import dev.yuwixx.resonance.data.repository.NavidromeRepository
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
 import dev.yuwixx.resonance.data.repository.PlaylistRepository
@@ -32,12 +34,45 @@ class LibraryViewModel @Inject constructor(
     val prefs: ResonancePreferences,
     private val artworkRepository: ArtworkRepository,
     private val navidromeRepository: NavidromeRepository,
+    private val navidromeDownloadRepository: NavidromeDownloadRepository,
     private val mixGeneratorManager: MixGeneratorManager,
     private val mixRepository: MixRepository,
 ) : ViewModel() {
 
+    val downloadStates: StateFlow<Map<Long, SongDownloadEntity>> = navidromeDownloadRepository.downloadStates
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    val downloadsStorageUsed: StateFlow<Long> = downloadStates
+        .map { it.values.sumOf { d -> d.fileSizeBytes } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
+
+    fun downloadSong(songId: Long) {
+        viewModelScope.launch { navidromeDownloadRepository.downloadSongs(listOf(songId)) }
+    }
+
+    fun downloadAlbum(albumId: Long) {
+        viewModelScope.launch { navidromeDownloadRepository.downloadAlbum(albumId) }
+    }
+
+    fun downloadPlaylist(playlistId: Long) {
+        viewModelScope.launch { navidromeDownloadRepository.downloadPlaylist(playlistId) }
+    }
+
+    fun removeDownload(songId: Long) {
+        viewModelScope.launch { navidromeDownloadRepository.removeDownload(songId) }
+    }
+
+    fun removeAllDownloads() {
+        viewModelScope.launch { navidromeDownloadRepository.removeAll() }
+    }
+
     suspend fun getArtistArtworkUrl(artistName: String): String? =
         artworkRepository.getArtistArtworkUrl(artistName)
+
+    suspend fun getSongArtworkUrl(song: Song): String? {
+        if (!prefs.fetchAlbumArt.first()) return null
+        return artworkRepository.getSongArtworkUrl(song.albumId, song.title, song.displayArtist)
+    }
 
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()

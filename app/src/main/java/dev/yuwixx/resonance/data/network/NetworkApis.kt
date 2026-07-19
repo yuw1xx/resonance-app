@@ -2,11 +2,15 @@ package dev.yuwixx.resonance.data.network
 
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
+import retrofit2.http.Header
+import retrofit2.http.POST
 import retrofit2.http.Query
 
 interface GitHubApi {
-    @GET("repos/yuw1xx/resonance/releases/latest")
+    @GET("repos/yuw1xx/resonance-app/releases/latest")
     suspend fun getLatestRelease(): GitHubRelease
 }
 
@@ -72,4 +76,57 @@ data class DeezerArtist(
     @Json(name = "picture_medium") val pictureMedium: String?,
     @Json(name = "picture_xl") val pictureXl: String?,
     val nb_fan: Long?,
+)
+
+interface SpotifyAuthApi {
+    @FormUrlEncoded
+    @POST("api/token")
+    suspend fun getToken(
+        @Header("Authorization") basicAuth: String,
+        @Field("grant_type") grantType: String = "client_credentials",
+    ): SpotifyTokenResponse
+}
+
+@JsonClass(generateAdapter = true)
+data class SpotifyTokenResponse(
+    @Json(name = "access_token") val accessToken: String,
+    @Json(name = "expires_in") val expiresInSeconds: Int,
+)
+
+interface SpotifyApi {
+    @GET("v1/search")
+    suspend fun searchTracks(
+        @Header("Authorization") bearerAuth: String,
+        @Query("q") query: String,
+        @Query("type") type: String = "track",
+        @Query("limit") limit: Int = 1,
+    ): SpotifySearchResponse
+}
+
+@JsonClass(generateAdapter = true)
+data class SpotifySearchResponse(
+    val tracks: SpotifyTrackPage?,
+)
+
+@JsonClass(generateAdapter = true)
+data class SpotifyTrackPage(
+    val items: List<SpotifyTrack>,
+)
+
+@JsonClass(generateAdapter = true)
+data class SpotifyTrack(
+    val name: String,
+    val album: SpotifyAlbum,
+)
+
+@JsonClass(generateAdapter = true)
+data class SpotifyAlbum(
+    val images: List<SpotifyImage>,
+)
+
+@JsonClass(generateAdapter = true)
+data class SpotifyImage(
+    val url: String,
+    val width: Int?,
+    val height: Int?,
 )

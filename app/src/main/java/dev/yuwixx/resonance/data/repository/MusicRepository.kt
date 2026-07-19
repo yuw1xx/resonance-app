@@ -202,11 +202,11 @@ class MusicRepository @Inject constructor(
                             albumArtist = cursor.getString(albumArtistCol) ?: "",
                             album = cursor.getString(albumCol) ?: "Unknown Album",
                             albumId = cursor.getLong(albumIdCol),
-                            genre = cursor.getString(genreCol) ?: "",
+                            genre = if (genreCol >= 0) cursor.getString(genreCol) ?: "" else "",
                             duration = cursor.getLong(durationCol),
                             size = cursor.getLong(sizeCol),
-                            bitrate = cursor.getInt(bitrateCol) / 1000,
-                            sampleRate = cursor.getInt(sampleRateCol),
+                            bitrate = (if (bitrateCol >= 0) cursor.getInt(bitrateCol) else 0) / 1000,
+                            sampleRate = if (sampleRateCol >= 0) cursor.getInt(sampleRateCol) else 0,
                             // MediaStore encodes disc number in the upper 12 bits of the TRACK field.
                             trackNumber = trackRaw % 1000,
                             discNumber = trackRaw / 1000,
@@ -382,6 +382,10 @@ class MusicRepository @Inject constructor(
         } catch (e: Exception) {
             Log.e("MusicRepository", "Failed to write physical ID3 tag (Likely Android 11+ Scoped Storage restriction). Database updated successfully.", e)
         }
+    }
+
+    suspend fun updateReplayGain(songId: Long, trackGain: Float?, albumGain: Float?) {
+        songDao.updateReplayGain(songId, trackGain, albumGain)
     }
 
     // ─── Utilities ───

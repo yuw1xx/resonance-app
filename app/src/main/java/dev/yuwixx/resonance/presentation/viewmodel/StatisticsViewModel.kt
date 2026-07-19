@@ -99,9 +99,11 @@ class StatisticsViewModel @Inject constructor(
 
     private fun computeStreak(dates: List<String>): Int {
         if (dates.isEmpty()) return 0
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).also {
-            it.timeZone = java.util.TimeZone.getTimeZone("UTC")
-        }
+        // dates[] comes from history's date(listenedAt / 1000, 'unixepoch', 'localtime') — i.e.
+        // device-local calendar dates — so today/yesterday must be computed in the same (default)
+        // timezone. Forcing UTC here used to desync from that for roughly half of every day at
+        // any negative UTC offset, intermittently zeroing the streak.
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val cal = Calendar.getInstance()
         val today     = sdf.format(cal.time)
         cal.add(Calendar.DAY_OF_YEAR, -1)

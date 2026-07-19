@@ -46,7 +46,18 @@ class PlayerViewModel @Inject constructor(
     private val castManager: CastManager,
     private val localAudioServer: LocalAudioServer,
     private val artworkRepository: ArtworkRepository,
+    private val visualizerStateHolder: dev.yuwixx.resonance.data.service.VisualizerStateHolder,
+    private val replayGainProcessor: dev.yuwixx.resonance.domain.usecase.ReplayGainProcessor,
+    private val navidromeDownloadRepository: NavidromeDownloadRepository,
+    private val navidromeSyncRepository: NavidromeSyncRepository,
 ) : ViewModel() {
+
+    val visualizerBars: StateFlow<FloatArray> = visualizerStateHolder.magnitudes
+
+    // Only capture while the Cava seekbar is actually composed (see CavaSeekbar's
+    // DisposableEffect) — MusicService also gates on isPlaying, so this is belt-and-suspenders
+    // against burning battery on a bar row nobody can see.
+    fun setVisualizerActive(active: Boolean) = visualizerStateHolder.requestActive(active)
 
     private var _controller: MediaController? = null
 
@@ -95,6 +106,11 @@ class PlayerViewModel @Inject constructor(
             if (song == null || uri == null) flowOf<ArtworkComposeColors?>(null)
             else flow { emit(artworkRepository.extractArtworkColors(song.albumId, uri).toComposeColors()) }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    suspend fun getSongArtworkUrl(song: Song): String? {
+        if (!prefs.fetchAlbumArt.first()) return null
+        return artworkRepository.getSongArtworkUrl(song.albumId, song.title, song.displayArtist)
+    }
 
     val partyMode = prefs.partyMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -191,9 +207,14 @@ class PlayerViewModel @Inject constructor(
                 } else if (wasCasting) {
                     wasCasting = false
                     val lastPos = _positionMs.value
+                    // _isPlaying still holds the last cast-driven playing state at this point
+                    // (set by the castIsPlaying collector below) — read it before ctrl.play()
+                    // below overwrites it with the controller's own (still-paused) state.
+                    val shouldResume = _isPlaying.value
                     // Resume the local player from where Cast left off.
                     _controller?.let { ctrl ->
                         if (lastPos > 0) ctrl.seekTo(lastPos)
+                        if (shouldResume) ctrl.play()
                         _isPlaying.value = ctrl.isPlaying
                     }
                 }
@@ -245,6 +266,13 @@ class PlayerViewModel @Inject constructor(
                     val dur = castManager.getStreamDuration()
                     _positionMs.value = pos
                     if (dur > 0) _durationMs.value = dur
+                    // Lyric auto-scroll and scrobbling were previously local-playback-only —
+                    // castIsPlaying is kept in sync with _isPlaying by the collector in init{},
+                    // which checkScrobbleThreshold relies on, so this must stay true while casting.
+                    if (castManager.castIsPlaying.value && dur > 0) {
+                        updateActiveLyricIndex(pos)
+                        checkScrobbleThreshold(pos, dur)
+                    }
                     // Auto-advance when the cast track finishes.
                     // Guard with castLastAdvancedSongId so the 100ms ticker can't
                     // fire the advance multiple times for the same track.
@@ -343,9 +371,11 @@ class PlayerViewModel @Inject constructor(
             // so the very first song of a queue never got a head start.
             songs.getOrNull(startIndex)?.let { song ->
                 viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
+                prefetchReplayGain(song)
             }
             songs.getOrNull(startIndex + 1)?.let { song ->
                 viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
+                prefetchReplayGain(song)
             }
 
             _controller?.let { ctrl ->
@@ -355,6 +385,14 @@ class PlayerViewModel @Inject constructor(
                 ctrl.play()
             }
         }
+    }
+
+    // Shuffles the list client-side so the very first song played is random too (not just
+    // later next/previous hops), then leaves shuffle mode on for the rest of the queue.
+    fun playShuffled(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        play(songs.shuffled(), 0)
+        _controller?.shuffleModeEnabled = true
     }
 
     fun playPause() {
@@ -429,8 +467,10 @@ class PlayerViewModel @Inject constructor(
             val isLiked = likedSongsDao.isLiked(song.id) > 0
             if (isLiked) {
                 likedSongsDao.unlikeSong(song.id)
+                song.navidromeId?.let { navidromeSyncRepository.unstar(song.id, it) }
             } else {
                 likedSongsDao.likeSong(LikedSongEntity(songId = song.id, likedAt = System.currentTimeMillis()))
+                song.navidromeId?.let { navidromeSyncRepository.star(song.id, it) }
             }
         }
     }
@@ -453,6 +493,7 @@ class PlayerViewModel @Inject constructor(
     fun addToQueueEnd(song: Song) {
         _controller?.addMediaItem(song.toMediaItem())
         viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
+        prefetchReplayGain(song)
     }
 
     fun addToQueueNext(song: Song) {
@@ -462,6 +503,7 @@ class PlayerViewModel @Inject constructor(
             ctrl.addMediaItem(insertIndex, song.toMediaItem())
         }
         viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
+        prefetchReplayGain(song)
     }
 
     private val _queue = MutableStateFlow<List<Song>>(emptyList())
@@ -469,6 +511,64 @@ class PlayerViewModel @Inject constructor(
 
     private val _currentQueueIndex = MutableStateFlow(0)
     val currentQueueIndex: StateFlow<Int> = _currentQueueIndex.asStateFlow()
+
+    // The song that will actually play next, per the controller's shuffle-aware traversal —
+    // not just queue[currentQueueIndex + 1], which is only correct when shuffle is off.
+    private val _nextSong = MutableStateFlow<Song?>(null)
+    val nextSong: StateFlow<Song?> = _nextSong.asStateFlow()
+
+    // Queue entries in actual upcoming playback order (shuffle-aware), each carrying its real
+    // underlying window index so remove/play-at actions keep targeting the right item. Used by
+    // QueueScreen — _queue above stays in raw linear order since updateNextSong() relies on that.
+    data class QueueEntry(val index: Int, val song: Song)
+    private val _orderedQueue = MutableStateFlow<List<QueueEntry>>(emptyList())
+    val orderedQueue: StateFlow<List<QueueEntry>> = _orderedQueue.asStateFlow()
+
+    private fun updateNextSong() {
+        val ctrl = _controller
+        val nextIndex = ctrl?.nextMediaItemIndex ?: C.INDEX_UNSET
+        _nextSong.value = if (nextIndex != C.INDEX_UNSET) _queue.value.getOrNull(nextIndex) else null
+    }
+
+    // Walks the timeline from the current item using the same shuffle-aware traversal ExoPlayer
+    // itself uses for next()/previous(), so QueueScreen's order matches real playback order.
+    // REPEAT_MODE_OFF is passed explicitly regardless of the live repeat mode — that's the
+    // traversal-semantics parameter's purpose, and it prevents infinite wraparound under
+    // REPEAT_MODE_ALL (INDEX_UNSET is returned once you'd wrap past either end instead of looping).
+    private fun buildOrderedQueue(ctrl: MediaController, songs: List<Song>): List<QueueEntry> {
+        val count = songs.size
+        if (count == 0) return emptyList()
+        val current = ctrl.currentMediaItemIndex
+        if (!ctrl.shuffleModeEnabled || current == C.INDEX_UNSET) {
+            return songs.mapIndexed { i, s -> QueueEntry(i, s) }
+        }
+        val timeline = ctrl.currentTimeline
+        val visited = HashSet<Int>().apply { add(current) }
+        val prefix = ArrayDeque<Int>()
+        var idx = current
+        while (prefix.size < count) {
+            idx = timeline.getPreviousWindowIndex(idx, Player.REPEAT_MODE_OFF, true)
+            if (idx == C.INDEX_UNSET || !visited.add(idx)) break
+            prefix.addFirst(idx)
+        }
+        val suffix = mutableListOf<Int>()
+        idx = current
+        while (suffix.size < count) {
+            idx = timeline.getNextWindowIndex(idx, Player.REPEAT_MODE_OFF, true)
+            if (idx == C.INDEX_UNSET || !visited.add(idx)) break
+            suffix.add(idx)
+        }
+        return (prefix.toList() + current + suffix).mapNotNull { i -> songs.getOrNull(i)?.let { QueueEntry(i, it) } }
+    }
+
+    // Seeks within the existing timeline/shuffle order — unlike play(), this doesn't rebuild the
+    // playlist, so it doesn't disturb shuffle order or re-trigger preload/scrobble-reset machinery.
+    fun playAtQueueIndex(index: Int) {
+        _controller?.let { ctrl ->
+            ctrl.seekTo(index, 0L)
+            ctrl.play()
+        }
+    }
 
     fun clearQueue() {
         _controller?.clearMediaItems()
@@ -494,6 +594,7 @@ class PlayerViewModel @Inject constructor(
     fun loadSmartQueue(reason: dev.yuwixx.resonance.data.model.SmartQueueReason) {
         if (_isLoadingSmartQueue.value) return
         viewModelScope.launch {
+            _smartQueueError.value = null
             _isLoadingSmartQueue.value = true
             try {
                 val seedSong = _currentSong.value
@@ -510,6 +611,7 @@ class PlayerViewModel @Inject constructor(
                         val insertIndex = ctrl.currentMediaItemIndex + 1
                         result.songs.forEachIndexed { i, song ->
                             ctrl.addMediaItem(insertIndex + i, song.toMediaItem())
+                            prefetchReplayGain(song)
                         }
                     }
                 } else {
@@ -568,9 +670,15 @@ class PlayerViewModel @Inject constructor(
                         _activeLyricIndex.value = -1
 
                         // Kick off waveform and lyrics loading in parallel for the current track.
-                        launch { _waveformData.value = waveformExtractor.extract(song.id, song.uri) }
+                        // Guarded against a "late response wins" race: if the user skips again
+                        // before these resolve, an older transition's slow response must not
+                        // overwrite the now-current song's already-correct state.
                         launch {
-                            _lyricsResult.value = lyricsRepository.getLyrics(
+                            val waveform = waveformExtractor.extract(song.id, song.uri)
+                            if (_currentSong.value?.id == song.id) _waveformData.value = waveform
+                        }
+                        launch {
+                            val lyrics = lyricsRepository.getLyrics(
                                 songId = song.id,
                                 title = song.title,
                                 artist = song.artist,
@@ -578,6 +686,7 @@ class PlayerViewModel @Inject constructor(
                                 durationMs = song.duration,
                                 songUri = song.uri,
                             )
+                            if (_currentSong.value?.id == song.id) _lyricsResult.value = lyrics
                         }
 
                         val now = System.currentTimeMillis()
@@ -637,6 +746,10 @@ class PlayerViewModel @Inject constructor(
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            // The local controller stays alive (paused) during a cast session, so a stray event
+            // from it must not override the cast-driven play state — castManager.castIsPlaying's
+            // own collector (see init{}) is the source of truth for _isPlaying while casting.
+            if (castManager.isCasting.value) return
             _isPlaying.value = isPlaying
             if (!scrobbleSubmittedForCurrentTrack) {
                 if (isPlaying) {
@@ -658,6 +771,7 @@ class PlayerViewModel @Inject constructor(
 
         override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
             _shuffleEnabled.value = shuffleModeEnabled
+            updateNextSong()
         }
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
@@ -691,6 +805,8 @@ class PlayerViewModel @Inject constructor(
             }
             _queue.value = songs
             _currentQueueIndex.value = ctrl.currentMediaItemIndex
+            _orderedQueue.value = buildOrderedQueue(ctrl, songs)
+            updateNextSong()
         }
     }
 
@@ -699,9 +815,12 @@ class PlayerViewModel @Inject constructor(
             _waveformData.value = null
             _lyricsResult.value = LyricsResult.Loading
             _activeLyricIndex.value = -1
-            launch { _waveformData.value = waveformExtractor.extract(song.id, song.uri) }
             launch {
-                _lyricsResult.value = lyricsRepository.getLyrics(
+                val waveform = waveformExtractor.extract(song.id, song.uri)
+                if (_currentSong.value?.id == song.id) _waveformData.value = waveform
+            }
+            launch {
+                val lyrics = lyricsRepository.getLyrics(
                     songId = song.id,
                     title = song.title,
                     artist = song.artist,
@@ -709,6 +828,7 @@ class PlayerViewModel @Inject constructor(
                     durationMs = song.duration,
                     songUri = song.uri,
                 )
+                if (_currentSong.value?.id == song.id) _lyricsResult.value = lyrics
             }
             val now = System.currentTimeMillis()
             scrobbleTrackStartedAt = now
@@ -724,6 +844,54 @@ class PlayerViewModel @Inject constructor(
         _controller?.release()
         localAudioServer.safeStop()
         super.onCleared()
+    }
+
+    // A member function (not a top-level extension) so it can consult replayGainProcessor's
+    // in-memory cache without needing that dependency threaded through every call site.
+    private fun Song.toMediaItem(): MediaItem {
+        val cached = replayGainProcessor.peekCachedGain(id)
+        val trackGain = cached?.first ?: replayGainTrack
+        val albumGain = cached?.second ?: replayGainAlbum
+        val extras = android.os.Bundle().apply {
+            trackGain?.let { putFloat("replayGainTrack", it) }
+            albumGain?.let { putFloat("replayGainAlbum", it) }
+        }
+
+        // Play the downloaded local copy instead of streaming, when one exists (no-op for
+        // local MediaStore songs — they never have a song_downloads row).
+        val playbackUri = navidromeDownloadRepository.localPathForSync(id)
+            ?.let { android.net.Uri.fromFile(java.io.File(it)) }
+            ?: uri
+
+        return MediaItem.Builder()
+            .setMediaId(id.toString())
+            .setUri(playbackUri)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(displayArtist)
+                    .setAlbumTitle(album)
+                    .setArtworkUri(artworkUri)
+                    .setExtras(extras)
+                    .build()
+            )
+            .setRequestMetadata(
+                MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(playbackUri)
+                    .build()
+            )
+            .build()
+    }
+
+    // Kicks off a background tag read for a song about to be queued, so ReplayGain is applied
+    // from the second play onward (the very first play may miss it — an acceptable tradeoff
+    // versus blocking playback start on a file read). Persists the result to the DB too, so it
+    // survives across app sessions without a re-read.
+    private fun prefetchReplayGain(song: Song) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val (track, album) = replayGainProcessor.readAndCacheGain(song.id, song.path) ?: return@launch
+            musicRepository.updateReplayGain(song.id, track, album)
+        }
     }
 }
 
@@ -761,30 +929,4 @@ private fun MediaItem.toSong(): Song? {
         replayGainAlbum = extras?.getFloat("replayGainAlbum").takeIf { extras?.containsKey("replayGainAlbum") == true },
         artworkUri    = meta.artworkUri,
     )
-}
-
-private fun Song.toMediaItem(): MediaItem {
-    val extras = android.os.Bundle().apply {
-        replayGainTrack?.let { putFloat("replayGainTrack", it) }
-        replayGainAlbum?.let { putFloat("replayGainAlbum", it) }
-    }
-
-    return MediaItem.Builder()
-        .setMediaId(id.toString())
-        .setUri(uri)
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setArtist(displayArtist)
-                .setAlbumTitle(album)
-                .setArtworkUri(artworkUri)
-                .setExtras(extras)
-                .build()
-        )
-        .setRequestMetadata(
-            MediaItem.RequestMetadata.Builder()
-                .setMediaUri(uri)
-                .build()
-        )
-        .build()
 }

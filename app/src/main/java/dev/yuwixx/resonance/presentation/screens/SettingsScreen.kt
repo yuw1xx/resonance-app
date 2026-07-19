@@ -178,8 +178,9 @@ fun SettingsScreen(
     val showFilenameTitle by prefs.showFilenameAsTitle.collectAsState(initial = false)
     val ignoreArticles by prefs.ignoreArticles.collectAsState(initial = true)
     val autoScanHours by prefs.autoScanIntervalHours.collectAsState(initial = 0)
-    val fetchArtistImages by prefs.fetchArtistImages.collectAsState(initial = true)
-    val fetchLyrics by prefs.fetchLyrics.collectAsState(initial = true)
+    val fetchArtistImages by prefs.fetchArtistImages.collectAsState(initial = false)
+    val fetchLyrics by prefs.fetchLyrics.collectAsState(initial = false)
+    val fetchAlbumArt by prefs.fetchAlbumArt.collectAsState(initial = false)
     val allFolders by libraryViewModel.allFolders.collectAsState()
     val excludedFolders by prefs.excludedFolders.collectAsState(initial = emptySet())
     val includedFolders by prefs.includedFolders.collectAsState(initial = emptySet())
@@ -212,6 +213,9 @@ fun SettingsScreen(
     val navidromeUsername by settingsViewModel.navidromeUsername.collectAsState()
     val navidromeConnectionState by settingsViewModel.navidromeConnectionState.collectAsState()
     val navidromeSyncState by settingsViewModel.navidromeSyncState.collectAsState()
+    val downloadWifiOnly by settingsViewModel.downloadWifiOnly.collectAsState()
+    val downloadsStorageUsed by settingsViewModel.downloadsStorageUsed.collectAsState()
+    val downloadedSongCount by settingsViewModel.downloadedSongCount.collectAsState()
 
     Scaffold(
         topBar = {
@@ -520,7 +524,7 @@ fun SettingsScreen(
                                 )
                                 SegmentedSettingsItem(
                                     title = "Seekbar Style",
-                                    options = listOf("Standard" to "STANDARD", "Waveform" to "WAVEFORM", "Material You 3" to "MATERIAL_YOU_3"),
+                                    options = listOf("Standard" to "STANDARD", "Waveform" to "WAVEFORM", "Material You 3" to "MATERIAL_YOU_3", "Cava" to "CAVA"),
                                     selected = seekbarStyle,
                                     onSelect = { scope.launch { prefs.setSeekbarStyle(it) } },
                                 )
@@ -674,7 +678,7 @@ fun SettingsScreen(
 
                     SettingsCategory.Player -> {
                         item {
-                            SectionCard(icon = Icons.Rounded.PlayCircleOutline, title = "Player", modifier = Modifier.padding(horizontal = 8.dp)) {
+                            SectionCard(icon = Icons.Rounded.MusicNote, title = "Player", modifier = Modifier.padding(horizontal = 8.dp)) {
                                 SegmentedSettingsItem(
                                     title = "Player Layout",
                                     options = listOf("Standard" to "STANDARD", "Big Artwork" to "ARTWORK_BIG", "Lyrics Focus" to "LYRICS_FOCUS"),
@@ -867,6 +871,7 @@ fun SettingsScreen(
                                 SettingsTextItem(
                                     title = "Artist Delimiter",
                                     subtitle = "Characters that split multi-artist tags: $artistDelimiter",
+                                    icon = Icons.Rounded.People,
                                     onClick = { showDelimiterDialog = true },
                                 )
                                 SegmentedSettingsItem(
@@ -879,12 +884,14 @@ fun SettingsScreen(
                                     title = "Included Folders",
                                     subtitle = if (includedFolders.isEmpty()) "All folders (scan everything)"
                                                else "${includedFolders.size} folder${if (includedFolders.size != 1) "s" else ""} included",
+                                    icon = Icons.Rounded.FolderOpen,
                                     onClick = { showIncludedDialog = true },
                                 )
                                 SettingsTextItem(
                                     title = "Excluded Folders",
                                     subtitle = if (excludedFolders.isEmpty()) "No folders excluded"
                                                else "${excludedFolders.size} folder${if (excludedFolders.size != 1) "s" else ""} excluded",
+                                    icon = Icons.Rounded.FolderOff,
                                     onClick = { showExcludedDialog = true },
                                 )
                             }
@@ -969,11 +976,22 @@ fun SettingsScreen(
                                 onResetSync = { settingsViewModel.resetNavidromeSyncState() },
                             )
                         }
+                        if (currentMusicSource == MusicSource.NAVIDROME) {
+                            item {
+                                DownloadsSection(
+                                    wifiOnly = downloadWifiOnly,
+                                    onWifiOnlyChange = { settingsViewModel.setDownloadWifiOnly(it) },
+                                    storageUsedBytes = downloadsStorageUsed,
+                                    downloadedSongCount = downloadedSongCount,
+                                    onDeleteAll = { settingsViewModel.removeAllDownloads() },
+                                )
+                            }
+                        }
                     }
 
                     SettingsCategory.OnlineServices -> {
                         item {
-                            SectionCard(icon = Icons.Rounded.Lyrics, title = "Lyrics & Artist Images", modifier = Modifier.padding(horizontal = 8.dp)) {
+                            SectionCard(icon = Icons.Rounded.Lyrics, title = "Lyrics & Artwork", modifier = Modifier.padding(horizontal = 8.dp)) {
                                 SettingsToggleRow(
                                     title = "Fetch Lyrics",
                                     subtitle = "Auto-download time-synced lyrics from LRC Library",
@@ -984,18 +1002,20 @@ fun SettingsScreen(
                                     subtitle = "Load artist photos from Last.fm in the Artists list",
                                     checked = fetchArtistImages,
                                 ) { scope.launch { prefs.setFetchArtistImages(it) } }
+                                SettingsToggleRow(
+                                    title = "Fetch Album Art",
+                                    subtitle = "Search Spotify for a song's cover art when it's missing",
+                                    checked = fetchAlbumArt,
+                                ) { scope.launch { prefs.setFetchAlbumArt(it) } }
                             }
                         }
 
-                        item {
-                            Text(
-                                "Last.fm Scrobbling",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
-                            )
-                        }
+                        // No outer group label here (unlike the Main screen's category groups) —
+                        // LastFmSection/MalojaSection each already self-identify via their own
+                        // branded pill badge, so a floating "Last.fm Scrobbling" text above would
+                        // just duplicate that, and every other sub-section on this screen already
+                        // carries its own title inside a SectionCard instead of a separate label.
+                        item { Spacer(Modifier.height(8.dp)) }
                         item {
                             LastFmSection(
                                 authState = lastFmAuthState,
@@ -1018,15 +1038,7 @@ fun SettingsScreen(
                             )
                         }
 
-                        item {
-                            Text(
-                                "Maloja Scrobbling",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
-                            )
-                        }
+                        item { Spacer(Modifier.height(8.dp)) }
                         item {
                             MalojaSection(
                                 isConfigured = malojaServerUrl.isNotBlank(),
@@ -1044,7 +1056,7 @@ fun SettingsScreen(
                         }
 
                         item {
-                            SectionCard(icon = null, title = "Internet Share", titleStyle = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 8.dp)) {
+                            SectionCard(icon = Icons.Rounded.Public, title = "Internet Share", modifier = Modifier.padding(horizontal = 8.dp)) {
                                 RemoteShareSection(
                                     serverUrl = remoteShareServerUrl,
                                     uploadToken = remoteShareUploadToken,
@@ -1135,7 +1147,7 @@ fun SettingsScreen(
                                 ActivityResultContracts.OpenDocument()
                             ) { uri -> uri?.let { backupViewModel.importBackup(it) } }
 
-                            SectionCard(icon = Icons.Rounded.Save, title = "Data & Backup", modifier = Modifier.padding(horizontal = 8.dp)) {
+                            SectionCard(icon = Icons.Rounded.Storage, title = "Data & Backup", modifier = Modifier.padding(horizontal = 8.dp)) {
                                 SettingsTextItem(
                                     title = "Export Backup",
                                     subtitle = "Save liked songs and playlists to a file",
@@ -1308,16 +1320,16 @@ fun SettingsScreen(
                                 SettingsTextItem(
                                     title = "GitHub Repository",
                                     subtitle = "View source code and report issues",
-                                    icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                                    icon = Icons.Rounded.Code,
                                     trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
-                                    onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance") },
+                                    onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance-app") },
                                 )
                                 SettingsTextItem(
                                     title = "App License",
                                     subtitle = "View Resonance's open source license",
                                     icon = Icons.Rounded.Gavel,
                                     trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
-                                    onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance/blob/main/LICENSE") },
+                                    onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance-app/blob/main/LICENSE") },
                                 )
                                 SettingsTextItem(
                                     title = "Third-Party Licenses",
@@ -2137,6 +2149,69 @@ private fun NavidromeSection(
 }
 
 @Composable
+private fun DownloadsSection(
+    wifiOnly: Boolean,
+    onWifiOnlyChange: (Boolean) -> Unit,
+    storageUsedBytes: Long,
+    downloadedSongCount: Int,
+    onDeleteAll: () -> Unit,
+) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    SectionCard(icon = Icons.Rounded.Download, title = "Offline Downloads", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SettingsToggleRow(
+            title = "Wi-Fi Only",
+            subtitle = "Only download songs while connected to Wi-Fi",
+            checked = wifiOnly,
+            onToggle = onWifiOnlyChange,
+        )
+        ListItem(
+            modifier = Modifier.padding(horizontal = 8.dp),
+            headlineContent = { Text("Storage Used", fontWeight = FontWeight.Medium) },
+            supportingContent = {
+                Text(
+                    "$downloadedSongCount song${if (downloadedSongCount == 1) "" else "s"} · ${formatDownloadSize(storageUsedBytes)}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+        )
+        if (downloadedSongCount > 0) {
+            TextButton(
+                onClick = { showDeleteConfirm = true },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.padding(start = 8.dp),
+            ) {
+                Icon(Icons.Rounded.DeleteSweep, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Delete All Downloads")
+            }
+        }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete all downloads?") },
+            text = { Text("This removes every downloaded song from local storage. You can re-download them any time while connected.") },
+            confirmButton = {
+                Button(
+                    onClick = { onDeleteAll(); showDeleteConfirm = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text("Delete All") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+private fun formatDownloadSize(bytes: Long): String = when {
+    bytes >= 1_073_741_824L -> "%.2f GB".format(bytes / 1_073_741_824.0)
+    bytes >= 1_048_576L     -> "%.1f MB".format(bytes / 1_048_576.0)
+    bytes >= 1_024L         -> "%.0f KB".format(bytes / 1_024.0)
+    else                    -> "$bytes B"
+}
+
+@Composable
 private fun SourceRow(
     title: String,
     subtitle: String,
@@ -2366,8 +2441,9 @@ private fun NavidromeConfigPage(
     }
 }
 
+// Not private: reused by SetupScreen.kt's onboarding NavidromeStep as well.
 @Composable
-private fun NavidromeSyncPage(
+fun NavidromeSyncPage(
     syncState: NavidromeSyncState,
     onDone: () -> Unit,
 ) {
@@ -2376,6 +2452,7 @@ private fun NavidromeSyncPage(
     var elapsedSeconds by remember { mutableLongStateOf(0L) }
     LaunchedEffect(syncState is NavidromeSyncState.Syncing) {
         if (syncState is NavidromeSyncState.Syncing) {
+            elapsedSeconds = 0L
             while (true) {
                 delay(1_000)
                 elapsedSeconds++

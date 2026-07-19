@@ -45,6 +45,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import dev.yuwixx.resonance.data.database.entity.DownloadState
+import dev.yuwixx.resonance.data.database.entity.SongDownloadEntity
 import dev.yuwixx.resonance.data.model.*
 import dev.yuwixx.resonance.data.model.RepeatMode as AppRepeatMode
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
@@ -86,6 +88,8 @@ fun SongsScreen(
     val isSyncing by libraryViewModel.isSyncing.collectAsState()
     val navSyncState by libraryViewModel.navSyncState.collectAsState()
     val playlists by libraryViewModel.allPlaylists.collectAsState()
+    val musicSource by libraryViewModel.prefs.musicSource.collectAsState(initial = MusicSource.LOCAL)
+    val downloadStates by libraryViewModel.downloadStates.collectAsState()
 
     var selectedSongs by remember { mutableStateOf(setOf<Song>()) }
     val isSelectionMode = selectedSongs.isNotEmpty()
@@ -153,6 +157,12 @@ fun SongsScreen(
                     TopAppBar(
                         title = {},
                         actions = {
+                            IconButton(onClick = {
+                                playerViewModel.playShuffled(songs)
+                                onNavigateToPlayer()
+                            }, enabled = songs.isNotEmpty()) {
+                                Icon(Icons.Rounded.Shuffle, "Shuffle Play")
+                            }
                             IconButton(onClick = onSearchClick) {
                                 Icon(Icons.Rounded.Search, "Search")
                             }
@@ -197,7 +207,7 @@ fun SongsScreen(
                         contentPadding = PaddingValues(bottom = 80.dp),
                     ) {
                     item { BigScreenTitle("Songs") }
-                    items(songs, key = { it.id }) { song ->
+                    itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
                         SongCard(
                             song = song,
                             modifier = Modifier.animateItem(),
@@ -211,7 +221,7 @@ fun SongsScreen(
                                         selectedSongs + song
                                     }
                                 } else {
-                                    playerViewModel.play(songs, songs.indexOf(song))
+                                    playerViewModel.play(songs, index)
                                     onNavigateToPlayer()
                                 }
                             },
@@ -230,7 +240,8 @@ fun SongsScreen(
                                 } else {
                                     songForInfoSheet = song
                                 }
-                            }
+                            },
+                            onArtworkMissing = { libraryViewModel.getSongArtworkUrl(song) },
                         )
                     }
                 }
@@ -284,7 +295,16 @@ fun SongsScreen(
                 songForInfoSheet = null
                 showInfoSheetPlaylistPicker = false
             },
-            onEditTags = { onNavigateToTagEditor(song.id) }
+            onEditTags = { onNavigateToTagEditor(song.id) },
+            isNavidromeSource = musicSource == MusicSource.NAVIDROME,
+            downloadState = downloadStates[song.id],
+            onDownloadToggle = {
+                if (downloadStates[song.id]?.state == DownloadState.DOWNLOADED) {
+                    libraryViewModel.removeDownload(song.id)
+                } else {
+                    libraryViewModel.downloadSong(song.id)
+                }
+            },
         )
     }
 }
@@ -551,7 +571,7 @@ fun ArtistsScreen(
         if (artists.isEmpty()) {
             EmptyLibraryView(onScan = { libraryViewModel.syncLibrary() })
         } else {
-            val fetchImages by libraryViewModel.prefs.fetchArtistImages.collectAsState(initial = true)
+            val fetchImages by libraryViewModel.prefs.fetchArtistImages.collectAsState(initial = false)
             val listState = rememberLazyListState()
             LazyColumnWithScrollbar(
                 state = listState,
@@ -736,10 +756,13 @@ fun AlbumDetailScreen(
     onBack: () -> Unit,
     onNavigateToPlayer: () -> Unit,
     onNavigateToTagEditor: (Long) -> Unit = {},
+    onArtistClick: (String) -> Unit = {},
 ) {
     val albums by libraryViewModel.allAlbums.collectAsState()
     val allSongs by libraryViewModel.allSongs.collectAsState()
     val playlists by libraryViewModel.allPlaylists.collectAsState()
+    val musicSource by libraryViewModel.prefs.musicSource.collectAsState(initial = MusicSource.LOCAL)
+    val downloadStates by libraryViewModel.downloadStates.collectAsState()
 
     val album = remember(albums, albumId) { albums.find { it.id == albumId } }
     val albumSongs = remember(allSongs, album) {
@@ -764,6 +787,15 @@ fun AlbumDetailScreen(
                 showPlaylistPicker = false
             },
             onEditTags = { onNavigateToTagEditor(song.id) },
+            isNavidromeSource = musicSource == MusicSource.NAVIDROME,
+            downloadState = downloadStates[song.id],
+            onDownloadToggle = {
+                if (downloadStates[song.id]?.state == DownloadState.DOWNLOADED) {
+                    libraryViewModel.removeDownload(song.id)
+                } else {
+                    libraryViewModel.downloadSong(song.id)
+                }
+            },
         )
     }
 
@@ -780,7 +812,7 @@ fun AlbumDetailScreen(
             )
         }
     ) { padding ->
-        album?.let {
+        album?.let { currentAlbum ->
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
@@ -789,10 +821,17 @@ fun AlbumDetailScreen(
                 ),
             ) {
                 item {
-                    AlbumHeader(album = it, songs = albumSongs) {
-                        playerViewModel.play(albumSongs, 0)
-                        onNavigateToPlayer()
-                    }
+                    AlbumHeader(
+                        album = currentAlbum,
+                        songs = albumSongs,
+                        onPlayClick = {
+                            playerViewModel.play(albumSongs, 0)
+                            onNavigateToPlayer()
+                        },
+                        onArtistClick = { onArtistClick(currentAlbum.artist) },
+                        showDownloadAction = musicSource == MusicSource.NAVIDROME,
+                        onDownloadClick = { libraryViewModel.downloadAlbum(albumId) },
+                    )
                 }
                 itemsIndexed(albumSongs, key = { _, s -> s.id }) { index, song ->
                     SongCard(
@@ -802,6 +841,7 @@ fun AlbumDetailScreen(
                             onNavigateToPlayer()
                         },
                         onLongClick = { songForInfoSheet = song },
+                        onArtworkMissing = { libraryViewModel.getSongArtworkUrl(song) },
                     )
                 }
             }
@@ -810,7 +850,14 @@ fun AlbumDetailScreen(
 }
 
 @Composable
-fun AlbumHeader(album: Album, songs: List<Song>, onPlayClick: () -> Unit) {
+fun AlbumHeader(
+    album: Album,
+    songs: List<Song>,
+    onPlayClick: () -> Unit,
+    onArtistClick: () -> Unit = {},
+    showDownloadAction: Boolean = false,
+    onDownloadClick: () -> Unit = {},
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -837,6 +884,7 @@ fun AlbumHeader(album: Album, songs: List<Song>, onPlayClick: () -> Unit) {
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
             textAlign = TextAlign.Center,
+            modifier = Modifier.clickable(onClick = onArtistClick),
         )
         Text(
             text = "${songs.size} songs · ${album.year.takeIf { it > 0 } ?: ""}",
@@ -844,14 +892,22 @@ fun AlbumHeader(album: Album, songs: List<Song>, onPlayClick: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
-        Button(
-            onClick = onPlayClick,
-            modifier = Modifier.fillMaxWidth(0.6f),
-            shape = RoundedCornerShape(16.dp),
-        ) {
-            Icon(Icons.Rounded.PlayArrow, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Play")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = onPlayClick,
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Icon(Icons.Rounded.PlayArrow, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Play")
+            }
+            if (showDownloadAction) {
+                OutlinedButton(onClick = onDownloadClick, shape = RoundedCornerShape(16.dp)) {
+                    Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Download")
+                }
+            }
         }
     }
 }
@@ -870,6 +926,8 @@ fun ArtistDetailScreen(
     val artists by libraryViewModel.allArtists.collectAsState()
     val albums by libraryViewModel.allAlbums.collectAsState()
     val playlists by libraryViewModel.allPlaylists.collectAsState()
+    val musicSource by libraryViewModel.prefs.musicSource.collectAsState(initial = MusicSource.LOCAL)
+    val downloadStates by libraryViewModel.downloadStates.collectAsState()
 
     val artist = remember(artists, artistName) { artists.find { it.name == artistName } }
     val artistSongs = remember(artist) { artist?.songs ?: emptyList() }
@@ -893,6 +951,15 @@ fun ArtistDetailScreen(
                 showPlaylistPicker = false
             },
             onEditTags = { onNavigateToTagEditor(song.id) },
+            isNavidromeSource = musicSource == MusicSource.NAVIDROME,
+            downloadState = downloadStates[song.id],
+            onDownloadToggle = {
+                if (downloadStates[song.id]?.state == DownloadState.DOWNLOADED) {
+                    libraryViewModel.removeDownload(song.id)
+                } else {
+                    libraryViewModel.downloadSong(song.id)
+                }
+            },
         )
     }
 
@@ -977,6 +1044,7 @@ fun ArtistDetailScreen(
                             onNavigateToPlayer()
                         },
                         onLongClick = { songForInfoSheet = song },
+                        onArtworkMissing = { libraryViewModel.getSongArtworkUrl(song) },
                     )
                 }
             }
@@ -986,7 +1054,7 @@ fun ArtistDetailScreen(
 
 @Composable
 fun ArtistHeader(artist: Artist, songs: List<Song>, libraryViewModel: LibraryViewModel, onPlayClick: () -> Unit) {
-    val fetchImages by libraryViewModel.prefs.fetchArtistImages.collectAsState(initial = true)
+    val fetchImages by libraryViewModel.prefs.fetchArtistImages.collectAsState(initial = false)
     var imageUrl by remember(artist.name) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(artist.name, fetchImages) {
@@ -1065,6 +1133,7 @@ fun PlaylistDetailScreen(
 ) {
     val playlists by libraryViewModel.allPlaylists.collectAsState()
     val allSongs by libraryViewModel.allSongs.collectAsState()
+    val musicSource by libraryViewModel.prefs.musicSource.collectAsState(initial = MusicSource.LOCAL)
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -1161,6 +1230,17 @@ fun PlaylistDetailScreen(
                                     }
                                 }
                             )
+                            if (musicSource == MusicSource.NAVIDROME) {
+                                DropdownMenuItem(
+                                    text = { Text("Download Playlist") },
+                                    leadingIcon = { Icon(Icons.Rounded.Download, null) },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        libraryViewModel.downloadPlaylist(playlistId)
+                                        scope.launch { snackbarHostState.showSnackbar("Downloading playlist…") }
+                                    }
+                                )
+                            }
                             HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text("Export as M3U") },
@@ -1198,7 +1278,11 @@ fun PlaylistDetailScreen(
                                 playerViewModel.play(playlistSongs, 0)
                                 onNavigateToPlayer()
                             }
-                        }
+                        },
+                        onShuffleClick = {
+                            playerViewModel.playShuffled(playlistSongs)
+                            onNavigateToPlayer()
+                        },
                     )
                 }
                 itemsIndexed(playlistSongs, key = { index, s -> "${index}_${s.id}" }) { index, song ->
@@ -1214,7 +1298,8 @@ fun PlaylistDetailScreen(
                             }) {
                                 Icon(Icons.Rounded.RemoveCircleOutline, "Remove")
                             }
-                        }
+                        },
+                        onArtworkMissing = { libraryViewModel.getSongArtworkUrl(song) },
                     )
                 }
             }
@@ -1268,6 +1353,7 @@ fun PlaylistHeader(
     songs: List<Song>,
     onChangeCover: () -> Unit,
     onPlayClick: () -> Unit,
+    onShuffleClick: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -1342,15 +1428,25 @@ fun PlaylistHeader(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
-        Button(
-            onClick = onPlayClick,
-            modifier = Modifier.fillMaxWidth(0.6f),
-            shape = RoundedCornerShape(16.dp),
-            enabled = songs.isNotEmpty()
-        ) {
-            Icon(Icons.Rounded.PlayArrow, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Play All")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = onPlayClick,
+                shape = RoundedCornerShape(16.dp),
+                enabled = songs.isNotEmpty()
+            ) {
+                Icon(Icons.Rounded.PlayArrow, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Play All")
+            }
+            OutlinedButton(
+                onClick = onShuffleClick,
+                shape = RoundedCornerShape(16.dp),
+                enabled = songs.isNotEmpty()
+            ) {
+                Icon(Icons.Rounded.Shuffle, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Shuffle")
+            }
         }
     }
 }
@@ -1440,7 +1536,7 @@ fun QueueScreen(
     playerViewModel: PlayerViewModel,
     onBack: () -> Unit,
 ) {
-    val queue by playerViewModel.queue.collectAsState()
+    val orderedQueue by playerViewModel.orderedQueue.collectAsState()
     val currentSongIndex by playerViewModel.currentQueueIndex.collectAsState()
 
     Scaffold(
@@ -1463,7 +1559,7 @@ fun QueueScreen(
             )
         }
     ) { padding ->
-        if (queue.isEmpty()) {
+        if (orderedQueue.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Queue is empty", style = MaterialTheme.typography.titleMedium)
             }
@@ -1472,15 +1568,15 @@ fun QueueScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = padding,
             ) {
-                itemsIndexed(queue, key = { index, s -> "${index}_${s.id}" }) { index, song ->
-                    val isCurrent = index == currentSongIndex
+                itemsIndexed(orderedQueue, key = { _, e -> "${e.index}_${e.song.id}" }) { _, entry ->
+                    val isCurrent = entry.index == currentSongIndex
                     SongCard(
-                        song = song,
+                        song = entry.song,
                         isPlaying = isCurrent,
-                        onClick = { playerViewModel.play(queue, index) },
+                        onClick = { playerViewModel.playAtQueueIndex(entry.index) },
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { playerViewModel.removeFromQueue(index) }) {
+                                IconButton(onClick = { playerViewModel.removeFromQueue(entry.index) }) {
                                     Icon(Icons.Rounded.Close, "Remove")
                                 }
                                 Icon(
@@ -1489,7 +1585,8 @@ fun QueueScreen(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                        }
+                        },
+                        onArtworkMissing = { playerViewModel.getSongArtworkUrl(entry.song) },
                     )
                 }
             }
@@ -1586,7 +1683,10 @@ fun SongInfoBottomSheet(
     playlists: List<Playlist>,
     showPlaylistPicker: Boolean,
     onPlaylistSelected: (Playlist) -> Unit,
-    onEditTags: () -> Unit
+    onEditTags: () -> Unit,
+    isNavidromeSource: Boolean = false,
+    downloadState: SongDownloadEntity? = null,
+    onDownloadToggle: () -> Unit = {},
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         if (showPlaylistPicker) {
@@ -1643,6 +1743,21 @@ fun SongInfoBottomSheet(
                     leadingContent = { Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, null) }
                 )
 
+                if (isNavidromeSource) {
+                    val (downloadLabel, downloadIcon, downloadEnabled) = when (downloadState?.state) {
+                        DownloadState.DOWNLOADED   -> Triple("Remove Download", Icons.Rounded.DownloadDone, true)
+                        DownloadState.DOWNLOADING  -> Triple("Downloading…", Icons.Rounded.Downloading, false)
+                        DownloadState.QUEUED       -> Triple("Queued…", Icons.Rounded.Downloading, false)
+                        DownloadState.FAILED       -> Triple("Retry Download", Icons.Rounded.Download, true)
+                        else                       -> Triple("Download", Icons.Rounded.Download, true)
+                    }
+                    ListItem(
+                        modifier = Modifier.clickable(enabled = downloadEnabled) { onDownloadToggle() },
+                        headlineContent = { Text(downloadLabel) },
+                        leadingContent = { Icon(downloadIcon, null) }
+                    )
+                }
+
                 ListItem(
                     modifier = Modifier.clickable {
                         onEditTags()
@@ -1683,6 +1798,12 @@ fun LikedSongsScreen(
                 },
                 actions = {
                     if (likedSongs.isNotEmpty()) {
+                        IconButton(onClick = {
+                            playerViewModel.playShuffled(likedSongs)
+                            onNavigateToPlayer()
+                        }) {
+                            Icon(Icons.Rounded.Shuffle, "Shuffle Play")
+                        }
                         IconButton(onClick = {
                             playerViewModel.play(likedSongs, 0)
                             onNavigateToPlayer()
@@ -1785,6 +1906,7 @@ fun LikedSongsScreen(
                             playerViewModel.play(likedSongs, index)
                             onNavigateToPlayer()
                         },
+                        onArtworkMissing = { libraryViewModel.getSongArtworkUrl(song) },
                     )
                 }
             }
@@ -1985,6 +2107,7 @@ fun SearchScreen(
                                     playerViewModel.play(filteredSongs, index)
                                     onNavigateToPlayer()
                                 },
+                                onArtworkMissing = { libraryViewModel.getSongArtworkUrl(song) },
                             )
                         }
                     }

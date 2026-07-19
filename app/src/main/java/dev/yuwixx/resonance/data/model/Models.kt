@@ -33,6 +33,9 @@ data class Song(
     val artworkUri: Uri?,
     val listenCount: Int = 0,
     val lastListened: Long = 0L,
+    // Non-null only for Navidrome-sourced songs — the original opaque Subsonic string id,
+    // needed to star/unstar against the server (id is the stableLongId-mapped Long instead).
+    val navidromeId: String? = null,
 ) {
     val displayArtist: String get() = artists.joinToString(", ")
 }

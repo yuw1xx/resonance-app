@@ -9,8 +9,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
 import android.media.audiofx.Equalizer
+import android.media.audiofx.Visualizer
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.media3.common.*
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -23,20 +25,26 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import dagger.hilt.android.AndroidEntryPoint
 import dev.yuwixx.resonance.MainActivity
+import dev.yuwixx.resonance.data.database.dao.LikedSongsDao
 import dev.yuwixx.resonance.data.database.dao.NavidromeSongDao
 import dev.yuwixx.resonance.data.database.dao.PlaylistDao
 import dev.yuwixx.resonance.data.database.dao.QueueDao
 import dev.yuwixx.resonance.data.database.dao.SongDao
+import dev.yuwixx.resonance.data.database.entity.LikedSongEntity
 import dev.yuwixx.resonance.data.database.entity.QueueEntity
 import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.data.repository.NavidromeDownloadRepository
 import dev.yuwixx.resonance.domain.usecase.ReplayGainProcessor
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import dev.yuwixx.resonance.ui.glancewidget.ACTION_WIDGET_PLAY_PAUSE
+import dev.yuwixx.resonance.ui.glancewidget.ACTION_WIDGET_SEEK
 import dev.yuwixx.resonance.ui.glancewidget.ACTION_WIDGET_SKIP_NEXT
 import dev.yuwixx.resonance.ui.glancewidget.ACTION_WIDGET_SKIP_PREV
+import dev.yuwixx.resonance.ui.glancewidget.ACTION_WIDGET_TOGGLE_LIKE
+import dev.yuwixx.resonance.ui.glancewidget.EXTRA_SEEK_FRACTION_PCT
 import dev.yuwixx.resonance.ui.glancewidget.ResonanceWidget
 
 @UnstableApi
@@ -48,15 +56,20 @@ class MusicService : MediaLibraryService() {
     @Inject lateinit var songDao: SongDao
     @Inject lateinit var navidromeSongDao: NavidromeSongDao
     @Inject lateinit var playlistDao: PlaylistDao
+    @Inject lateinit var likedSongsDao: LikedSongsDao
+    @Inject lateinit var navidromeDownloadRepository: NavidromeDownloadRepository
     @Inject lateinit var replayGainProcessor: ReplayGainProcessor
     @Inject lateinit var navidromePreloader: NavidromePreloader
     @Inject lateinit var eqStateHolder: EqStateHolder
+    @Inject lateinit var visualizerStateHolder: VisualizerStateHolder
 
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaLibrarySession
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var equalizer: Equalizer? = null
+    private var visualizer: Visualizer? = null
+    private var visualizerActiveRequested = false
 
     private var crossfadeJob: Job? = null
     private var crossfadeDurationMs: Int = 0
@@ -77,12 +90,22 @@ class MusicService : MediaLibraryService() {
     private var widgetProgressJob: kotlinx.coroutines.Job? = null
 
     private var savedShuffleOrder: ShuffleOrder? = null
+    private var smartShuffleEnabled: Boolean = false
+    // Tracks the actual playlist contents (by id, in window-index order) so a fresh
+    // setMediaItems() call can be told apart from a shuffle-order-only Timeline update —
+    // the latter fires the same onTimelineChanged callback but must not re-trigger itself.
+    private var lastKnownMediaItemIds: List<Long> = emptyList()
 
     override fun onCreate() {
         super.onCreate()
         buildPlayer()
         buildSession()
         setupEqualizer()
+        setupVisualizer()
+        visualizerStateHolder.onActiveRequestChanged = { active ->
+            visualizerActiveRequested = active
+            updateVisualizerEnabled()
+        }
         applyInitialPreferences()
         observePreferences()
         restoreQueue()
@@ -139,20 +162,40 @@ class MusicService : MediaLibraryService() {
                     stopWidgetProgressUpdates()
                     pushWidgetState()
                 }
+                updateVisualizerEnabled()
             }
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-                if (shuffleModeEnabled) {
-                    scope.launch {
-                        val newOrder = createShuffleOrder()
-                        savedShuffleOrder = newOrder
-                        player.setShuffleOrder(newOrder)
+                if (shuffleModeEnabled) applyShuffleOrder()
+            }
+
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                val count = player.mediaItemCount
+                val currentIds = (0 until count).map { player.getMediaItemAt(it).mediaId.toLongOrNull() ?: 0L }
+                if (currentIds != lastKnownMediaItemIds) {
+                    val previousIds = lastKnownMediaItemIds
+                    lastKnownMediaItemIds = currentIds
+                    // A pure addition (e.g. "Play Next"/Smart Queue inserting one or more songs
+                    // into an already-shuffled queue) must NOT trigger a full reshuffle — that
+                    // would scatter the just-inserted item to a random spot, defeating "play
+                    // next" entirely. Only re-randomize on a genuine wholesale replacement (a new
+                    // playlist via setMediaItems, or a removal); ExoPlayer's own default
+                    // ShuffleOrder.cloneAndInsert already places pure additions sensibly without
+                    // disturbing the rest of the order.
+                    // Known limitation: this can't distinguish "pure addition" from "addition +
+                    // manual reorder" — not reachable today since nothing calls moveMediaItem(),
+                    // but a future drag-to-reorder queue feature would need to special-case this.
+                    val currentSet = currentIds.toHashSet()
+                    val isPureAddition = currentIds.size > previousIds.size && previousIds.all { it in currentSet }
+                    if (!isPureAddition && player.shuffleModeEnabled) {
+                        applyShuffleOrder()
                     }
                 }
             }
 
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 setupEqualizer()
+                setupVisualizer()
             }
         })
     }
@@ -240,7 +283,99 @@ class MusicService : MediaLibraryService() {
                 eqStateHolder.publishEnabled(enabled)
                 scope.launch { prefs.setEqEnabled(enabled) }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w("MusicService", "Failed to set up Equalizer (session ${player.audioSessionId})", e)
+        }
+    }
+
+    // Cava-style spectrum: attaches to the same audio session as the equalizer (no extra
+    // permission needed — RECORD_AUDIO is only required to capture another app's session).
+    // Capture only runs while the UI actually requests it (Cava seekbar visible) AND audio
+    // is playing, to avoid burning battery for a bar row nobody is looking at.
+    private fun setupVisualizer(retryOnFailure: Boolean = true) {
+        try {
+            val sessionId = player.audioSessionId
+            if (sessionId == 0) return
+
+            visualizer?.release()
+
+            val captureSizeRange = Visualizer.getCaptureSizeRange()
+            val captureSize = captureSizeRange[1].coerceAtMost(1024).coerceAtLeast(captureSizeRange[0])
+
+            val viz = Visualizer(sessionId).apply {
+                enabled = false
+                scalingMode = Visualizer.SCALING_MODE_NORMALIZED
+                setCaptureSize(captureSize)
+                setDataCaptureListener(
+                    object : Visualizer.OnDataCaptureListener {
+                        override fun onWaveFormDataCapture(v: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
+                        override fun onFftDataCapture(v: Visualizer?, fft: ByteArray?, samplingRate: Int) {
+                            if (fft == null) return
+                            visualizerStateHolder.publishMagnitudes(
+                                computeSpectrumBars(fft, VisualizerStateHolder.BAR_COUNT)
+                            )
+                        }
+                    },
+                    Visualizer.getMaxCaptureRate(),
+                    /* waveform= */ false,
+                    /* fft= */ true,
+                )
+            }
+            visualizer = viz
+            updateVisualizerEnabled()
+        } catch (e: Exception) {
+            Log.w("MusicService", "Failed to set up Visualizer (session ${player.audioSessionId})", e)
+            // The underlying AudioTrack may not have fully attached yet when this races
+            // onAudioSessionIdChanged — one short retry covers that without looping forever
+            // on a device that genuinely can't support a Visualizer on this session.
+            if (retryOnFailure) {
+                scope.launch {
+                    delay(300)
+                    setupVisualizer(retryOnFailure = false)
+                }
+            }
+        }
+    }
+
+    private fun updateVisualizerEnabled() {
+        try {
+            visualizer?.enabled = visualizerActiveRequested && player.isPlaying
+        } catch (e: Exception) {
+            Log.w("MusicService", "Failed to update Visualizer enabled state", e)
+        }
+    }
+
+    // Decodes the Visualizer's packed 8-bit FFT format (fft[0]=Re(0), fft[1]=Re(N/2), then
+    // Re(i)/Im(i) pairs) into magnitudes, then groups those linear frequency bins into
+    // `barCount` log-spaced bars — bass notes span few bins so they'd otherwise be crushed
+    // into a single bar next to treble, which spans hundreds.
+    private fun computeSpectrumBars(fft: ByteArray, barCount: Int): FloatArray {
+        val numBins = fft.size / 2
+        if (numBins < 2) return FloatArray(barCount)
+
+        val magnitudes = FloatArray(numBins)
+        magnitudes[0] = kotlin.math.abs(fft[0].toInt()).toFloat()
+        for (i in 1 until numBins) {
+            val re = fft[2 * i].toInt()
+            val im = fft[2 * i + 1].toInt()
+            magnitudes[i] = kotlin.math.sqrt((re * re + im * im).toFloat())
+        }
+
+        val bars = FloatArray(barCount)
+        val logMax = kotlin.math.ln(numBins.toDouble())
+        var startBin = 1
+        for (b in 0 until barCount) {
+            val endBin = kotlin.math.exp(logMax * (b + 1) / barCount)
+                .toInt()
+                .coerceIn(startBin + 1, numBins)
+            var peak = 0f
+            for (i in startBin until endBin) peak = maxOf(peak, magnitudes[i])
+            // fft[] entries are signed 8-bit (-128..127), so a Re/Im pair's magnitude tops
+            // out around sqrt(2)*128 ≈ 181; 128 is a reasonable practical ceiling to scale by.
+            bars[b] = (peak / 128f).coerceIn(0f, 1f)
+            startBin = endBin
+        }
+        return bars
     }
 
     // ─── Preferences ───
@@ -255,6 +390,7 @@ class MusicService : MediaLibraryService() {
                 dev.yuwixx.resonance.data.model.RepeatMode.ALL -> Player.REPEAT_MODE_ALL
                 else -> Player.REPEAT_MODE_OFF
             }
+            smartShuffleEnabled       = prefs.smartShuffleEnabled.first()
             player.shuffleModeEnabled = prefs.shuffleEnabled.first()
 
             gaplessEnabled            = prefs.gaplessEnabled.first()
@@ -273,6 +409,10 @@ class MusicService : MediaLibraryService() {
 
         scope.launch {
             prefs.skipSilence.collect { player.skipSilenceEnabled = it }
+        }
+
+        scope.launch {
+            prefs.smartShuffleEnabled.collect { smartShuffleEnabled = it }
         }
 
         scope.launch {
@@ -522,9 +662,13 @@ class MusicService : MediaLibraryService() {
                     songIds.mapNotNull { id ->
                         val entity = navidromeSongDao.getSongByNumericId(id) ?: return@mapNotNull null
                         val artworkUri = entity.coverArtUrl?.let { android.net.Uri.parse(it) }
+                        // Play the downloaded local copy instead of streaming, when one exists.
+                        val localPath = navidromeDownloadRepository.localPathFor(id)
+                        val playbackUri = localPath?.let { android.net.Uri.fromFile(java.io.File(it)) }
+                            ?: android.net.Uri.parse(entity.streamUrl)
                         MediaItem.Builder()
                             .setMediaId(entity.numericId.toString())
-                            .setUri(android.net.Uri.parse(entity.streamUrl))
+                            .setUri(playbackUri)
                             .setMediaMetadata(
                                 MediaMetadata.Builder()
                                     .setTitle(entity.title)
@@ -536,7 +680,7 @@ class MusicService : MediaLibraryService() {
                             )
                             .setRequestMetadata(
                                 MediaItem.RequestMetadata.Builder()
-                                    .setMediaUri(android.net.Uri.parse(entity.streamUrl))
+                                    .setMediaUri(playbackUri)
                                     .build()
                             )
                             .build()
@@ -593,8 +737,11 @@ class MusicService : MediaLibraryService() {
                     val savedOrder = queueEntity.originalOrder
                     if (queueEntity.shuffleEnabled && savedOrder.isNotEmpty()) {
                         val shuffledIds = savedOrder.split(",").mapNotNull { it.trim().toLongOrNull() }
-                        val idToPos = songIds.mapIndexed { i, id -> id to i }.toMap()
-                        val shuffleTable = shuffledIds.mapNotNull { idToPos[it] }.toIntArray()
+                        // A list (not map) of positions per ID so a duplicate song in the queue
+                        // maps each occurrence to its own position instead of collapsing to one.
+                        val idToPositions = songIds.withIndex().groupBy({ it.value }, { it.index })
+                            .mapValues { (_, indices) -> ArrayDeque(indices) }
+                        val shuffleTable = shuffledIds.mapNotNull { idToPositions[it]?.removeFirstOrNull() }.toIntArray()
                         if (shuffleTable.size == mediaItems.size) {
                             val restoredOrder = ShuffleOrder.DefaultShuffleOrder(shuffleTable, 0L)
                             savedShuffleOrder = restoredOrder
@@ -608,42 +755,58 @@ class MusicService : MediaLibraryService() {
         }
     }
 
-    fun persistQueue() {
-        scope.launch {
-            val count = player.mediaItemCount
-            if (count == 0) return@launch
-            val ids = (0 until count).map { player.getMediaItemAt(it).mediaId.toLongOrNull() ?: 0L }
-            val index = player.currentMediaItemIndex
-            val shuffle = player.shuffleModeEnabled
-            val repeatStr = when (player.repeatMode) {
-                Player.REPEAT_MODE_ONE -> "ONE"
-                Player.REPEAT_MODE_ALL -> "ALL"
-                else -> "NONE"
-            }
-            val shuffledOrder = buildShuffledOrder(ids, shuffle)
-            withContext(Dispatchers.IO) {
-                try {
-                    queueDao.saveQueue(
-                        QueueEntity(
-                            id = 0L,
-                            songIds = ids.joinToString(","),
-                            currentIndex = index,
-                            shuffleEnabled = shuffle,
-                            repeatMode = repeatStr,
-                            originalOrder = shuffledOrder,
-                        )
-                    )
-                } catch (_: Exception) {}
-            }
+    private fun buildQueueEntity(): QueueEntity? {
+        val count = player.mediaItemCount
+        if (count == 0) return null
+        val ids = (0 until count).map { player.getMediaItemAt(it).mediaId.toLongOrNull() ?: 0L }
+        val shuffle = player.shuffleModeEnabled
+        val repeatStr = when (player.repeatMode) {
+            Player.REPEAT_MODE_ONE -> "ONE"
+            Player.REPEAT_MODE_ALL -> "ALL"
+            else -> "NONE"
+        }
+        return QueueEntity(
+            id = 0L,
+            songIds = ids.joinToString(","),
+            currentIndex = player.currentMediaItemIndex,
+            shuffleEnabled = shuffle,
+            repeatMode = repeatStr,
+            originalOrder = buildShuffledOrder(ids, shuffle),
+        )
+    }
+
+    private suspend fun saveQueueEntity(entity: QueueEntity) {
+        try {
+            queueDao.saveQueue(entity)
+        } catch (e: Exception) {
+            Log.e("MusicService", "Failed to persist queue", e)
         }
     }
 
-    private suspend fun createShuffleOrder(): ShuffleOrder {
-        val count = player.mediaItemCount
-        if (count == 0) return ShuffleOrder.DefaultShuffleOrder(0, System.currentTimeMillis())
-        if (!prefs.smartShuffleEnabled.first()) {
-            return ShuffleOrder.DefaultShuffleOrder(count, System.currentTimeMillis())
+    fun persistQueue() {
+        scope.launch {
+            val entity = buildQueueEntity() ?: return@launch
+            withContext(Dispatchers.IO) { saveQueueEntity(entity) }
         }
+    }
+
+    // Applies a plain random order synchronously — no suspension, no window where
+    // shuffleModeEnabled is true but the order ExoPlayer actually uses is still sequential.
+    // If smart shuffle is on, it's refined asynchronously right after via applySmartShuffleOrder().
+    private fun applyShuffleOrder() {
+        val count = player.mediaItemCount
+        if (count == 0) return
+        val order = ShuffleOrder.DefaultShuffleOrder(count, System.currentTimeMillis())
+        savedShuffleOrder = order
+        player.setShuffleOrder(order)
+        if (smartShuffleEnabled) {
+            scope.launch { applySmartShuffleOrder() }
+        }
+    }
+
+    private suspend fun applySmartShuffleOrder() {
+        val count = player.mediaItemCount
+        if (count == 0) return
         val songIds = (0 until count).map { player.getMediaItemAt(it).mediaId.toLongOrNull() ?: 0L }
         val listenCounts = withContext(Dispatchers.IO) {
             songDao.getListenCountsForIds(songIds).associate { it.songId to it.playCount }
@@ -656,7 +819,12 @@ class MusicService : MediaLibraryService() {
                 listens * 2 + rng.nextInt(maxListens + 1)
             }
             .toIntArray()
-        return ShuffleOrder.DefaultShuffleOrder(shuffledIndices, System.currentTimeMillis())
+        // The playlist may have changed while the DB lookup was in flight; bail rather than
+        // hand ExoPlayer a shuffled-index array whose length no longer matches mediaItemCount.
+        if (player.mediaItemCount != count) return
+        val order = ShuffleOrder.DefaultShuffleOrder(shuffledIndices, System.currentTimeMillis())
+        savedShuffleOrder = order
+        player.setShuffleOrder(order)
     }
 
     private fun buildShuffledOrder(ids: List<Long>, shuffle: Boolean): String {
@@ -674,43 +842,22 @@ class MusicService : MediaLibraryService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession = mediaSession
 
     override fun onDestroy() {
-        val count = player.mediaItemCount
-        if (count > 0) {
-            val ids = (0 until count).map { player.getMediaItemAt(it).mediaId.toLongOrNull() ?: 0L }
-            val index = player.currentMediaItemIndex
-            val shuffle = player.shuffleModeEnabled
-            val repeatStr = when (player.repeatMode) {
-                Player.REPEAT_MODE_ONE -> "ONE"
-                Player.REPEAT_MODE_ALL -> "ALL"
-                else -> "NONE"
-            }
-            val shuffledOrder = buildShuffledOrder(ids, shuffle)
-            kotlinx.coroutines.runBlocking(Dispatchers.IO) {
-                try {
-                    queueDao.saveQueue(
-                        QueueEntity(
-                            id = 0L,
-                            songIds = ids.joinToString(","),
-                            currentIndex = index,
-                            shuffleEnabled = shuffle,
-                            repeatMode = repeatStr,
-                            originalOrder = shuffledOrder,
-                        )
-                    )
-                } catch (_: Exception) {}
-            }
+        // Kept synchronous/blocking on purpose: losing the queue if the process dies right
+        // after onDestroy() returns is worse than the small ANR risk of one fast DB write.
+        buildQueueEntity()?.let { entity ->
+            kotlinx.coroutines.runBlocking(Dispatchers.IO) { saveQueueEntity(entity) }
         }
         kotlinx.coroutines.runBlocking {
             try { ResonanceWidget.updateState(this@MusicService, "", "", "", false, false, false, false) }
-            catch (_: Exception) {}
+            catch (e: Exception) { Log.e("MusicService", "Failed to clear widget state", e) }
         }
         crossfadeJob?.cancel()
         stopWidgetProgressUpdates()
         widgetActionsReceiver?.let { unregisterReceiver(it) }
         headphonesReceiver?.let { unregisterReceiver(it) }
         scope.cancel()
-        navidromePreloader.destroy()
         equalizer?.release()
+        visualizer?.release()
         mediaSession.release()
         player.release()
         super.onDestroy()
@@ -721,11 +868,13 @@ class MusicService : MediaLibraryService() {
     private fun pushWidgetState() {
         val mediaItem = player.currentMediaItem ?: run {
             scope.launch {
+                val cornerRadius = prefs.cornerRadius.first()
                 ResonanceWidget.updateState(
-                    context    = this@MusicService,
-                    title      = "", artist = "", artworkUri = "",
-                    isPlaying  = false, hasSong = false,
-                    hasPrev    = false, hasNext = false, progress = 0f,
+                    context        = this@MusicService,
+                    title          = "", artist = "", artworkUri = "",
+                    isPlaying      = false, hasSong = false,
+                    hasPrev        = false, hasNext = false, progress = 0f,
+                    isLiked        = false, cornerRadiusDp = cornerRadius,
                 )
             }
             return
@@ -736,17 +885,22 @@ class MusicService : MediaLibraryService() {
         val artworkUri = meta.artworkUri?.toString() ?: ""
         val duration   = player.duration.takeIf { it > 0 } ?: 1L
         val progress   = (player.currentPosition.toFloat() / duration).coerceIn(0f, 1f)
+        val songId     = mediaItem.mediaId.toLongOrNull()
         scope.launch {
+            val isLiked      = songId?.let { likedSongsDao.isLiked(it) > 0 } ?: false
+            val cornerRadius = prefs.cornerRadius.first()
             ResonanceWidget.updateState(
-                context    = this@MusicService,
-                title      = title,
-                artist     = artist,
-                artworkUri = artworkUri,
-                isPlaying  = player.isPlaying,
-                hasSong    = true,
-                hasPrev    = player.hasPreviousMediaItem(),
-                hasNext    = player.hasNextMediaItem(),
-                progress   = progress,
+                context        = this@MusicService,
+                title          = title,
+                artist         = artist,
+                artworkUri     = artworkUri,
+                isPlaying      = player.isPlaying,
+                hasSong        = true,
+                hasPrev        = player.hasPreviousMediaItem(),
+                hasNext        = player.hasNextMediaItem(),
+                progress       = progress,
+                isLiked        = isLiked,
+                cornerRadiusDp = cornerRadius,
             )
         }
     }
@@ -780,6 +934,26 @@ class MusicService : MediaLibraryService() {
                         if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem()
                         else player.seekTo(0)
                     }
+                    ACTION_WIDGET_SEEK -> {
+                        val pct = intent.getIntExtra(EXTRA_SEEK_FRACTION_PCT, -1)
+                        if (pct in 0..100 && player.duration > 0) {
+                            player.seekTo((player.duration * pct / 100L))
+                        }
+                    }
+                    ACTION_WIDGET_TOGGLE_LIKE -> {
+                        val songId = player.currentMediaItem?.mediaId?.toLongOrNull()
+                        if (songId != null) {
+                            scope.launch {
+                                val isLiked = likedSongsDao.isLiked(songId) > 0
+                                if (isLiked) {
+                                    likedSongsDao.unlikeSong(songId)
+                                } else {
+                                    likedSongsDao.likeSong(LikedSongEntity(songId = songId, likedAt = System.currentTimeMillis()))
+                                }
+                                pushWidgetState()
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -787,8 +961,15 @@ class MusicService : MediaLibraryService() {
             addAction(ACTION_WIDGET_PLAY_PAUSE)
             addAction(ACTION_WIDGET_SKIP_NEXT)
             addAction(ACTION_WIDGET_SKIP_PREV)
+            addAction(ACTION_WIDGET_SEEK)
+            addAction(ACTION_WIDGET_TOGGLE_LIKE)
         }
-        registerReceiver(widgetActionsReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, widgetActionsReceiver, filter,
+            dev.yuwixx.resonance.ui.glancewidget.PERMISSION_WIDGET_CONTROL,
+            /* scheduler= */ null,
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     fun applyReplayGain(
@@ -859,7 +1040,7 @@ class MusicService : MediaLibraryService() {
                     }
                     future.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
                 } catch (e: Exception) {
-                    future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+                    future.set(LibraryResult.ofError(SessionError.ERROR_UNKNOWN))
                 }
             }
             return future
@@ -875,6 +1056,33 @@ class MusicService : MediaLibraryService() {
                 item.buildUpon().setUri(uri).build()
             }
             return Futures.immediateFuture(resolvedItems.toMutableList())
+        }
+
+        // Backs the android.media.action.MEDIA_PLAY_FROM_SEARCH intent filter: Android Auto /
+        // Assistant voice search ("Play <query> on Resonance") arrives here as a single
+        // unresolved MediaItem carrying only a search string, which we resolve against the
+        // local library by title/artist/album.
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val query = mediaItems.singleOrNull()?.requestMetadata?.searchQuery
+            if (query.isNullOrBlank()) {
+                return Futures.immediateFuture(
+                    MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
+                )
+            }
+
+            val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
+            scope.launch(Dispatchers.IO) {
+                val matches = songDao.searchSongs(query).first().map { it.toAutoMediaItem() }
+                val resolved = matches.ifEmpty { mediaItems }
+                future.set(MediaSession.MediaItemsWithStartPosition(resolved, 0, 0L))
+            }
+            return future
         }
 
         private fun buildRootChildren(): List<MediaItem> = listOf(

@@ -10,8 +10,10 @@ import dev.yuwixx.resonance.data.database.dao.SongDao
 import dev.yuwixx.resonance.data.database.entity.PlaylistEntity
 import dev.yuwixx.resonance.data.database.entity.PlaylistSongCrossRef
 import dev.yuwixx.resonance.data.model.MixType
+import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.model.Playlist
 import dev.yuwixx.resonance.data.model.Song
+import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
@@ -25,6 +27,8 @@ class PlaylistRepository @Inject constructor(
     private val songDao: SongDao,
     private val navidromeSongDao: NavidromeSongDao,
     private val mixNavidromeSongDao: MixNavidromeSongDao,
+    private val prefs: ResonancePreferences,
+    private val navidromeSyncRepository: NavidromeSyncRepository,
 ) {
     val allPlaylists: Flow<List<Playlist>> = playlistDao.getAllPlaylists().flatMapLatest { entities ->
         if (entities.isEmpty()) return@flatMapLatest flowOf(emptyList())
@@ -72,15 +76,10 @@ class PlaylistRepository @Inject constructor(
     suspend fun deletePlaylist(playlistId: Long) {
         val entity = playlistDao.getPlaylistById(playlistId) ?: return
         playlistDao.deletePlaylist(entity)
+        entity.navidromePlaylistId?.let { navidromeSyncRepository.pushPlaylistDelete(it) }
     }
 
-    suspend fun addSongToPlaylist(playlistId: Long, songId: Long) {
-        val refs = playlistDao.getPlaylistSongRefs(playlistId)
-        playlistDao.addSongToPlaylist(
-            PlaylistSongCrossRef(playlistId = playlistId, songId = songId, position = refs.size)
-        )
-        updateModifiedTime(playlistId)
-    }
+    suspend fun addSongToPlaylist(playlistId: Long, songId: Long) = addSongsToPlaylist(playlistId, listOf(songId))
 
     suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>) {
         val refs = playlistDao.getPlaylistSongRefs(playlistId)
@@ -91,16 +90,38 @@ class PlaylistRepository @Inject constructor(
             )
         }
         updateModifiedTime(playlistId)
+        syncPushAddSongs(playlistId, songIds)
     }
 
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
         playlistDao.removeSongFromPlaylist(playlistId, songId)
         updateModifiedTime(playlistId)
+        val linked = playlistDao.getPlaylistById(playlistId)?.navidromePlaylistId ?: return
+        val navidromeId = navidromeSongDao.getSongByNumericId(songId)?.navidromeId ?: return
+        navidromeSyncRepository.pushPlaylistRemoveSong(linked, navidromeId)
     }
 
     suspend fun renamePlaylist(playlistId: Long, newName: String) {
         val entity = playlistDao.getPlaylistById(playlistId) ?: return
         playlistDao.updatePlaylist(entity.copy(name = newName, dateModified = System.currentTimeMillis()))
+        entity.navidromePlaylistId?.let { navidromeSyncRepository.pushPlaylistRename(it, newName) }
+    }
+
+    // Only playlists created in Resonance sync both ways: the first time songs are added while
+    // Navidrome is the active source, this establishes the remote link (with those songs
+    // already included); every mutation after that just pushes the specific diff.
+    private suspend fun syncPushAddSongs(playlistId: Long, addedSongIds: List<Long>) {
+        if (prefs.musicSource.first() != MusicSource.NAVIDROME) return
+        val entity = playlistDao.getPlaylistById(playlistId) ?: return
+
+        if (entity.navidromePlaylistId == null) {
+            val allSongIds = playlistDao.getPlaylistSongRefs(playlistId).map { it.songId }
+            val navidromeIds = allSongIds.mapNotNull { navidromeSongDao.getSongByNumericId(it)?.navidromeId }
+            navidromeSyncRepository.pushPlaylistCreate(playlistId, entity.name, navidromeIds)
+        } else {
+            val navidromeIds = addedSongIds.mapNotNull { navidromeSongDao.getSongByNumericId(it)?.navidromeId }
+            navidromeSyncRepository.pushPlaylistAddSongs(entity.navidromePlaylistId, navidromeIds)
+        }
     }
 
     fun exportPlaylistAsM3U(playlist: Playlist): String {

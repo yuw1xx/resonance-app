@@ -14,13 +14,17 @@ import dev.yuwixx.resonance.data.database.entity.*
         MixNavidromeSongCrossRef::class,
         HistoryEntity::class,
         ArtistArtworkEntity::class,
+        AlbumArtworkEntity::class,
         LyricsEntity::class,
         QueueEntity::class,
         LikedSongEntity::class,
         NavidromeSongEntity::class,
         NavidromeAlbumEntity::class,
+        PendingScrobbleEntity::class,
+        SongDownloadEntity::class,
+        PendingStarActionEntity::class,
     ],
-    version = 4,
+    version = 8,
     exportSchema = true,
 )
 abstract class ResonanceDatabase : RoomDatabase() {
@@ -34,4 +38,7 @@ abstract class ResonanceDatabase : RoomDatabase() {
     abstract fun likedSongsDao(): LikedSongsDao
     abstract fun navidromeSongDao(): NavidromeSongDao
     abstract fun navidromeAlbumDao(): NavidromeAlbumDao
+    abstract fun pendingScrobbleDao(): PendingScrobbleDao
+    abstract fun songDownloadDao(): SongDownloadDao
+    abstract fun pendingStarActionDao(): PendingStarActionDao
 }
