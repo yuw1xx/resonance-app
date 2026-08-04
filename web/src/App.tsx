@@ -7,6 +7,7 @@ import { SetupPage } from '@/pages/SetupPage'
 import { LastFmCallbackPage } from '@/pages/LastFmCallbackPage'
 import { RelayReceivePage } from '@/pages/RelayReceivePage'
 import { HomePage } from '@/pages/HomePage'
+import { SongsPage } from '@/pages/SongsPage'
 import { AlbumsPage } from '@/pages/AlbumsPage'
 import { AlbumDetailPage } from '@/pages/AlbumDetailPage'
 import { ArtistsPage } from '@/pages/ArtistsPage'
@@ -56,6 +57,7 @@ export function App() {
             }
           >
             <Route path="/" element={<HomePage />} />
+            <Route path="/songs" element={<SongsPage />} />
             <Route path="/albums" element={<AlbumsPage />} />
             <Route path="/albums/:id" element={<AlbumDetailPage />} />
             <Route path="/artists" element={<ArtistsPage />} />

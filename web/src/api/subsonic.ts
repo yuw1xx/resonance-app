@@ -235,6 +235,15 @@ export const subsonic = {
       r => r.searchResult3 ?? {},
     ),
 
+  // Subsonic has no dedicated "list every song" endpoint — an empty search3 query matching
+  // everything is the conventional workaround other Subsonic clients use, and Navidrome
+  // supports it. Bounded like the Albums page's own bulk fetch (500) rather than paginated,
+  // for the same "simple, known ceiling" tradeoff.
+  getAllSongs: (size = 2000) =>
+    call('search3', { query: '', songCount: String(size), albumCount: '0', artistCount: '0' }).then(
+      r => r.searchResult3?.song ?? [],
+    ),
+
   scrobble: (id: string, submission = true, timeMs?: number) =>
     call('scrobble', {
       id,

@@ -5,6 +5,7 @@ import { useRipple } from './Ripple'
 
 const NAV = [
   { to: '/',           label: 'Home',       icon: 'home' },
+  { to: '/songs',      label: 'Songs',      icon: 'music_note' },
   { to: '/albums',     label: 'Albums',     icon: 'album' },
   { to: '/artists',    label: 'Artists',    icon: 'people' },
   { to: '/playlists',  label: 'Playlists',  icon: 'queue_music' },

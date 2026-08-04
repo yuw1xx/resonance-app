@@ -5,6 +5,7 @@ import { CoverArt } from '@/components/CoverArt'
 import { Icon } from '@/components/Icon'
 import { useRipple } from '@/components/Ripple'
 import { useCastAvailable } from '@/hooks/useCast'
+import { usePlaybackPosition } from '@/hooks/usePlaybackPosition'
 import { requestCastSession, endCastSession, castSong, isCasting as checkIsCasting } from '@/lib/cast'
 
 function fmt(s: number) {
@@ -37,11 +38,12 @@ function MiniBtn({
 
 export function PlayerBar() {
   const {
-    queue, currentIndex, isPlaying, position, duration,
+    queue, currentIndex, isPlaying, duration,
     volume, shuffle, repeat, showQueue,
     togglePlay, next, prev, seekTo, setVolume,
     toggleShuffle, cycleRepeat, toggleQueue, toggleFullscreen,
   } = usePlayerStore()
+  const position = usePlaybackPosition()
 
   const infoRipple = useRipple()
   const castAvailable = useCastAvailable()

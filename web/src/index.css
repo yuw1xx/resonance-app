@@ -171,25 +171,26 @@ body {
   height: 4px; border-radius: 2px;
   background: linear-gradient(
     to right,
-    var(--md-primary) var(--pct, 0%),
+    var(--progress-accent, var(--md-primary)) var(--pct, 0%),
     var(--md-outline-var) var(--pct, 0%)
   );
+  transition: background 600ms ease;
 }
 .progress-slider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 0; height: 0;
-  border-radius: 50%; background: var(--md-primary);
+  border-radius: 50%; background: var(--progress-accent, var(--md-primary));
   margin-top: -2px;
-  transition: width 120ms, height 120ms, margin-top 120ms, box-shadow 150ms;
+  transition: width 120ms, height 120ms, margin-top 120ms, box-shadow 150ms, background 600ms ease;
 }
 .progress-slider:hover::-webkit-slider-thumb,
 .progress-slider:active::-webkit-slider-thumb {
   width: 16px; height: 16px; margin-top: -6px;
-  box-shadow: 0 0 0 10px color-mix(in srgb, var(--md-primary) 12%, transparent);
+  box-shadow: 0 0 0 10px color-mix(in srgb, var(--progress-accent, var(--md-primary)) 12%, transparent);
 }
 .progress-slider::-moz-range-track { height: 4px; background: var(--md-outline-var); border-radius: 2px; }
-.progress-slider::-moz-range-progress { height: 4px; background: var(--md-primary); }
-.progress-slider::-moz-range-thumb { width: 16px; height: 16px; background: var(--md-primary); border: none; border-radius: 50%; }
+.progress-slider::-moz-range-progress { height: 4px; background: var(--progress-accent, var(--md-primary)); }
+.progress-slider::-moz-range-thumb { width: 16px; height: 16px; background: var(--progress-accent, var(--md-primary)); border: none; border-radius: 50%; }
 
 /* Volume slider */
 .volume-slider {
@@ -321,6 +322,22 @@ input[type='search'] {
 }
 .animate-fade-in {
   animation: fade-in 250ms cubic-bezier(0.05, 0.7, 0.1, 1.0) forwards;
+}
+
+/* ─── Ambient breathing glow (FullscreenPlayer) ──────────── */
+@keyframes breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.06); }
+}
+.animate-breathe {
+  animation: breathe 6s ease-in-out infinite;
+}
+@keyframes bg-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-bg-fade-in {
+  animation: bg-fade-in 900ms ease-out forwards;
 }
 
 /* ─── Animation speed ───────────────────────────────────── */

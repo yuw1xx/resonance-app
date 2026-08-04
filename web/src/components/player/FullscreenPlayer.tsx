@@ -9,6 +9,8 @@ import { useRipple } from '@/components/Ripple'
 import { RotatingArt } from '@/components/RotatingArt'
 import { AudioVisualizer } from '@/components/AudioVisualizer'
 import { useStarredIds, useToggleStar } from '@/hooks/useStarred'
+import { usePlaybackPosition } from '@/hooks/usePlaybackPosition'
+import { useDominantColor } from '@/hooks/useDominantColor'
 import { Modal, ModalButton } from '@/components/Modal'
 import { Lyrics } from './Lyrics'
 
@@ -50,12 +52,13 @@ function CtrlBtn({
 
 export function FullscreenPlayer() {
   const {
-    queue, currentIndex, isPlaying, position, duration,
+    queue, currentIndex, isPlaying, duration,
     volume, shuffle, repeat, showQueue, sleepTimerDeadline,
     togglePlay, next, prev, seekTo, setVolume,
     toggleShuffle, cycleRepeat, toggleFullscreen, toggleQueue,
     startSleepTimer, cancelSleepTimer,
   } = usePlayerStore()
+  const position = usePlaybackPosition()
 
   const { artRotation, showVisualizer, sleepTimerMinutes, playerArtworkShape } = useSettingsStore()
   const navigate = useNavigate()
@@ -75,12 +78,14 @@ export function FullscreenPlayer() {
 
   const pct = duration > 0 ? (position / duration) * 100 : 0
   const bgUrl = song.coverArt ? getCoverArtUrl(song.coverArt, 800) : null
+  const accent = useDominantColor(bgUrl)
+  const sliderVars = { '--pct': `${pct}%`, ...(accent ? { '--progress-accent': accent } : {}) } as React.CSSProperties
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-md-bg animate-slide-up">
 
       {/* ── Atmospheric background ────────────────────────── */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div key={song.id} className="absolute inset-0 overflow-hidden pointer-events-none animate-bg-fade-in">
         {bgUrl ? (
           <img
             src={bgUrl} alt="" aria-hidden
@@ -88,6 +93,16 @@ export function FullscreenPlayer() {
             style={{ transform: 'scale(1.3)', filter: 'blur(80px) brightness(0.1) saturate(2.5)' }}
           />
         ) : null}
+        {/* Color wash from the art's extracted accent — pure atmosphere, no fixed hue */}
+        {accent && (
+          <div
+            className="absolute inset-0 animate-breathe"
+            style={{
+              background: `radial-gradient(ellipse 80% 60% at 50% 15%, color-mix(in srgb, ${accent} 35%, transparent), transparent 70%)`,
+            }}
+            aria-hidden
+          />
+        )}
         {/* Gradient: lighter at top (art breathes), heavier at bottom (text readable) */}
         <div className="absolute inset-0 bg-gradient-to-b from-md-bg/40 via-md-bg/70 to-md-bg/95" />
       </div>
@@ -154,6 +169,17 @@ export function FullscreenPlayer() {
                 aria-hidden
               />
             )}
+            {accent && (
+              <div
+                key={song.id}
+                className="absolute pointer-events-none -z-10 blur-3xl rounded-full animate-breathe animate-bg-fade-in"
+                style={{
+                  inset: '-14%',
+                  background: `radial-gradient(circle, color-mix(in srgb, ${accent} 55%, transparent), transparent 72%)`,
+                }}
+                aria-hidden
+              />
+            )}
 
             {artRotation ? (
               <RotatingArt
@@ -170,9 +196,11 @@ export function FullscreenPlayer() {
                       : 'rounded-[28px]'
                 }`}
                 style={{
-                  boxShadow: '0 36px 90px rgba(0,0,0,0.7), 0 12px 36px rgba(0,0,0,0.45)',
+                  boxShadow: accent
+                    ? `0 36px 90px rgba(0,0,0,0.6), 0 12px 36px color-mix(in srgb, ${accent} 30%, rgba(0,0,0,0.45))`
+                    : '0 36px 90px rgba(0,0,0,0.7), 0 12px 36px rgba(0,0,0,0.45)',
                   transform: isPlaying ? 'scale(1.02)' : 'scale(1)',
-                  transition: 'transform 1.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  transition: 'transform 1.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 600ms ease',
                 }}
               >
                 <CoverArt
@@ -239,7 +267,7 @@ export function FullscreenPlayer() {
                 value={position}
                 onChange={e => seekTo(Number(e.target.value))}
                 className="progress-slider w-full"
-                style={{ '--pct': `${pct}%` } as React.CSSProperties}
+                style={sliderVars}
               />
               <div className="flex justify-between -mt-1 px-0.5">
                 <span className="text-[11px] text-outline/75 tabular-nums">{fmt(position)}</span>
@@ -261,6 +289,9 @@ export function FullscreenPlayer() {
                   shadow-elevation-3 hover:shadow-elevation-4
                   hover:scale-[1.07] active:scale-[0.95]
                   transition-all duration-200 ease-md-emphasized"
+                style={accent ? {
+                  boxShadow: `0 8px 32px color-mix(in srgb, ${accent} 45%, transparent)`,
+                } : undefined}
                 aria-label={isPlaying ? 'Pause' : 'Play'}
               >
                 <Icon name={isPlaying ? 'pause' : 'play_arrow'} size={36} filled />
