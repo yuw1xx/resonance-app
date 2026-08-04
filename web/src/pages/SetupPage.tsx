@@ -7,7 +7,7 @@ export function SetupPage() {
   const login = useAuthStore(s => s.login)
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const navigate = useNavigate()
-  const [serverUrl, setServerUrl] = useState('http://localhost:4533')
+  const [serverUrl, setServerUrl] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
