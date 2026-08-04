@@ -1,0 +1,348 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── M3 Design Tokens ─────────────────────────────────── */
+:root {
+  /* Channel vars: consumed by Tailwind as rgb(var(--c-xxx) / alpha)   */
+  /* so that opacity modifiers (bg-primary/10) and applyTheme() work.  */
+  --c-primary:              208 188 255;
+  --c-on-primary:           56 30 114;
+  --c-primary-container:    79 55 139;
+  --c-on-primary-container: 234 221 255;
+  --c-secondary-container:  74 68 88;
+  --c-on-secondary-container: 232 222 248;
+  --c-bg:                   15 13 19;
+  --c-surface:              20 18 24;
+  --c-surface-low:          29 27 32;
+  --c-surface-c:            33 31 38;
+  --c-surface-high:         43 41 48;
+  --c-surface-highest:      54 52 59;
+
+  /* Hex vars: used in CSS directly (slider tracks, SVG strokes, canvas colors, filters) */
+  --md-primary:             #D0BCFF;
+  --md-primary-container:   #4F378B;
+  --md-background:          #0F0D13;
+  --md-outline:             #938F99;
+  --md-outline-var:         #49454F;
+  /* Non-themed constants (same across all color themes) */
+  --md-on-surface:          #E6E1E5;
+  --md-on-surface-var:      #CAC4D0;
+  --md-surface-high:        #2B2930;
+  --md-surface-highest:     #36343B;
+
+  --md-motion-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --md-motion-decel:      cubic-bezier(0.05, 0.7, 0.1, 1.0);
+  --md-motion-accel:      cubic-bezier(0.3, 0.0, 0.8, 0.15);
+}
+
+/* ─── Base ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { height: 100%; }
+
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--md-background);
+  color: var(--md-on-surface);
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--md-outline-var);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--md-outline); }
+
+/* ─── Material Symbols ──────────────────────────────────── */
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+  user-select: none;
+}
+
+/* ─── State Layer ───────────────────────────────────────── */
+.state-layer {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.state-layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1);
+  pointer-events: none;
+  border-radius: inherit;
+}
+.state-layer:hover::after { opacity: 0.08; }
+.state-layer:active::after { opacity: 0.12; }
+
+/* ─── Ripple ────────────────────────────────────────────── */
+.ripple-root {
+  position: relative;
+  overflow: hidden;
+}
+.ripple-wave {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  animation: ripple-anim 550ms cubic-bezier(0, 0, 0.2, 1) forwards;
+}
+@keyframes ripple-anim {
+  0%   { transform: scale(0); opacity: 0.18; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* ─── Sliders ────────────────────────────────────────────── */
+/*
+ * All sliders use a single <input type="range"> with a CSS gradient
+ * track that fills to --pct. No invisible overlay divs needed.
+ */
+
+/* Flush seek bar at top of player bar */
+.seek-bar {
+  -webkit-appearance: none; appearance: none;
+  display: block; width: 100%;
+  height: 20px;         /* large hit area */
+  margin: 0; padding: 0;
+  background: transparent; cursor: pointer;
+}
+.seek-bar::-webkit-slider-runnable-track {
+  height: 3px; border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--md-primary) var(--pct, 0%),
+    var(--md-outline-var) var(--pct, 0%)
+  );
+}
+.seek-bar::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 0; height: 0;
+  border-radius: 50%; background: var(--md-primary);
+  margin-top: -1.5px;  /* (3px - 0) / 2 = centred on track */
+  transition: width 120ms, height 120ms, margin-top 120ms;
+}
+.seek-bar:hover::-webkit-slider-thumb,
+.seek-bar:active::-webkit-slider-thumb {
+  width: 12px; height: 12px; margin-top: -4.5px;
+}
+.seek-bar::-moz-range-track { height: 3px; background: var(--md-outline-var); border-radius: 2px; }
+.seek-bar::-moz-range-progress { height: 3px; background: var(--md-primary); }
+.seek-bar::-moz-range-thumb { width: 12px; height: 12px; background: var(--md-primary); border: none; border-radius: 50%; opacity: 0; transition: opacity 150ms; }
+.seek-bar:hover::-moz-range-thumb { opacity: 1; }
+
+/* Fullscreen player seek bar */
+.progress-slider {
+  -webkit-appearance: none; appearance: none;
+  display: block; width: 100%;
+  height: 24px;         /* generous hit area */
+  margin: 0; padding: 0;
+  background: transparent; cursor: pointer;
+}
+.progress-slider::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--md-primary) var(--pct, 0%),
+    var(--md-outline-var) var(--pct, 0%)
+  );
+}
+.progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 0; height: 0;
+  border-radius: 50%; background: var(--md-primary);
+  margin-top: -2px;
+  transition: width 120ms, height 120ms, margin-top 120ms, box-shadow 150ms;
+}
+.progress-slider:hover::-webkit-slider-thumb,
+.progress-slider:active::-webkit-slider-thumb {
+  width: 16px; height: 16px; margin-top: -6px;
+  box-shadow: 0 0 0 10px color-mix(in srgb, var(--md-primary) 12%, transparent);
+}
+.progress-slider::-moz-range-track { height: 4px; background: var(--md-outline-var); border-radius: 2px; }
+.progress-slider::-moz-range-progress { height: 4px; background: var(--md-primary); }
+.progress-slider::-moz-range-thumb { width: 16px; height: 16px; background: var(--md-primary); border: none; border-radius: 50%; }
+
+/* Volume slider */
+.volume-slider {
+  -webkit-appearance: none; appearance: none;
+  display: block; width: 100%;
+  height: 20px;
+  margin: 0; padding: 0;
+  background: transparent; cursor: pointer;
+}
+.volume-slider::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--md-on-surface-var) var(--pct, 0%),
+    var(--md-outline-var) var(--pct, 0%)
+  );
+}
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 12px; height: 12px;
+  border-radius: 50%; background: var(--md-on-surface-var);
+  margin-top: -4px;
+  opacity: 0; transition: opacity 150ms;
+}
+.volume-slider:hover::-webkit-slider-thumb { opacity: 1; }
+.volume-slider::-moz-range-track { height: 4px; background: var(--md-outline-var); border-radius: 2px; }
+.volume-slider::-moz-range-progress { height: 4px; background: var(--md-on-surface-var); }
+.volume-slider::-moz-range-thumb { width: 12px; height: 12px; background: var(--md-on-surface-var); border: none; border-radius: 50%; }
+
+/* Settings slider (used in SettingsPage) */
+.settings-slider {
+  -webkit-appearance: none; appearance: none;
+  display: block; width: 100%;
+  height: 24px;
+  margin: 0; padding: 0;
+  background: transparent; cursor: pointer;
+}
+.settings-slider::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--md-primary) var(--pct, 0%),
+    var(--md-outline-var) var(--pct, 0%)
+  );
+}
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 20px; height: 20px;
+  border-radius: 50%; background: var(--md-primary);
+  margin-top: -8px;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--md-primary) 0%, transparent);
+  transition: box-shadow 200ms;
+}
+.settings-slider:hover::-webkit-slider-thumb {
+  box-shadow: 0 0 0 10px color-mix(in srgb, var(--md-primary) 12%, transparent);
+}
+.settings-slider:active::-webkit-slider-thumb {
+  box-shadow: 0 0 0 14px color-mix(in srgb, var(--md-primary) 12%, transparent);
+}
+.settings-slider::-moz-range-track { height: 4px; background: var(--md-outline-var); border-radius: 2px; }
+.settings-slider::-moz-range-progress { height: 4px; background: var(--md-primary); }
+.settings-slider::-moz-range-thumb { width: 20px; height: 20px; background: var(--md-primary); border: none; border-radius: 50%; }
+
+/* ─── Skeleton Shimmer ──────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--c-surface-high)) 25%,
+    rgb(var(--c-surface-highest)) 50%,
+    rgb(var(--c-surface-high)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ─── Page entrance ─────────────────────────────────────── */
+.page-enter {
+  animation: fade-up 350ms cubic-bezier(0.05, 0.7, 0.1, 1.0) both;
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Stagger children ──────────────────────────────────── */
+.stagger-children > * {
+  animation: fade-up 350ms cubic-bezier(0.05, 0.7, 0.1, 1.0) both;
+}
+.stagger-children > *:nth-child(1)  { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2)  { animation-delay: 40ms; }
+.stagger-children > *:nth-child(3)  { animation-delay: 80ms; }
+.stagger-children > *:nth-child(4)  { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5)  { animation-delay: 160ms; }
+.stagger-children > *:nth-child(6)  { animation-delay: 200ms; }
+.stagger-children > *:nth-child(7)  { animation-delay: 240ms; }
+.stagger-children > *:nth-child(8)  { animation-delay: 280ms; }
+
+/* ─── Input reset ───────────────────────────────────────── */
+input[type='text'],
+input[type='password'],
+input[type='url'],
+input[type='search'] {
+  outline: none;
+}
+
+/* ─── Vinyl spin ────────────────────────────────────────── */
+@keyframes spin-vinyl {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ─── Fullscreen slide-up ───────────────────────────────── */
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.animate-slide-up {
+  animation: slide-up 450ms cubic-bezier(0.05, 0.7, 0.1, 1.0) forwards;
+}
+
+/* ─── Fade-in ───────────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 250ms cubic-bezier(0.05, 0.7, 0.1, 1.0) forwards;
+}
+
+/* ─── Animation speed ───────────────────────────────────── */
+body[data-speed="slow"] *,
+body[data-speed="slow"] *::before,
+body[data-speed="slow"] *::after {
+  transition-duration: 600ms !important;
+}
+body[data-speed="fast"] *,
+body[data-speed="fast"] *::before,
+body[data-speed="fast"] *::after {
+  transition-duration: 60ms !important;
+}
+body[data-speed="off"] *,
+body[data-speed="off"] *::before,
+body[data-speed="off"] *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* ─── Animated EQ bars (SongRow active indicator) ──────── */
+@keyframes eq-bar {
+  0%   { height: 20%; }
+  100% { height: 90%; }
+}
