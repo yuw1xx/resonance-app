@@ -12,8 +12,8 @@ interface Props {
   songIds: string[]
 }
 
-function PlaylistRow({ id, name, songCount, onAdd }: {
-  id: string; name: string; songCount?: number; onAdd: () => void
+function PlaylistRow({ name, songCount, onAdd }: {
+  name: string; songCount?: number; onAdd: () => void
 }) {
   const ripple = useRipple()
   return (
@@ -104,7 +104,6 @@ export function AddToPlaylistModal({ open, onClose, songIds }: Props) {
           {playlists.map(pl => (
             <PlaylistRow
               key={pl.id}
-              id={pl.id}
               name={pl.name}
               songCount={pl.songCount}
               onAdd={() => addMutation.mutate(pl.id)}

@@ -314,7 +314,7 @@ export function PlaylistDetailPage() {
           songs={songs}
           onClear={() => { selection.clear(); setSelectMode(false) }}
           onRemove={ids => {
-            const indices = songs.map((s, i) => i).filter(i => ids.has(songs[i].id))
+            const indices = songs.map((_, i) => i).filter(i => ids.has(songs[i].id))
             batchRemoveMutation.mutate(indices)
           }}
         />
