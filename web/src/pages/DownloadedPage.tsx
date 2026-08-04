@@ -111,7 +111,9 @@ export function DownloadedPage() {
       </div>
       {storage && storage.quotaBytes > 0 && (
         <p className="text-[12px] text-outline mb-6">
-          {fmtBytes(storage.usageBytes)} used of {fmtBytes(storage.quotaBytes)} available to this site
+          {storage.usageBytes <= storage.quotaBytes
+            ? `${fmtBytes(storage.usageBytes)} used of ${fmtBytes(storage.quotaBytes)} available to this site`
+            : `~${fmtBytes(storage.usageBytes)} used`}
         </p>
       )}
       {!storage && <div className="mb-6" />}
