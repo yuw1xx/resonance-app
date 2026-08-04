@@ -83,9 +83,7 @@ export function Sidebar() {
       <aside className="hidden md:flex w-[240px] flex-shrink-0 bg-md-surface flex-col py-3 overflow-hidden">
         {/* Logo */}
         <div className="flex items-center gap-3 px-5 py-4 mb-1">
-          <div className="w-9 h-9 rounded-xl bg-primary-container flex items-center justify-center">
-            <Icon name="music_note" size={20} className="text-on-primary-container" />
-          </div>
+          <img src="/icon.svg" alt="" className="w-9 h-9 rounded-xl" />
           <span className="text-[18px] font-[700] text-on-surface tracking-[-0.3px]">Resonance</span>
         </div>
 
@@ -114,9 +112,7 @@ export function Sidebar() {
       <aside className="md:hidden flex flex-col w-[72px] flex-shrink-0 bg-md-surface py-3 overflow-hidden">
         {/* Logo mark */}
         <div className="flex justify-center mb-4 mt-2">
-          <div className="w-9 h-9 rounded-xl bg-primary-container flex items-center justify-center">
-            <Icon name="music_note" size={20} className="text-on-primary-container" />
-          </div>
+          <img src="/icon.svg" alt="" className="w-9 h-9 rounded-xl" />
         </div>
 
         {/* Nav */}

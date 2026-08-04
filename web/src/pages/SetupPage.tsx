@@ -59,9 +59,7 @@ export function SetupPage() {
       <div className="relative w-full max-w-[400px] animate-scale-in">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center mx-auto mb-4 shadow-elevation-2">
-            <Icon name="music_note" size={32} className="text-on-primary-container" />
-          </div>
+          <img src="/icon.svg" alt="" className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-elevation-2" />
           <h1 className="text-[28px] font-[700] text-on-surface tracking-[-0.5px]">Resonance</h1>
           <p className="text-[14px] text-on-surface-var mt-1.5">Connect to your Navidrome server</p>
         </div>

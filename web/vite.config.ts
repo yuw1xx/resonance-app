@@ -25,7 +25,7 @@ export default defineConfig({
         name: 'Resonance',
         short_name: 'Resonance',
         description: 'A Material You music player for Navidrome',
-        theme_color: '#4F378B',
+        theme_color: '#6D28D9',
         background_color: '#0F0D13',
         display: 'standalone',
         start_url: BASE,

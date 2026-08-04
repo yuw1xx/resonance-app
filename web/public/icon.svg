@@ -1,10 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#4F378B"/>
-  <g fill="#EADDFF">
-    <circle cx="200" cy="340" r="52"/>
-    <circle cx="360" cy="300" r="52"/>
-    <rect x="252" y="140" width="20" height="200"/>
-    <rect x="412" y="100" width="20" height="200"/>
-    <path d="M252 140 L432 100 L432 160 L252 200 Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="0.5" stop-color="#6D28D9"/>
+      <stop offset="1" stop-color="#3730A3"/>
+    </linearGradient>
+    <radialGradient id="highlight" cx="20" cy="20" r="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.19"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="108" height="108" fill="url(#bg)"/>
+  <rect width="108" height="108" fill="url(#highlight)"/>
+
+  <path d="M 21,54 a 33,33 0 1 0 66,0 a 33,33 0 1 0 -66,0"
+    fill="none" stroke="#FFFFFF" stroke-opacity="0.2" stroke-width="1.5"/>
+
+  <g fill="#FFFFFF">
+    <path d="M24.5,47 a2.5,2.5 0 0 1 5,0 L29.5,61 a2.5,2.5 0 0 1 -5,0 Z"/>
+    <path d="M33.5,41 a2.5,2.5 0 0 1 5,0 L38.5,67 a2.5,2.5 0 0 1 -5,0 Z"/>
+    <path d="M42.5,35 a2.5,2.5 0 0 1 5,0 L47.5,73 a2.5,2.5 0 0 1 -5,0 Z"/>
+    <path d="M51.5,31 a2.5,2.5 0 0 1 5,0 L56.5,77 a2.5,2.5 0 0 1 -5,0 Z"/>
+    <path d="M60.5,35 a2.5,2.5 0 0 1 5,0 L65.5,73 a2.5,2.5 0 0 1 -5,0 Z"/>
+    <path d="M69.5,41 a2.5,2.5 0 0 1 5,0 L74.5,67 a2.5,2.5 0 0 1 -5,0 Z"/>
+    <path d="M78.5,47 a2.5,2.5 0 0 1 5,0 L83.5,61 a2.5,2.5 0 0 1 -5,0 Z"/>
   </g>
 </svg>
