@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { SongRow } from '@/components/SongRow'
 import { Icon } from '@/components/Icon'
 import { useRipple } from '@/components/Ripple'
@@ -79,22 +80,31 @@ export function LikedSongsPage() {
       <div className="mx-6 h-px bg-outline-var/30" />
 
       {songs.length > 0 && (
-        selectMode ? (
+        <AnimatePresence mode="wait" initial={false}>
+        {selectMode ? (
           <SelectionToolbar
+            key="toolbar"
             selectedIds={selection.selected}
             songs={songs}
             onClear={() => { selection.clear(); setSelectMode(false) }}
           />
         ) : (
-          <div className="flex justify-end px-6 pt-3">
+          <motion.div
+            key="select-btn"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            className="flex justify-end px-6 pt-3"
+          >
             <button
               onClick={() => setSelectMode(true)}
               className="text-[12px] font-[500] text-on-surface-var hover:text-on-surface transition-colors duration-150"
             >
               Select
             </button>
-          </div>
-        )
+          </motion.div>
+        )}
+        </AnimatePresence>
       )}
 
       <div className="px-3 pb-8 pt-2">
@@ -108,20 +118,31 @@ export function LikedSongsPage() {
             <p className="text-[13px]">Songs you like will show up here</p>
           </div>
         ) : (
-          songs.map((song, i) => (
-            <SongRow
+          <AnimatePresence initial={false}>
+          {songs.map((song, i) => (
+            <motion.div
               key={song.id}
-              song={song}
-              index={i}
-              queue={songs}
-              showAlbumArt
-              showAlbum
-              active={false}
-              selectable={selectMode}
-              selected={selection.selected.has(song.id)}
-              onToggleSelect={() => selection.toggle(song.id)}
-            />
-          ))
+              layout="position"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}
+              transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+              className="overflow-hidden"
+            >
+              <SongRow
+                song={song}
+                index={i}
+                queue={songs}
+                showAlbumArt
+                showAlbum
+                active={false}
+                selectable={selectMode}
+                selected={selection.selected.has(song.id)}
+                onToggleSelect={() => selection.toggle(song.id)}
+              />
+            </motion.div>
+          ))}
+          </AnimatePresence>
         )}
       </div>
     </div>

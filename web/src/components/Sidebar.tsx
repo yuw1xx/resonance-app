@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { useAuthStore } from '@/stores/auth'
 import { Icon } from './Icon'
 import { useRipple } from './Ripple'
@@ -26,18 +27,25 @@ function DrawerItem({ to, label, icon }: { to: string; label: string; icon: stri
       ref={ripple.ref as React.Ref<HTMLAnchorElement>}
       onPointerDown={ripple.onPointerDown}
       className={({ isActive }) =>
-        `ripple-root flex items-center gap-3 px-4 h-[56px] rounded-full text-[14px]
-        transition-all duration-200 ease-md-standard
+        `ripple-root relative flex items-center gap-3 px-4 h-[56px] rounded-full text-[14px]
+        transition-colors duration-200 ease-md-standard
         ${isActive
-          ? 'bg-secondary-container text-on-secondary-container font-[600]'
+          ? 'text-on-secondary-container font-[600]'
           : 'text-on-surface-var hover:text-on-surface hover:bg-on-surface/8 font-[500]'
         }`
       }
     >
       {({ isActive }) => (
         <>
-          <Icon name={icon} size={22} filled={isActive} className="flex-shrink-0" />
-          <span className="tracking-[0.1px]">{label}</span>
+          {isActive && (
+            <motion.div
+              layoutId="drawer-nav-pill"
+              className="absolute inset-0 rounded-full bg-secondary-container"
+              transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+            />
+          )}
+          <Icon name={icon} size={22} filled={isActive} className="relative flex-shrink-0" />
+          <span className="relative tracking-[0.1px]">{label}</span>
         </>
       )}
     </NavLink>
@@ -60,11 +68,18 @@ function RailItem({ to, label, icon }: { to: string; label: string; icon: string
         transition-colors duration-200 ease-md-standard"
     >
       <div
-        className={`w-14 h-8 rounded-full flex items-center justify-center transition-all duration-200
-          ${isActive ? 'bg-secondary-container' : 'hover:bg-on-surface/8'}`}
+        className={`relative w-14 h-8 rounded-full flex items-center justify-center transition-colors duration-200
+          ${isActive ? '' : 'hover:bg-on-surface/8'}`}
       >
+        {isActive && (
+          <motion.div
+            layoutId="rail-nav-pill"
+            className="absolute inset-0 rounded-full bg-secondary-container"
+            transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+          />
+        )}
         <Icon name={icon} size={20} filled={isActive}
-          className={isActive ? 'text-on-secondary-container' : 'text-on-surface-var'} />
+          className={`relative ${isActive ? 'text-on-secondary-container' : 'text-on-surface-var'}`} />
       </div>
       <span className={`text-[10px] font-[500] tracking-[0.3px]
         ${isActive ? 'text-on-secondary-container' : 'text-on-surface-var'}`}>

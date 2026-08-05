@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { AnimatePresence, motion } from 'framer-motion'
 import { subsonic } from '@/api/subsonic'
 import { CoverArt } from '@/components/CoverArt'
 import { SongRow } from '@/components/SongRow'
@@ -158,17 +159,25 @@ export function SearchPage() {
               </div>
             )
           }>
-            {selectMode && (
-              <SelectionToolbar
-                selectedIds={selection.selected}
-                songs={songs}
-                onClear={() => { selection.clear(); setSelectMode(false) }}
-              />
-            )}
+            <AnimatePresence>
+              {selectMode && (
+                <SelectionToolbar
+                  key="selection-toolbar"
+                  selectedIds={selection.selected}
+                  songs={songs}
+                  onClear={() => { selection.clear(); setSelectMode(false) }}
+                />
+              )}
+            </AnimatePresence>
             <div className="bg-surface-c rounded-2xl overflow-hidden">
               {songs.map((song, i) => (
-                <SongRow
+                <motion.div
                   key={song.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25, delay: Math.min(i * 0.02, 0.3) }}
+                >
+                <SongRow
                   song={song}
                   index={i}
                   queue={songs}
@@ -179,6 +188,7 @@ export function SearchPage() {
                   selected={selection.selected.has(song.id)}
                   onToggleSelect={() => selection.toggle(song.id)}
                 />
+                </motion.div>
               ))}
             </div>
           </Section>

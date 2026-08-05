@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { getCoverArtUrl } from '@/api/subsonic'
@@ -231,31 +232,50 @@ export function FullscreenPlayer() {
 
             {/* Song title + artist + heart */}
             <div className="flex items-start gap-3">
-              <div className="flex-1 min-w-0">
-                <h2
-                  onClick={() => { toggleFullscreen(); navigate(`/songs/${song.id}`) }}
-                  className="font-[800] text-on-surface leading-[1.1] tracking-[-0.5px] line-clamp-2
-                    cursor-pointer hover:opacity-80 transition-opacity duration-150"
-                  style={{ fontSize: 'clamp(22px, 5vw, 32px)' }}
-                >
-                  {song.title}
-                </h2>
-                <p className="text-[15px] text-on-surface-var font-[500] mt-2 truncate">
-                  {song.artist ?? 'Unknown Artist'}
-                </p>
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={song.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10, transition: { duration: 0.15 } }}
+                    transition={{ duration: 0.25, ease: [0.05, 0.7, 0.1, 1] }}
+                  >
+                    <h2
+                      onClick={() => { toggleFullscreen(); navigate(`/songs/${song.id}`) }}
+                      className="font-[800] text-on-surface leading-[1.1] tracking-[-0.5px] line-clamp-2
+                        cursor-pointer hover:opacity-80 transition-opacity duration-150"
+                      style={{ fontSize: 'clamp(22px, 5vw, 32px)' }}
+                    >
+                      {song.title}
+                    </h2>
+                    <p className="text-[15px] text-on-surface-var font-[500] mt-2 truncate">
+                      {song.artist ?? 'Unknown Artist'}
+                    </p>
+                  </motion.div>
+                </AnimatePresence>
               </div>
-              <button
+              <motion.button
                 onClick={() => toggleStar.mutate({ id: song.id, starred: isStarred })}
+                whileTap={{ scale: 0.8 }}
                 className={`flex-shrink-0 mt-1 w-11 h-11 flex items-center justify-center rounded-full
-                  transition-all duration-200
+                  transition-colors duration-200
                   ${isStarred
                     ? 'text-primary hover:bg-primary/10'
                     : 'text-on-surface-var/40 hover:text-primary hover:bg-primary/8'
                   }`}
                 aria-label={isStarred ? 'Unlike' : 'Like'}
               >
-                <Icon name={isStarred ? 'favorite' : 'favorite_border'} size={23} filled={isStarred} />
-              </button>
+                <motion.span
+                  key={isStarred ? 'filled' : 'outline'}
+                  initial={{ scale: 0.6 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 15 }}
+                  className="inline-flex"
+                >
+                  <Icon name={isStarred ? 'favorite' : 'favorite_border'} size={23} filled={isStarred} />
+                </motion.span>
+              </motion.button>
             </div>
 
             {/* Seek slider */}

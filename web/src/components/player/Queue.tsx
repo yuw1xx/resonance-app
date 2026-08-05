@@ -2,6 +2,7 @@ import { usePlayerStore } from '@/stores/player'
 import { CoverArt } from '@/components/CoverArt'
 import { Icon } from '@/components/Icon'
 import { useRipple } from '@/components/Ripple'
+import { AnimatePresence, motion } from 'framer-motion'
 
 import type { QueueSong } from '@/stores/player'
 
@@ -14,12 +15,17 @@ function QueueItem({ song, index, active }: {
   const ripple = useRipple()
 
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}
+      transition={{ type: 'spring', stiffness: 500, damping: 40 }}
       ref={ripple.ref as React.Ref<HTMLDivElement>}
       onPointerDown={ripple.onPointerDown}
       onClick={() => jumpTo(index)}
       className={`ripple-root group flex items-center gap-3 px-3 py-2.5 cursor-pointer
-        transition-colors duration-150 rounded-xl mx-2
+        transition-colors duration-150 rounded-xl mx-2 overflow-hidden
         ${active ? 'bg-primary-container/40' : 'hover:bg-on-surface/8'}`}
     >
       <div className="relative w-9 h-9 flex-shrink-0 rounded-md overflow-hidden shadow-elevation-1">
@@ -43,7 +49,7 @@ function QueueItem({ song, index, active }: {
       >
         <Icon name="close" size={14} />
       </button>
-    </div>
+    </motion.div>
   )
 }
 
@@ -76,9 +82,11 @@ export function Queue() {
             <p className="text-[13px]">Queue is empty</p>
           </div>
         ) : (
-          queue.map((song, i) => (
-            <QueueItem key={`${song.id}-${i}`} song={song} index={i} active={i === currentIndex} />
-          ))
+          <AnimatePresence>
+            {queue.map((song, i) => (
+              <QueueItem key={`${song.id}-${i}`} song={song} index={i} active={i === currentIndex} />
+            ))}
+          </AnimatePresence>
         )}
       </div>
     </div>

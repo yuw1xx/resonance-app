@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { AnimatePresence, motion } from 'framer-motion'
 import { subsonic } from '@/api/subsonic'
 import { SongRow } from '@/components/SongRow'
 import { Icon } from '@/components/Icon'
@@ -99,30 +100,39 @@ export function SongsPage() {
         </div>
       </div>
 
-      {selectMode && (
-        <SelectionToolbar
-          selectedIds={selection.selected}
-          songs={songs}
-          onClear={() => { selection.clear(); setSelectMode(false) }}
-        />
-      )}
+      <AnimatePresence>
+        {selectMode && (
+          <SelectionToolbar
+            key="selection-toolbar"
+            selectedIds={selection.selected}
+            songs={songs}
+            onClear={() => { selection.clear(); setSelectMode(false) }}
+          />
+        )}
+      </AnimatePresence>
 
       <div className="px-3 pb-8 pt-2">
         {isLoading
           ? Array.from({ length: 12 }).map((_, i) => <SongSkeleton key={i} />)
           : songs.map((song, i) => (
-              <SongRow
+              <motion.div
                 key={song.id}
-                song={song}
-                index={i}
-                queue={songs}
-                showAlbumArt
-                showAlbum
-                active={false}
-                selectable={selectMode}
-                selected={selection.selected.has(song.id)}
-                onToggleSelect={() => selection.toggle(song.id)}
-              />
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: Math.min(i * 0.02, 0.3) }}
+              >
+                <SongRow
+                  song={song}
+                  index={i}
+                  queue={songs}
+                  showAlbumArt
+                  showAlbum
+                  active={false}
+                  selectable={selectMode}
+                  selected={selection.selected.has(song.id)}
+                  onToggleSelect={() => selection.toggle(song.id)}
+                />
+              </motion.div>
             ))
         }
       </div>

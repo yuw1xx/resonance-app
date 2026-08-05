@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { motion } from 'framer-motion'
 import { Icon } from './Icon'
 import { useRipple } from './Ripple'
 import { AddToPlaylistModal } from './AddToPlaylistModal'
@@ -45,7 +46,12 @@ export function SelectionToolbar({ selectedIds, songs, onClear, onRemove }: Prop
   const ids = selectedSongs.map(s => s.id)
 
   return (
-    <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-2.5
+    <motion.div
+      initial={{ opacity: 0, y: -12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -12, transition: { duration: 0.15 } }}
+      transition={{ type: 'spring', stiffness: 500, damping: 36 }}
+      className="sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-2.5
       bg-md-bg/90 backdrop-blur-md border-b border-outline-var/20">
       <div className="flex items-center gap-3">
         <button
@@ -76,6 +82,6 @@ export function SelectionToolbar({ selectedIds, songs, onClear, onRemove }: Prop
         onClose={() => setShowAddToPlaylist(false)}
         songIds={ids}
       />
-    </div>
+    </motion.div>
   )
 }

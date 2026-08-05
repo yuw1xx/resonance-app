@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { motion } from 'framer-motion'
 import { subsonic } from '@/api/subsonic'
 import { CoverArt } from '@/components/CoverArt'
 import { Icon } from '@/components/Icon'
@@ -86,7 +87,7 @@ export function PlaylistsPage() {
         {isLoading
           ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} />)
           : playlists.map((pl, i) => (
-              <PlaylistRow key={pl.id} pl={pl} onClick={() => navigate(`/playlists/${pl.id}`)} last={i === playlists.length - 1} />
+              <PlaylistRow key={pl.id} pl={pl} index={i} onClick={() => navigate(`/playlists/${pl.id}`)} last={i === playlists.length - 1} />
             ))
         }
         {!isLoading && playlists.length === 0 && (
@@ -100,17 +101,22 @@ export function PlaylistsPage() {
   )
 }
 
-function PlaylistRow({ pl, onClick, last }: {
+function PlaylistRow({ pl, onClick, last, index }: {
   pl: { id: string; name: string; songCount?: number; duration?: number; coverArt?: string }
   onClick: () => void
   last: boolean
+  index: number
 }) {
   const ripple = useRipple()
   return (
-    <button
+    <motion.button
       ref={ripple.ref as React.Ref<HTMLButtonElement>}
       onPointerDown={ripple.onPointerDown}
       onClick={onClick}
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.25, delay: Math.min(index * 0.02, 0.3) }}
+      whileTap={{ scale: 0.98 }}
       className={`ripple-root group flex items-center gap-4 w-full px-4 py-3.5
         hover:bg-on-surface/8 transition-colors duration-150 text-left
         ${!last ? 'border-b border-outline-var/20' : ''}`}
@@ -125,6 +131,6 @@ function PlaylistRow({ pl, onClick, last }: {
         </p>
       </div>
       <Icon name="chevron_right" size={20} className="text-outline opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
-    </button>
+    </motion.button>
   )
 }

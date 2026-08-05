@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { CoverArt } from './CoverArt'
 import { useRipple } from './Ripple'
 import type { SubsonicAlbum } from '@/api/subsonic'
@@ -13,16 +14,20 @@ export function AlbumCard({ album, index = 0 }: Props) {
   const ripple = useRipple()
 
   return (
-    <button
+    <motion.button
       ref={ripple.ref as React.Ref<HTMLButtonElement>}
       onPointerDown={ripple.onPointerDown}
       onClick={() => navigate(`/albums/${album.id}`)}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: Math.min(index * 0.03, 0.3), ease: [0.05, 0.7, 0.1, 1] }}
+      whileHover={{ y: -3 }}
+      whileTap={{ scale: 0.97 }}
       className="ripple-root group flex flex-col gap-2.5 text-left w-full rounded-xl p-2
         bg-surface-c hover:bg-surface-high
-        transition-all duration-250 ease-md-emphasized
+        transition-colors duration-250 ease-md-emphasized
         shadow-none hover:shadow-elevation-2
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-      style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
     >
       <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-surface-high">
         <CoverArt
@@ -52,6 +57,6 @@ export function AlbumCard({ album, index = 0 }: Props) {
           {album.year ? ` · ${album.year}` : ''}
         </p>
       </div>
-    </button>
+    </motion.button>
   )
 }

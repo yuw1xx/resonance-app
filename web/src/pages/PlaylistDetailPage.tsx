@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AnimatePresence, motion } from 'framer-motion'
 import { subsonic } from '@/api/subsonic'
 import { CoverArt } from '@/components/CoverArt'
 import { SongRow } from '@/components/SongRow'
@@ -318,17 +319,20 @@ export function PlaylistDetailPage() {
 
       <div className="mx-6 h-px bg-outline-var/30" />
 
-      {selectMode && (
-        <SelectionToolbar
-          selectedIds={selection.selected}
-          songs={songs}
-          onClear={() => { selection.clear(); setSelectMode(false) }}
-          onRemove={ids => {
-            const indices = songs.map((_, i) => i).filter(i => ids.has(songs[i].id))
-            batchRemoveMutation.mutate(indices)
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {selectMode && (
+          <SelectionToolbar
+            key="selection-toolbar"
+            selectedIds={selection.selected}
+            songs={songs}
+            onClear={() => { selection.clear(); setSelectMode(false) }}
+            onRemove={ids => {
+              const indices = songs.map((_, i) => i).filter(i => ids.has(songs[i].id))
+              batchRemoveMutation.mutate(indices)
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       <div className="px-3 pb-8 pt-2">
         {songs.length === 0 && (
@@ -337,12 +341,17 @@ export function PlaylistDetailPage() {
             <p className="text-[13px]">No songs in this playlist yet</p>
           </div>
         )}
+        <AnimatePresence initial={false}>
         {songs.map((song, i) => (
-          <div
+          <motion.div
             key={song.id}
             data-song-id={song.id}
-            className={`flex items-center gap-1 transition-opacity duration-150
-              ${draggingId === song.id ? 'opacity-40' : ''}`}
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: draggingId === song.id ? 0.4 : 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}
+            transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+            className="flex items-center gap-1 overflow-hidden"
           >
             {!selectMode && (
               <button
@@ -369,8 +378,9 @@ export function PlaylistDetailPage() {
                 onToggleSelect={() => selection.toggle(song.id)}
               />
             </div>
-          </div>
+          </motion.div>
         ))}
+        </AnimatePresence>
       </div>
 
       <Modal

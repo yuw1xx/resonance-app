@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { CoverArt } from './CoverArt'
 import { Icon } from './Icon'
 import { useRipple } from './Ripple'
@@ -132,17 +133,26 @@ export function SongRow({
       {!selectable && (
       <div className={`flex items-center gap-1 flex-shrink-0 transition-opacity duration-150
         ${isStarred ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-        <button
+        <motion.button
           onClick={e => { e.stopPropagation(); toggleStar.mutate({ id: song.id, starred: isStarred }) }}
           title={isStarred ? 'Unlike' : 'Like'}
+          whileTap={{ scale: 0.75 }}
           className={`p-1.5 rounded-full transition-colors duration-150
             ${isStarred
               ? 'text-primary hover:bg-primary/12'
               : 'text-on-surface-var hover:bg-on-surface/12 hover:text-on-surface'
             }`}
         >
-          <Icon name={isStarred ? 'favorite' : 'favorite_border'} size={16} filled={isStarred} />
-        </button>
+          <motion.span
+            key={isStarred ? 'filled' : 'outline'}
+            initial={{ scale: 0.5 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 15 }}
+            className="inline-flex"
+          >
+            <Icon name={isStarred ? 'favorite' : 'favorite_border'} size={16} filled={isStarred} />
+          </motion.span>
+        </motion.button>
         <button
           onClick={e => { e.stopPropagation(); playNext([song]) }}
           title="Play next"

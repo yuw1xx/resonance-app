@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { AnimatePresence, motion } from 'framer-motion'
 import { subsonic } from '@/api/subsonic'
 import { CoverArt } from '@/components/CoverArt'
 import { SongRow } from '@/components/SongRow'
@@ -166,36 +167,51 @@ export function AlbumDetailPage() {
       {/* Divider */}
       <div className="mx-6 h-px bg-outline-var/30" />
 
-      {selectMode ? (
-        <SelectionToolbar
-          selectedIds={selection.selected}
-          songs={songs}
-          onClear={() => { selection.clear(); setSelectMode(false) }}
-        />
-      ) : (
-        <div className="flex justify-end px-6 pt-3">
-          <button
-            onClick={() => setSelectMode(true)}
-            className="text-[12px] font-[500] text-on-surface-var hover:text-on-surface transition-colors duration-150"
+      <AnimatePresence mode="wait" initial={false}>
+        {selectMode ? (
+          <SelectionToolbar
+            key="toolbar"
+            selectedIds={selection.selected}
+            songs={songs}
+            onClear={() => { selection.clear(); setSelectMode(false) }}
+          />
+        ) : (
+          <motion.div
+            key="select-btn"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            className="flex justify-end px-6 pt-3"
           >
-            Select
-          </button>
-        </div>
-      )}
+            <button
+              onClick={() => setSelectMode(true)}
+              className="text-[12px] font-[500] text-on-surface-var hover:text-on-surface transition-colors duration-150"
+            >
+              Select
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Song list */}
       <div className="px-3 pb-8 pt-2">
         {songs.map((song, i) => (
-          <SongRow
+          <motion.div
             key={song.id}
-            song={song}
-            index={i}
-            queue={songs}
-            active={false}
-            selectable={selectMode}
-            selected={selection.selected.has(song.id)}
-            onToggleSelect={() => selection.toggle(song.id)}
-          />
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: Math.min(i * 0.02, 0.3) }}
+          >
+            <SongRow
+              song={song}
+              index={i}
+              queue={songs}
+              active={false}
+              selectable={selectMode}
+              selected={selection.selected.has(song.id)}
+              onToggleSelect={() => selection.toggle(song.id)}
+            />
+          </motion.div>
         ))}
       </div>
     </div>

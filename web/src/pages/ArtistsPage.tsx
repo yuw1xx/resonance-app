@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { motion } from 'framer-motion'
 import { subsonic } from '@/api/subsonic'
 import { CoverArt } from '@/components/CoverArt'
 import { useRipple } from '@/components/Ripple'
@@ -18,13 +19,17 @@ function ArtistCard({ artist, index }: { artist: SubsonicArtistSummary; index: n
   const ripple = useRipple()
 
   return (
-    <button
+    <motion.button
       ref={ripple.ref as React.Ref<HTMLButtonElement>}
       onPointerDown={ripple.onPointerDown}
       onClick={() => navigate(`/artists/${artist.id}`)}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: Math.min(index * 0.02, 0.4), ease: [0.05, 0.7, 0.1, 1] }}
+      whileHover={{ y: -3 }}
+      whileTap={{ scale: 0.96 }}
       className="ripple-root group flex flex-col items-center gap-3 p-3 rounded-2xl
-        hover:bg-surface-c transition-all duration-200 ease-md-standard"
-      style={{ animationDelay: `${Math.min(index * 20, 400)}ms` }}
+        hover:bg-surface-c transition-colors duration-200 ease-md-standard"
     >
       <div className="relative w-full aspect-square overflow-hidden rounded-full bg-surface-high
         shadow-elevation-1 group-hover:shadow-elevation-2 transition-shadow duration-200">
@@ -43,7 +48,7 @@ function ArtistCard({ artist, index }: { artist: SubsonicArtistSummary; index: n
           </p>
         )}
       </div>
-    </button>
+    </motion.button>
   )
 }
 

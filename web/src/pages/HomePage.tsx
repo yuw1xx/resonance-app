@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { motion } from 'framer-motion'
 import { subsonic, type SubsonicAlbum } from '@/api/subsonic'
 import { AlbumCard } from '@/components/AlbumCard'
 import { SongRow } from '@/components/SongRow'
@@ -125,15 +126,21 @@ export function HomePage() {
             {loadingSongs
               ? Array.from({ length: 6 }).map((_, i) => <SongSkeleton key={i} />)
               : songs.map((song, i) => (
-                  <SongRow
+                  <motion.div
                     key={song.id}
-                    song={song}
-                    index={i}
-                    queue={songs}
-                    showAlbumArt
-                    showAlbum
-                    active={false}
-                  />
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: Math.min(i * 0.02, 0.3) }}
+                  >
+                    <SongRow
+                      song={song}
+                      index={i}
+                      queue={songs}
+                      showAlbumArt
+                      showAlbum
+                      active={false}
+                    />
+                  </motion.div>
                 ))
             }
           </div>

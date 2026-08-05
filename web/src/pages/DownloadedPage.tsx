@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { AnimatePresence, motion } from 'framer-motion'
 import { SongRow } from '@/components/SongRow'
 import { Icon } from '@/components/Icon'
 import { usePlayerStore, type QueueSong } from '@/stores/player'
@@ -125,19 +126,30 @@ export function DownloadedPage() {
         </div>
       ) : (
         <div>
+          <AnimatePresence initial={false}>
           {songs.map((song, i) => (
-            <SongRow
+            <motion.div
               key={song.id}
-              song={song}
-              index={i}
-              queue={songs}
-              showAlbumArt
-              showAlbum
-              active={false}
-              onRemove={() => handleRemove(song.id)}
-              removeLabel="Remove download"
-            />
+              layout="position"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}
+              transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+              className="overflow-hidden"
+            >
+              <SongRow
+                song={song}
+                index={i}
+                queue={songs}
+                showAlbumArt
+                showAlbum
+                active={false}
+                onRemove={() => handleRemove(song.id)}
+                removeLabel="Remove download"
+              />
+            </motion.div>
           ))}
+          </AnimatePresence>
         </div>
       )}
 
