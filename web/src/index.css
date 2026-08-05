@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hover-revealed actions/overlays (opacity-0 + group-hover:opacity-100) are otherwise
+ * unreachable on touch devices, which have no reliable hover state at all — force them
+ * visible whenever the device has no fine hover pointer, regardless of which Tailwind
+ * opacity-0/group-hover classes are already present on the element. */
+@media (hover: none) {
+  .touch-reveal { opacity: 1 !important; transform: none !important; }
+}
+
 /* ─── M3 Design Tokens ─────────────────────────────────── */
 :root {
   /* Channel vars: consumed by Tailwind as rgb(var(--c-xxx) / alpha)   */

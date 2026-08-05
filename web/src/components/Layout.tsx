@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
+import { BottomNav } from './BottomNav'
 import { PlayerBar } from './player/PlayerBar'
 import { FullscreenPlayer } from './player/FullscreenPlayer'
 import { Queue } from './player/Queue'
@@ -16,7 +17,7 @@ function SleepTimerBadge({ remainingMs }: { remainingMs: number | null }) {
   const mins = Math.floor(remainingMs / 60_000)
   const secs = Math.floor((remainingMs % 60_000) / 1000)
   return (
-    <div className="fixed bottom-24 right-4 z-40 flex items-center gap-2 px-3 py-2 rounded-full
+    <div className="fixed bottom-48 sm:bottom-24 right-4 z-40 flex items-center gap-2 px-3 py-2 rounded-full
       bg-surface-high border border-outline-var/30 shadow-elevation-2 text-[12px] text-on-surface-var
       animate-fade-in">
       <Icon name="bedtime" size={14} className="text-primary" />
@@ -43,7 +44,7 @@ export function Layout() {
     <div className="flex flex-col h-full bg-md-bg">
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <div className="w-px bg-outline-var/20 flex-shrink-0" />
+        <div className="hidden sm:block w-px bg-outline-var/20 flex-shrink-0" />
         <main className="flex-1 flex overflow-hidden">
           <div key={pathname} className="flex-1 flex flex-col overflow-hidden">
             <Outlet />
@@ -52,6 +53,7 @@ export function Layout() {
         </main>
       </div>
       <PlayerBar />
+      <BottomNav />
       {showFullscreen && <FullscreenPlayer />}
       <SleepTimerBadge remainingMs={remainingMs} />
       <ToastHost />

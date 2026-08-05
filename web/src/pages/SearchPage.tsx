@@ -229,7 +229,7 @@ function ResultRow({ coverArt, title, subtitle, onClick, coverRound = false }: {
         <p className="text-[13px] font-[500] text-on-surface truncate">{title}</p>
         {subtitle && <p className="text-[12px] text-on-surface-var truncate">{subtitle}</p>}
       </div>
-      <Icon name="chevron_right" size={18} className="text-outline ml-auto opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+      <Icon name="chevron_right" size={18} className="text-outline ml-auto opacity-0 group-hover:opacity-100 touch-reveal transition-opacity duration-150" />
     </button>
   )
 }

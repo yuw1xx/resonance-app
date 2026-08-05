@@ -79,12 +79,12 @@ export function SongDetailPage() {
   if (isLoading) {
     return (
       <div className="flex-1 overflow-y-auto page-enter p-6">
-        <div className="flex gap-6 items-end">
-          <div className="w-44 h-44 skeleton rounded-2xl flex-shrink-0" />
-          <div className="flex-1 space-y-3 pb-2">
-            <div className="h-5 skeleton rounded-full w-1/3" />
-            <div className="h-8 skeleton rounded-full w-2/3" />
-            <div className="h-4 skeleton rounded-full w-1/2" />
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end sm:gap-6">
+          <div className="w-36 h-36 sm:w-44 sm:h-44 skeleton rounded-2xl flex-shrink-0" />
+          <div className="flex-1 w-full space-y-3 pb-2">
+            <div className="h-5 skeleton rounded-full w-1/3 mx-auto sm:mx-0" />
+            <div className="h-8 skeleton rounded-full w-2/3 mx-auto sm:mx-0" />
+            <div className="h-4 skeleton rounded-full w-1/2 mx-auto sm:mx-0" />
           </div>
         </div>
       </div>
@@ -116,16 +116,16 @@ export function SongDetailPage() {
           Back
         </button>
 
-        <div className="flex gap-6 items-end">
-          <div className="w-44 h-44 rounded-2xl overflow-hidden shadow-elevation-4 flex-shrink-0">
+        <div className="flex flex-col items-center text-center gap-4 sm:flex-row sm:items-end sm:text-left sm:gap-6">
+          <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-2xl overflow-hidden shadow-elevation-4 flex-shrink-0">
             <CoverArt coverArt={song.coverArt} size={400} className="w-full h-full object-cover" alt={song.title} />
           </div>
-          <div className="min-w-0 pb-1">
+          <div className="min-w-0 w-full sm:pb-1">
             <p className="text-[11px] font-[600] text-primary uppercase tracking-[1px] mb-2">Song</p>
             <h1 className="text-[26px] font-[700] text-on-surface tracking-[-0.4px] leading-tight mb-2">
               {song.title}
             </h1>
-            <div className="flex flex-wrap items-center gap-x-1.5 text-[14px] text-on-surface-var mb-5">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-1.5 text-[14px] text-on-surface-var mb-5">
               {song.artistId ? (
                 <button onClick={() => navigate(`/artists/${song.artistId}`)} className="hover:text-on-surface hover:underline transition-colors duration-150">
                   {song.artist ?? 'Unknown Artist'}
@@ -142,7 +142,7 @@ export function SongDetailPage() {
                 </>
               )}
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
               <ActionBtn label="Play" icon="play_arrow" onClick={() => play([queueSong], 0)} />
               <ActionBtn label="Add to queue" icon="add" tonal onClick={() => addToQueue([queueSong])} />
               <ActionBtn

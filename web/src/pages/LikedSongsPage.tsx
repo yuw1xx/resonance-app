@@ -49,20 +49,20 @@ export function LikedSongsPage() {
       <div className="relative px-6 pt-6 pb-8" style={{
         background: 'linear-gradient(180deg, rgba(208,188,255,0.06) 0%, transparent 100%)'
       }}>
-        <div className="flex gap-6 items-end">
-          <div className="w-44 h-44 rounded-2xl flex-shrink-0 shadow-elevation-4
+        <div className="flex flex-col items-center text-center gap-4 sm:flex-row sm:items-end sm:text-left sm:gap-6">
+          <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-2xl flex-shrink-0 shadow-elevation-4
             bg-gradient-to-br from-primary-container to-secondary-container
             flex items-center justify-center">
             <Icon name="favorite" size={64} className="text-on-primary-container" filled />
           </div>
-          <div className="min-w-0 pb-1">
+          <div className="min-w-0 w-full sm:pb-1">
             <p className="text-[11px] font-[600] text-primary uppercase tracking-[1px] mb-2">Playlist</p>
             <h1 className="text-[26px] font-[700] text-on-surface tracking-[-0.4px] leading-tight mb-1">
               Liked Songs
             </h1>
             <p className="text-[12px] text-outline mb-5">{songs.length} songs</p>
             {songs.length > 0 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                 <ActionBtn label="Play" icon="play_arrow" onClick={() => play(songs, 0)} />
                 <ActionBtn
                   label="Shuffle"

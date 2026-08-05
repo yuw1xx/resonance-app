@@ -130,7 +130,7 @@ function PlaylistRow({ pl, onClick, last, index }: {
           {pl.songCount ?? 0} songs{pl.duration ? ` · ${fmtDur(pl.duration)}` : ''}
         </p>
       </div>
-      <Icon name="chevron_right" size={20} className="text-outline opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+      <Icon name="chevron_right" size={20} className="text-outline opacity-0 group-hover:opacity-100 touch-reveal transition-opacity duration-150" />
     </motion.button>
   )
 }

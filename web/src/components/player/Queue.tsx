@@ -44,7 +44,7 @@ function QueueItem({ song, index, active }: {
       </div>
       <button
         onClick={e => { e.stopPropagation(); removeFromQueue(index) }}
-        className="p-1 rounded-full text-on-surface-var opacity-0 group-hover:opacity-100
+        className="p-1 rounded-full text-on-surface-var opacity-0 group-hover:opacity-100 touch-reveal
           hover:bg-on-surface/12 hover:text-on-surface transition-all duration-150"
       >
         <Icon name="close" size={14} />

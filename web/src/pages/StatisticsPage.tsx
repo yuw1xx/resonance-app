@@ -56,7 +56,7 @@ function AlbumTile({ album, rank }: { album: SubsonicAlbum; rank?: number }) {
         <button
           onClick={e => { e.stopPropagation(); playAlbumById(album.id, play) }}
           className="absolute bottom-2 right-2 w-9 h-9 rounded-full bg-primary flex items-center justify-center
-            shadow-elevation-3 opacity-0 translate-y-1
+            shadow-elevation-3 opacity-0 translate-y-1 touch-reveal
             group-hover:opacity-100 group-hover:translate-y-0
             transition-all duration-200 ease-md-emphasized"
           aria-label="Play album"
@@ -92,7 +92,7 @@ function SongTile({ song }: { song: SubsonicSong }) {
       <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 shadow-elevation-1">
         <CoverArt coverArt={song.coverArt} size={80} className="w-full h-full object-cover" alt={song.title} />
         <div className="absolute inset-0 flex items-center justify-center bg-md-bg/60
-          opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          opacity-0 group-hover:opacity-100 touch-reveal transition-opacity duration-150">
           <Icon name="play_arrow" size={18} className="text-on-surface ml-[2px]" />
         </div>
       </div>

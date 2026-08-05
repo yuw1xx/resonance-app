@@ -16,7 +16,7 @@ export function BarChart({
     <div className="flex items-end gap-1" style={{ height }}>
       {entries.map((e, i) => (
         <div key={i} className="flex-1 flex flex-col items-center gap-1 group min-w-0" style={{ height }}>
-          <span className="h-3 leading-3 text-[9px] text-on-surface-var opacity-0 group-hover:opacity-100 transition-opacity duration-150 tabular-nums">
+          <span className="h-3 leading-3 text-[9px] text-on-surface-var opacity-0 group-hover:opacity-100 touch-reveal transition-opacity duration-150 tabular-nums">
             {formatValue ? formatValue(e.value) : e.value}
           </span>
           <div className="w-full flex items-end" style={{ height: barAreaHeight }}>

@@ -39,7 +39,7 @@ export function AlbumCard({ album, index = 0 }: Props) {
         {/* Play overlay */}
         <div className="absolute inset-0 bg-scrim/0 group-hover:bg-scrim/30 transition-colors duration-250 flex items-end justify-end p-2">
           <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center
-            translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100
+            translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 touch-reveal
             transition-all duration-350 ease-md-emphasized shadow-elevation-3">
             <span className="material-symbols-rounded text-on-primary text-[20px]"
               style={{ fontVariationSettings: "'FILL' 1" }}>

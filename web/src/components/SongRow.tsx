@@ -132,7 +132,7 @@ export function SongRow({
       {/* Actions */}
       {!selectable && (
       <div className={`flex items-center gap-1 flex-shrink-0 transition-opacity duration-150
-        ${isStarred ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+        ${isStarred ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 touch-reveal'}`}>
         <motion.button
           onClick={e => { e.stopPropagation(); toggleStar.mutate({ id: song.id, starred: isStarred }) }}
           title={isStarred ? 'Unlike' : 'Like'}
@@ -156,7 +156,7 @@ export function SongRow({
         <button
           onClick={e => { e.stopPropagation(); playNext([song]) }}
           title="Play next"
-          className="p-1.5 rounded-full text-on-surface-var hover:bg-on-surface/12 hover:text-on-surface
+          className="hidden sm:block p-1.5 rounded-full text-on-surface-var hover:bg-on-surface/12 hover:text-on-surface
             transition-colors duration-150"
         >
           <Icon name="queue_play_next" size={16} filled={false} />
@@ -164,7 +164,7 @@ export function SongRow({
         <button
           onClick={e => { e.stopPropagation(); addToQueue([song]) }}
           title="Add to queue"
-          className="p-1.5 rounded-full text-on-surface-var hover:bg-on-surface/12 hover:text-on-surface
+          className="hidden sm:block p-1.5 rounded-full text-on-surface-var hover:bg-on-surface/12 hover:text-on-surface
             transition-colors duration-150"
         >
           <Icon name="add_to_queue" size={16} filled={false} />

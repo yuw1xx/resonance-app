@@ -220,13 +220,13 @@ export function PlaylistDetailPage() {
   if (isLoading) {
     return (
       <div className="flex-1 overflow-y-auto page-enter p-6">
-        <div className="flex gap-6 items-end">
-          <div className="w-44 h-44 skeleton rounded-2xl flex-shrink-0" />
-          <div className="flex-1 space-y-3 pb-2">
-            <div className="h-5 skeleton rounded-full w-1/4" />
-            <div className="h-8 skeleton rounded-full w-2/3" />
-            <div className="h-4 skeleton rounded-full w-1/3" />
-            <div className="flex gap-2 mt-4">
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end sm:gap-6">
+          <div className="w-36 h-36 sm:w-44 sm:h-44 skeleton rounded-2xl flex-shrink-0" />
+          <div className="flex-1 w-full space-y-3 pb-2">
+            <div className="h-5 skeleton rounded-full w-1/4 mx-auto sm:mx-0" />
+            <div className="h-8 skeleton rounded-full w-2/3 mx-auto sm:mx-0" />
+            <div className="h-4 skeleton rounded-full w-1/3 mx-auto sm:mx-0" />
+            <div className="flex gap-2 mt-4 justify-center sm:justify-start">
               <div className="h-10 w-24 skeleton rounded-full" />
               <div className="h-10 w-28 skeleton rounded-full" />
             </div>
@@ -256,12 +256,12 @@ export function PlaylistDetailPage() {
           Back
         </button>
 
-        <div className="flex gap-6 items-end">
-          <div className="w-44 h-44 rounded-2xl overflow-hidden shadow-elevation-4 flex-shrink-0">
+        <div className="flex flex-col items-center text-center gap-4 sm:flex-row sm:items-end sm:text-left sm:gap-6">
+          <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-2xl overflow-hidden shadow-elevation-4 flex-shrink-0">
             <CoverArt coverArt={coverArt} size={400} className="w-full h-full object-cover" alt={playlist.name} />
           </div>
-          <div className="min-w-0 pb-1 flex-1">
-            <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 w-full sm:pb-1 sm:flex-1">
+            <div className="flex flex-col items-center sm:flex-row sm:items-start sm:justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-[11px] font-[600] text-primary uppercase tracking-[1px] mb-2">Playlist</p>
                 <h1 className="text-[26px] font-[700] text-on-surface tracking-[-0.4px] leading-tight mb-1 truncate">
@@ -281,7 +281,7 @@ export function PlaylistDetailPage() {
                 <IconBtn icon="delete" title="Delete playlist" danger onClick={() => setShowDelete(true)} />
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
               <ActionBtn label="Play" icon="play_arrow" onClick={() => play(songs, 0)} />
               <ActionBtn
                 label="Shuffle"

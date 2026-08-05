@@ -68,12 +68,12 @@ export function ArtistDetailPage() {
   if (isLoading) {
     return (
       <div className="flex-1 overflow-y-auto page-enter p-6">
-        <div className="flex gap-6 items-end">
-          <div className="w-32 h-32 skeleton rounded-full flex-shrink-0" />
-          <div className="flex-1 space-y-2 pb-2">
-            <div className="h-4 skeleton rounded-full w-1/4" />
-            <div className="h-7 skeleton rounded-full w-2/5" />
-            <div className="h-3.5 skeleton rounded-full w-1/4 mt-3" />
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end sm:gap-6">
+          <div className="w-28 h-28 sm:w-32 sm:h-32 skeleton rounded-full flex-shrink-0" />
+          <div className="flex-1 w-full space-y-2 pb-2">
+            <div className="h-4 skeleton rounded-full w-1/4 mx-auto sm:mx-0" />
+            <div className="h-7 skeleton rounded-full w-2/5 mx-auto sm:mx-0" />
+            <div className="h-3.5 skeleton rounded-full w-1/4 mt-3 mx-auto sm:mx-0" />
           </div>
         </div>
       </div>
@@ -107,11 +107,11 @@ export function ArtistDetailPage() {
           </button>
         </div>
 
-        <div className="flex gap-6 items-end">
-          <div className="w-32 h-32 rounded-full overflow-hidden shadow-elevation-3 flex-shrink-0">
+        <div className="flex flex-col items-center text-center gap-4 sm:flex-row sm:items-end sm:text-left sm:gap-6">
+          <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden shadow-elevation-3 flex-shrink-0">
             <CoverArt coverArt={artist.coverArt} size={256} className="w-full h-full object-cover" alt={artist.name} />
           </div>
-          <div className="pb-1">
+          <div className="w-full sm:pb-1">
             <p className="text-[11px] font-[600] text-primary uppercase tracking-[1px] mb-2">Artist</p>
             <h1 className="text-[26px] font-[700] text-on-surface tracking-[-0.4px] leading-tight">
               {artist.name}

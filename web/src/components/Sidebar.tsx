@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { Icon } from './Icon'
 import { useRipple } from './Ripple'
 
-const NAV = [
+export const NAV = [
   { to: '/',           label: 'Home',       icon: 'home' },
   { to: '/songs',      label: 'Songs',      icon: 'music_note' },
   { to: '/albums',     label: 'Albums',     icon: 'album' },
@@ -124,8 +124,8 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* ── Navigation Rail (< md) ────────────────────────── */}
-      <aside className="md:hidden flex flex-col w-[72px] flex-shrink-0 bg-md-surface py-3 overflow-hidden">
+      {/* ── Navigation Rail (sm–md: tablet portrait / large phone landscape) ── */}
+      <aside className="hidden sm:flex md:hidden flex-col w-[72px] flex-shrink-0 bg-md-surface py-3 overflow-hidden">
         {/* Logo mark */}
         <div className="flex justify-center mb-4 mt-2">
           <img src="/icon.svg" alt="" className="w-9 h-9 rounded-xl" />
