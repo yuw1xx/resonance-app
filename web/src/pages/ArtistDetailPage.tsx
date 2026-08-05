@@ -8,6 +8,7 @@ import { Icon } from '@/components/Icon'
 import { share } from '@/lib/share'
 import { lookupArtist as lookupDiscogsArtist } from '@/api/discogs'
 import { useSettingsStore } from '@/stores/settings'
+import { useArtistInfo } from '@/hooks/useArtistInfo'
 
 // Navidrome's Last.fm-sourced bios often carry a trailing "<a ...>Read more...</a>" —
 // render as plain text rather than dangerouslySetInnerHTML, and surface lastFmUrl separately.
@@ -52,9 +53,17 @@ export function ArtistDetailPage() {
     retry: false,
   })
 
+  const { data: mbInfo } = useArtistInfo(artist?.name)
+
   const bio = info?.biography ? stripHtml(info.biography) : ''
   const discogsProfile = discogs?.profile ? stripDiscogsMarkup(discogs.profile) : ''
   const activeMembers = discogs?.members?.filter(m => m.active !== false) ?? []
+
+  const yearRange = mbInfo?.formedYear
+    ? mbInfo.dissolvedYear
+      ? `${mbInfo.formedYear}–${mbInfo.dissolvedYear}`
+      : `Formed ${mbInfo.formedYear}`
+    : null
 
   if (isLoading) {
     return (
@@ -107,9 +116,15 @@ export function ArtistDetailPage() {
             <h1 className="text-[26px] font-[700] text-on-surface tracking-[-0.4px] leading-tight">
               {artist.name}
             </h1>
-            {artist.albumCount != null && (
+            {(artist.albumCount != null || yearRange) && (
               <p className="text-[13px] text-on-surface-var mt-1">
-                {artist.albumCount} {artist.albumCount === 1 ? 'album' : 'albums'}
+                {[
+                  artist.albumCount != null ? `${artist.albumCount} ${artist.albumCount === 1 ? 'album' : 'albums'}` : null,
+                  yearRange,
+                ].filter(Boolean).join(' · ')}
+                {mbInfo?.dissolvedYear && (
+                  <span className="ml-1.5 text-[11px] text-outline">(inactive)</span>
+                )}
               </p>
             )}
           </div>
@@ -118,10 +133,23 @@ export function ArtistDetailPage() {
 
       <div className="mx-6 h-px bg-outline-var/30" />
 
-      {(bio || discogsProfile || activeMembers.length > 0) && (
+      {(bio || discogsProfile || activeMembers.length > 0 || !!mbInfo?.genres.length) && (
         <div className="px-6 pt-6">
           <h2 className="text-[15px] font-[600] text-on-surface mb-3">About</h2>
           <div className="bg-surface-c rounded-2xl p-5 space-y-4">
+            {!!mbInfo?.genres.length && (
+              <div className="flex flex-wrap gap-2">
+                {mbInfo.genres.map(genre => (
+                  <span
+                    key={genre}
+                    className="px-3 py-1 rounded-full text-[11px] font-[500] bg-primary-container/40 text-on-primary-container capitalize"
+                  >
+                    {genre}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {bio && (
               <div>
                 <p className={`text-[13px] leading-relaxed text-on-surface-var ${bioExpanded ? '' : 'line-clamp-4'}`}>

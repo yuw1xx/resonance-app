@@ -1,3 +1,7 @@
+import { createRateLimiter } from '@/lib/rateLimiter'
+
+const withRateLimit = createRateLimiter(1050)
+
 export interface DiscogsMember {
   id: number
   name: string
@@ -21,20 +25,24 @@ function authHeader(token: string): Record<string, string> {
 }
 
 export async function searchArtist(name: string, token: string): Promise<{ id: number; name: string } | null> {
-  const url = new URL('https://api.discogs.com/database/search')
-  url.searchParams.set('q', name)
-  url.searchParams.set('type', 'artist')
-  const res = await fetch(url.toString(), { headers: authHeader(token) })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json: DiscogsSearchResult = await res.json()
-  const best = json.results?.find(r => r.type === 'artist')
-  return best ? { id: best.id, name: best.title } : null
+  return withRateLimit(async () => {
+    const url = new URL('https://api.discogs.com/database/search')
+    url.searchParams.set('q', name)
+    url.searchParams.set('type', 'artist')
+    const res = await fetch(url.toString(), { headers: authHeader(token) })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const json: DiscogsSearchResult = await res.json()
+    const best = json.results?.find(r => r.type === 'artist')
+    return best ? { id: best.id, name: best.title } : null
+  })
 }
 
 export async function getArtist(id: number, token: string): Promise<DiscogsArtist> {
-  const res = await fetch(`https://api.discogs.com/artists/${id}`, { headers: authHeader(token) })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+  return withRateLimit(async () => {
+    const res = await fetch(`https://api.discogs.com/artists/${id}`, { headers: authHeader(token) })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.json()
+  })
 }
 
 /** Convenience: search by name then fetch the top match's full profile in one call. */

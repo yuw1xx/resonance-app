@@ -76,6 +76,14 @@ export async function updateNowPlaying(
   await call('track.updateNowPlaying', params, { signed: true, http: 'POST' })
 }
 
+/** Unauthenticated, unsigned lookup (no session key needed) — used only for genre tags, since
+ * the bio itself already comes from Navidrome's own getArtistInfo2 (which doesn't expose tags). */
+export async function getArtistTags(artist: string): Promise<string[]> {
+  const json = await call('artist.getinfo', { artist })
+  const tags = json.artist?.tags?.tag as { name: string }[] | undefined
+  return (tags ?? []).map(t => t.name)
+}
+
 export async function scrobble(
   sessionKey: string, artist: string, track: string, timestampSeconds: number,
   album?: string, durationSeconds?: number,
