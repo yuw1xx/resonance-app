@@ -1339,6 +1339,13 @@ fun SettingsScreen(
                                     onClick = { uriHandler.openUri("https://discord.gg/SftqvvveMj") },
                                 )
                                 SettingsTextItem(
+                                    title = "Support on Ko-fi",
+                                    subtitle = "Buy me a coffee if Resonance's been useful",
+                                    icon = Icons.Rounded.Coffee,
+                                    trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
+                                    onClick = { uriHandler.openUri("https://ko-fi.com/yuwixx") },
+                                )
+                                SettingsTextItem(
                                     title = "App License",
                                     subtitle = "View Resonance's open source license",
                                     icon = Icons.Rounded.Gavel,

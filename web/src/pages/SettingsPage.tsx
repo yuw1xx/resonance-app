@@ -913,6 +913,18 @@ export function SettingsPage() {
               <Icon name="open_in_new" size={14} />
             </span>
           </a>
+          <a
+            href="https://ko-fi.com/yuwixx"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-on-surface/5 transition-colors duration-150"
+          >
+            <span className="text-[14px] text-on-surface-var">Support the project</span>
+            <span className="flex items-center gap-1 text-[13px] text-primary font-[500]">
+              Ko-fi
+              <Icon name="open_in_new" size={14} />
+            </span>
+          </a>
         </Section>
       </div>
     </div>
