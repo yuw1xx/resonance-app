@@ -13,6 +13,14 @@
 </div>
 
 ---
+<div align="center"><h3>Available on</h3>
+
+<a href="https://rookieenough.github.io/Orion-Data/redirect.html?id=resonance"><img src="https://raw.githubusercontent.com/RookieEnough/Orion-Store/refs/heads/main/assets/orion-badge.png" alt="Get it on Orion Store" width="180"></a>
+  <a href="https://github.com/yuw1xx/resonance-app/releases/latest"><img src="https://badgen.net/github/releas
+e/yuw1xx/resonance-app?label=GitHub+Release&color=black&icon=github" alt="GitHub Release"></a>
+
+</div>
+---
 
 ## Overview
 
