@@ -1,4 +1,5 @@
 import { getStreamUrl, getCoverArtUrl } from '@/api/subsonic'
+import { mimeForSuffix } from '@/lib/relay'
 import type { QueueSong } from '@/stores/player'
 
 // The Cast Web Sender SDK (loaded via <script> in index.html) has no official TypeScript
@@ -101,9 +102,13 @@ export function endCastSession() {
 export function castSong(song: QueueSong, maxBitRate?: number, replayGain?: string) {
   const session = getSession()
   if (!session || !window.chrome) return
+  // Cast receivers reject unrecognized content types outright, so an unknown suffix falls
+  // back to the mp3 mime rather than mimeForSuffix's generic octet-stream default — a guess
+  // that's at least playable is better than one the receiver refuses before even trying.
+  const contentType = mimeForSuffix(song.suffix)
   const mediaInfo = new window.chrome.cast.media.MediaInfo(
     getStreamUrl(song.id, maxBitRate, replayGain),
-    'audio/mpeg',
+    contentType === 'application/octet-stream' ? 'audio/mpeg' : contentType,
   )
   const metadata = new window.chrome.cast.media.MusicTrackMediaMetadata()
   metadata.title = song.title

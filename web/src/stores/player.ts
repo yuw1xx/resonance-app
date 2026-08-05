@@ -124,6 +124,20 @@ function connectDeckToEq(deck: HTMLAudioElement) {
   eqConnectedDecks.add(deck)
 }
 
+let eqAppliedOnce = false
+
+/** The persisted EQ preset is otherwise never re-applied after a reload — applyEqPreset()
+ * was only ever wired to the Settings page's own click handler, so a chosen preset would
+ * silently stop affecting audio the moment the tab was reopened, even though the Settings UI
+ * still showed it selected. Call this once from the first real playback gesture (play/resume,
+ * both always user-initiated) so a saved preset actually takes effect again. */
+function ensureEqAppliedOnGesture() {
+  if (eqAppliedOnce) return
+  eqAppliedOnce = true
+  const preset = useSettingsStore.getState().equalizerPreset
+  if (preset !== 'flat') applyEqPreset(preset)
+}
+
 export function applyEqPreset(preset: EqPreset) {
   // Always called from a user gesture (settings page click) — safe to init AudioContext here.
   // Before this is ever called, both decks play straight to the speakers, bypassing Web Audio
@@ -250,6 +264,21 @@ function saveQueueNow() {
 function maybeSaveQueue() {
   if (Date.now() - lastQueueSaveAt < 5000) return
   saveQueueNow()
+}
+
+/** Called on logout — the loaded stream URLs are baked with this session's auth token/salt,
+ * so leaving them queued would either keep playing invisibly (Layout, and with it PlayerBar,
+ * unmounts once isAuthenticated flips false, but the module-level <audio> elements don't) or
+ * fail silently on the next skip/preload once credentials are cleared. */
+export function stopAndClearQueue() {
+  abortCrossfade()
+  audio.pause()
+  audio.removeAttribute('src')
+  idle.pause()
+  idle.removeAttribute('src')
+  idlePreloadedIndex = null
+  if (scrobbleTimer) { clearTimeout(scrobbleTimer); scrobbleTimer = null }
+  usePlayerStore.setState({ queue: [], currentIndex: 0, isPlaying: false, position: 0, duration: 0 })
 }
 
 export async function checkForRemoteQueue() {
@@ -435,10 +464,17 @@ function beginCrossfade(durationSec: number, targetIndex: number) {
   incoming.preservesPitch = useSettingsStore.getState().preservePitch
   incoming.play().catch(() => { crossfading = false })
 
-  const startTime = performance.now()
+  let startTime = performance.now()
 
   function tick() {
     if (!crossfading) return
+    if (outgoing.paused && incoming.paused) {
+      // User paused mid-ramp — freeze progress instead of letting wall-clock time keep
+      // advancing it, which would otherwise silently finish (and swap decks) while paused.
+      startTime += 16
+      crossfadeRaf = requestAnimationFrame(tick)
+      return
+    }
     const t = Math.min(1, (performance.now() - startTime) / (durationSec * 1000))
     const masterVolume = usePlayerStore.getState().volume
     outgoing.volume = masterVolume * (1 - t)
@@ -563,6 +599,7 @@ export const usePlayerStore = create<PlayerState>()(
 
       play: (songs, index = 0) => {
         if (!songs.length) return
+        ensureEqAppliedOnGesture()
         abortCrossfade()
         const song = songs[index]
         set({ queue: songs, currentIndex: index, position: 0, duration: 0 })
@@ -583,6 +620,7 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       resume: () => {
+        ensureEqAppliedOnGesture()
         audio.play().catch(err => console.warn('resume() rejected:', err))
         if (crossfading) idle.play().catch(() => {})
         updatePositionState()
@@ -674,10 +712,38 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       removeFromQueue: (index) => {
+        const { queue, currentIndex, isPlaying } = get()
+        if (index === currentIndex) {
+          // Removing the song that's actually loaded on the audio deck — advance rather than
+          // just splicing the array, otherwise `queue[currentIndex]` (and the whole UI) would
+          // start pointing at a different song than what's still audibly playing.
+          abortCrossfade()
+          const newQueue = queue.filter((_, i) => i !== index)
+          if (!newQueue.length) {
+            audio.pause()
+            audio.removeAttribute('src')
+            set({ queue: [], currentIndex: 0, isPlaying: false, position: 0, duration: 0 })
+            idlePreloadedIndex = null
+            idle.removeAttribute('src')
+            return
+          }
+          const newIndex = Math.min(index, newQueue.length - 1)
+          const song = newQueue[newIndex]
+          set({ queue: newQueue, currentIndex: newIndex, position: 0, duration: 0 })
+          loadActive(audio, song)
+          if (isPlaying) audio.play().catch(() => {})
+          scheduleScrobble(song, song.duration ?? 0)
+          if (useSettingsStore.getState().navidromeScrobbling) subsonic.scrobble(song.id, false).catch(() => {})
+          if (isPlaying) pingLastFmNowPlaying(song)
+          setMediaSession(song)
+          saveQueueNow()
+          schedulePreload()
+          return
+        }
         set(s => {
-          const queue = s.queue.filter((_, i) => i !== index)
-          const currentIndex = index < s.currentIndex ? s.currentIndex - 1 : s.currentIndex
-          return { queue, currentIndex: Math.max(0, currentIndex) }
+          const q = s.queue.filter((_, i) => i !== index)
+          const newCurrentIndex = index < s.currentIndex ? s.currentIndex - 1 : s.currentIndex
+          return { queue: q, currentIndex: Math.max(0, newCurrentIndex) }
         })
         schedulePreload()
       },

@@ -163,8 +163,18 @@ export function PlaylistDetailPage() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['playlist', id] }),
   })
 
+  // A remove/reorder mutation sends index-based positions to the server (Subsonic's
+  // updatePlaylist has no id-based removal) — those indices are only valid against whatever
+  // array the server currently holds. Letting a second one fire while an earlier one (especially
+  // a reorder, which replaces the whole list) is still in flight and unrefetched can make it
+  // target the wrong song. Block overlapping calls rather than risk silently deleting the wrong
+  // track from someone's playlist.
+  const playlistMutationPending =
+    removeMutation.isPending || batchRemoveMutation.isPending || reorderMutation.isPending
+
   // ── Pointer-based drag reorder ──────────────────────────
   function handleDragStart(e: React.PointerEvent, songId: string) {
+    if (playlistMutationPending) return
     e.stopPropagation()
     setDraggingId(songId)
   }
@@ -337,9 +347,11 @@ export function PlaylistDetailPage() {
             {!selectMode && (
               <button
                 onPointerDown={e => handleDragStart(e, song.id)}
+                disabled={playlistMutationPending}
                 title="Drag to reorder"
                 className="p-1.5 rounded-full text-outline hover:text-on-surface-var hover:bg-on-surface/8
-                  transition-colors duration-150 cursor-grab active:cursor-grabbing touch-none flex-shrink-0"
+                  transition-colors duration-150 cursor-grab active:cursor-grabbing touch-none flex-shrink-0
+                  disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Icon name="drag_indicator" size={16} filled={false} />
               </button>
@@ -351,7 +363,7 @@ export function PlaylistDetailPage() {
                 queue={songs}
                 showAlbum
                 active={false}
-                onRemove={selectMode ? undefined : () => removeMutation.mutate(i)}
+                onRemove={selectMode || playlistMutationPending ? undefined : () => removeMutation.mutate(i)}
                 selectable={selectMode}
                 selected={selection.selected.has(song.id)}
                 onToggleSelect={() => selection.toggle(song.id)}

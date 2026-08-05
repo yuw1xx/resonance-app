@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createAuthCredentials, setCredentials, clearCredentials, subsonic } from '@/api/subsonic'
-import { checkForRemoteQueue } from '@/stores/player'
+import { checkForRemoteQueue, stopAndClearQueue } from '@/stores/player'
 
 interface AuthState {
   serverUrl: string
@@ -32,6 +32,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        stopAndClearQueue()
         clearCredentials()
         set({ serverUrl: '', username: '', token: '', salt: '', isAuthenticated: false })
       },
