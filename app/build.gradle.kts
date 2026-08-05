@@ -10,7 +10,11 @@ plugins {
 }
 
 licenseReport {
-    configurations = arrayOf("debugRuntimeClasspath")
+    // "debugRuntimeClasspath" became ambiguous once the gms/foss flavor dimension was added
+    // (silently resolved to an empty configuration instead of failing the build, collapsing
+    // this report to nothing). Pin to the gms variant — the fuller of the two dependency
+    // sets, and the one actually shipped via GitHub Releases/Orion Store/IzzyOnDroid.
+    configurations = arrayOf("gmsDebugRuntimeClasspath")
     renderers = arrayOf(JsonReportRenderer("license-report.json"))
 }
 
@@ -42,6 +46,22 @@ android {
         versionName = "2.2.0"
     }
 
+    // "gms" is the full build (Chromecast + Nearby Share via Google Play Services) shipped to
+    // GitHub Releases / Orion Store / IzzyOnDroid. "foss" strips both — required for official
+    // F-Droid inclusion, which rejects hard dependencies on GMS. Cast/Nearby call sites never
+    // reference GMS types directly (they go through CastManager/NearbyShareManager, or the
+    // CastButton composable), so each flavor just provides its own implementation of those
+    // under identical public APIs — no call-site branching needed anywhere else.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("gms") {
+            dimension = "distribution"
+        }
+        create("foss") {
+            dimension = "distribution"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -69,11 +89,16 @@ android {
     ksp {
         arg("room.schemaLocation", "$projectDir/schemas")
     }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
     implementation(libs.androidx.compose.foundation.layout)
-    implementation(libs.play.services.cast.framework)
     // ── Compose BOM ──────────────────────────────────────────────────────────
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
@@ -107,8 +132,8 @@ dependencies {
     implementation("androidx.media3:media3-session:1.5.0")
     implementation("androidx.media3:media3-common:1.5.0")
 
-    // ── Google Cast ──────────────────────────────────────────────────────────
-    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
+    // ── Google Cast (gms flavor only — pulls in androidx.mediarouter transitively) ──────────
+    "gmsImplementation"(libs.play.services.cast.framework)
     implementation("org.nanohttpd:nanohttpd:2.3.1")
 
     // ── WorkManager ──────────────────────────────────────────────────────────
@@ -154,11 +179,26 @@ dependencies {
 
     // ── Guava (used by Media3 internals) ─────────────────────────────────────
     implementation("com.google.guava:guava:33.3.1-android")
-    // ── Share ────────────────────────────────────────────────────────────────
-    implementation("com.google.android.gms:play-services-nearby:19.3.0")
+    // ── Share (Nearby Connections is gms flavor only; QR/relay sharing works on foss too) ────
+    "gmsImplementation"("com.google.android.gms:play-services-nearby:19.3.0")
     implementation("com.google.zxing:core:3.5.3")
     // ── Tag Editing ──────────────────────────────────────────────────────────
     implementation("net.jthink:jaudiotagger:3.0.1")
     // ── Secure Storage (Keystore-backed encryption for Navidrome password / Last.fm session key) ──
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // ── Testing ──────────────────────────────────────────────────────────────
+    testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("androidx.test:core-ktx:1.6.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("io.mockk:mockk:1.14.11")
+}
+
+// Robolectric's SQLite is backed by a real native library, which resolves 'localtime' in
+// HistoryDao's date/hour queries via the process's TZ environment variable (glibc tzset()) —
+// java.util.TimeZone.setDefault() alone doesn't reach it. Pinning TZ for the whole test JVM
+// process keeps those date-bucketing tests deterministic regardless of the host/CI timezone.
+tasks.withType<Test> {
+    environment("TZ", "UTC")
 }

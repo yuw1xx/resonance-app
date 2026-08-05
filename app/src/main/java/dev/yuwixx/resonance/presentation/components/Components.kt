@@ -25,16 +25,19 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.*
-import androidx.mediarouter.media.MediaRouter
-import androidx.mediarouter.media.MediaRouteSelector
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
-import com.google.android.gms.cast.framework.CastContext
 import dev.yuwixx.resonance.data.model.MixType
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.model.WaveformData
@@ -257,10 +260,21 @@ fun MaterialYou3Seekbar(
     var dragProgress by remember { mutableFloatStateOf(0f) }
     val displayProgress = if (isDragging) dragProgress else animatedProgress
 
+    // A thin track reads as a plain rectangle no matter its corner radius (8dp tall with a 4dp
+    // radius is imperceptible as "rounded" at normal viewing distance) — 14dp is thick enough
+    // for the pill shape to actually be visible, matching the Android 13+ media-notification
+    // seekbar this style is meant to evoke.
     val activeHeight by animateDpAsState(
-        targetValue = if (isDragging) 16.dp else 8.dp,
+        targetValue = if (isDragging) 22.dp else 14.dp,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "m3_height"
+    )
+    // Always visible, not just while dragging — on a track this thick, a bare color transition
+    // alone doesn't read as "there's a handle here."
+    val thumbHeight by animateDpAsState(
+        targetValue = if (isDragging) 32.dp else 22.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "m3_thumb_height"
     )
 
     Canvas(
@@ -290,31 +304,38 @@ fun MaterialYou3Seekbar(
         val height = activeHeight.toPx()
         val cy = size.height / 2f
         val splitX = displayProgress * width
+        val thumbWidth = 4.dp.toPx()
+        // A small gap around the thumb keeps the played/remaining segments from visually
+        // merging into it — another Android 13+ media-seekbar trait that helps the handle read
+        // as a distinct, grabbable element instead of just part of the track.
+        val gap = 6.dp.toPx()
+        val playedEnd = (splitX - thumbWidth / 2f - gap).coerceAtLeast(0f)
+        val remainingStart = (splitX + thumbWidth / 2f + gap).coerceAtMost(width)
 
-        drawRoundRect(
-            color = remainingColor,
-            topLeft = Offset(0f, (cy - height / 2f)),
-            size = androidx.compose.ui.geometry.Size(width, height),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(height / 2f)
-        )
-
-        drawRoundRect(
-            color = playedColor,
-            topLeft = Offset(0f, (cy - height / 2f)),
-            size = androidx.compose.ui.geometry.Size(splitX, height),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(height / 2f)
-        )
-
-        if (isDragging) {
-            val thumbWidth = 4.dp.toPx()
-            val thumbHeight = (height + 12.dp.toPx())
+        if (playedEnd > 0f) {
             drawRoundRect(
-                color = playedColor.copy(alpha = 0.9f),
-                topLeft = Offset(splitX - thumbWidth / 2f, cy - thumbHeight / 2f),
-                size = androidx.compose.ui.geometry.Size(thumbWidth, thumbHeight),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(thumbWidth / 2f)
+                color = playedColor,
+                topLeft = Offset(0f, cy - height / 2f),
+                size = androidx.compose.ui.geometry.Size(playedEnd, height),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(height / 2f)
             )
         }
+        if (remainingStart < width) {
+            drawRoundRect(
+                color = remainingColor,
+                topLeft = Offset(remainingStart, cy - height / 2f),
+                size = androidx.compose.ui.geometry.Size(width - remainingStart, height),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(height / 2f)
+            )
+        }
+
+        val thumbH = thumbHeight.toPx()
+        drawRoundRect(
+            color = playedColor,
+            topLeft = Offset(splitX - thumbWidth / 2f, cy - thumbH / 2f),
+            size = androidx.compose.ui.geometry.Size(thumbWidth, thumbH),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(thumbWidth / 2f)
+        )
     }
 }
 
@@ -437,98 +458,6 @@ fun WaveformSeekbar(
                             brush = smoothBrush,
                             start = Offset(barCX, top),
                             end = Offset(barCX, bottom),
-                            strokeWidth = barW,
-                            cap = StrokeCap.Round,
-                        )
-                    }
-                }
-            },
-    ) {
-    }
-}
-
-// Cava-style spectrum analyzer doubling as a seekbar: bars grow up from the baseline driven
-// by live FFT magnitudes from VisualizerStateHolder, colored played/remaining like the other
-// seekbar styles, with drag-to-seek support.
-@Composable
-fun CavaSeekbar(
-    magnitudes: FloatArray,
-    positionProvider: () -> Long,
-    durationMs: Long,
-    onSeek: (Long) -> Unit,
-    modifier: Modifier = Modifier,
-    playedColor: Color = MaterialTheme.colorScheme.primary,
-    remainingColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
-    barSpacingDp: Dp = 3.dp,
-    minHeightFraction: Float = 0.04f,
-) {
-    val haptics = LocalHapticFeedback.current
-    val config = LocalAppearanceConfig.current
-    val positionMs by remember { derivedStateOf { positionProvider() } }
-
-    val targetProgress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-    val animatedProgress by animateFloatAsState(
-        targetValue = targetProgress,
-        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing),
-        label = "cava_progress",
-    )
-
-    var isDragging by remember { mutableStateOf(false) }
-    var dragProgress by remember { mutableFloatStateOf(0f) }
-    val displayProgress = if (isDragging) dragProgress else animatedProgress
-
-    // Gravity-style smoothing: bars jump up instantly on a new peak but fall back down
-    // gradually — this alone is most of what makes a spectrum analyzer read as "cava" rather
-    // than a jittery bar chart, since raw FFT captures are noisy frame to frame.
-    val smoothedRef = remember { FloatArray(magnitudes.size) }
-    val smoothed = remember(magnitudes) {
-        for (i in magnitudes.indices) {
-            val target = magnitudes[i]
-            smoothedRef[i] = if (target > smoothedRef[i]) target else smoothedRef[i] * 0.82f
-        }
-        smoothedRef.copyOf()
-    }
-
-    Canvas(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .preferredFrameRateSafe(120f)
-            .pointerInput(durationMs) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull() ?: continue
-                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                        dragProgress = fraction
-                        if (change.pressed) {
-                            isDragging = true
-                            onSeek((fraction * durationMs).toLong())
-                            if (config.hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        } else {
-                            isDragging = false
-                        }
-                    }
-                }
-            }
-            .drawWithCache {
-                onDrawWithContent {
-                    val count = smoothed.size.coerceAtLeast(1)
-                    val gap = barSpacingDp.toPx()
-                    val barW = ((size.width - gap * (count - 1)) / count).coerceAtLeast(1f)
-                    val step = barW + gap
-                    val splitX = displayProgress * size.width
-
-                    for (i in 0 until count) {
-                        val barCX = i * step + barW / 2f
-                        val amp = smoothed[i].coerceAtLeast(minHeightFraction)
-                        val barH = (amp * size.height).coerceIn(size.height * minHeightFraction, size.height)
-                        val color = if (barCX <= splitX) playedColor else remainingColor
-
-                        drawLine(
-                            color = color,
-                            start = Offset(barCX, size.height),
-                            end = Offset(barCX, size.height - barH),
                             strokeWidth = barW,
                             cap = StrokeCap.Round,
                         )
@@ -920,202 +849,6 @@ fun MiniPlayer(
     }
 }
 
-@Composable
-fun CastButton(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    var showSheet by remember { mutableStateOf(false) }
-    val router = remember { MediaRouter.getInstance(context) }
-    val castSelector = remember {
-        try { CastContext.getSharedInstance(context)?.mergedSelector } catch (_: Exception) { null }
-    }
-    var isCasting by remember { mutableStateOf(!router.selectedRoute.isDefault) }
-
-    DisposableEffect(Unit) {
-        fun sync() { isCasting = !router.selectedRoute.isDefault }
-        val cb = object : MediaRouter.Callback() {
-            override fun onRouteAdded(r: MediaRouter, route: MediaRouter.RouteInfo) = sync()
-            override fun onRouteRemoved(r: MediaRouter, route: MediaRouter.RouteInfo) = sync()
-            override fun onRouteChanged(r: MediaRouter, route: MediaRouter.RouteInfo) = sync()
-            @Suppress("OVERRIDE_DEPRECATION")
-            override fun onRouteSelected(r: MediaRouter, route: MediaRouter.RouteInfo) = sync()
-            @Suppress("OVERRIDE_DEPRECATION")
-            override fun onRouteUnselected(r: MediaRouter, route: MediaRouter.RouteInfo) = sync()
-        }
-        castSelector?.let { router.addCallback(it, cb, 0) }
-        onDispose { router.removeCallback(cb) }
-    }
-
-    val castTint by animateColorAsState(
-        targetValue = if (isCasting) MaterialTheme.colorScheme.primary
-                      else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = tween(200),
-        label = "cast_tint",
-    )
-
-    IconButton(onClick = { showSheet = true }, modifier = modifier) {
-        Icon(Icons.Rounded.Cast, contentDescription = "Cast", tint = castTint)
-    }
-
-    if (showSheet) {
-        CastSheet(
-            router = router,
-            castSelector = castSelector,
-            onDisconnect = {
-                try { CastContext.getSharedInstance(context)?.sessionManager?.endCurrentSession(true) }
-                catch (_: Exception) {}
-            },
-            onDismiss = { showSheet = false },
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CastSheet(
-    router: MediaRouter,
-    castSelector: MediaRouteSelector?,
-    onDisconnect: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var routes by remember { mutableStateOf<List<MediaRouter.RouteInfo>>(emptyList()) }
-    val connectedRoute by remember { derivedStateOf { routes.firstOrNull { it.isSelected } } }
-
-    DisposableEffect(Unit) {
-        fun sync() {
-            routes = router.routes.filter { r ->
-                !r.isDefault && (castSelector == null || r.matchesSelector(castSelector))
-            }
-        }
-        val cb = object : MediaRouter.Callback() {
-            override fun onRouteAdded(r: MediaRouter, route: MediaRouter.RouteInfo) = sync()
-            override fun onRouteRemoved(r: MediaRouter, route: MediaRouter.RouteInfo) = sync()
-            override fun onRouteChanged(r: MediaRouter, route: MediaRouter.RouteInfo) = sync()
-            @Suppress("OVERRIDE_DEPRECATION")
-            override fun onRouteSelected(r: MediaRouter, route: MediaRouter.RouteInfo) = sync()
-            @Suppress("OVERRIDE_DEPRECATION")
-            override fun onRouteUnselected(r: MediaRouter, route: MediaRouter.RouteInfo) = sync()
-        }
-        castSelector?.let { router.addCallback(it, cb, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY) }
-        sync()
-        onDispose { router.removeCallback(cb) }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-    ) {
-        Column(modifier = Modifier.padding(bottom = 32.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Icon(
-                    Icons.Rounded.Cast, null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp),
-                )
-                Text(
-                    "Cast",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            if (connectedRoute != null) {
-                ListItem(
-                    headlineContent = { Text(connectedRoute!!.name, fontWeight = FontWeight.SemiBold) },
-                    supportingContent = {
-                        Text(
-                            "Connected",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    },
-                    leadingContent = {
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(40.dp)) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(castDeviceIcon(connectedRoute!!), null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
-                            }
-                        }
-                    },
-                )
-
-                ListItem(
-                    modifier = Modifier.clickable { onDisconnect(); onDismiss() },
-                    headlineContent = { Text("Disconnect", color = MaterialTheme.colorScheme.error) },
-                    leadingContent = {
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.size(40.dp)) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Rounded.LinkOff, null, tint = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.size(20.dp))
-                            }
-                        }
-                    },
-                )
-
-                val otherRoutes = routes.filter { !it.isSelected }
-                if (otherRoutes.isNotEmpty()) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
-                    Text(
-                        "Other devices",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                    )
-                    otherRoutes.forEach { CastRouteItem(it) { it.select(); onDismiss() } }
-                }
-            } else if (routes.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
-                        Text(
-                            "Searching for devices…",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            } else {
-                routes.forEach { CastRouteItem(it) { it.select(); onDismiss() } }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CastRouteItem(route: MediaRouter.RouteInfo, onClick: () -> Unit) {
-    ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
-        headlineContent = { Text(route.name) },
-        supportingContent = route.description?.takeIf { it.isNotBlank() }?.let { desc ->
-            { Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        },
-        leadingContent = {
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(40.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(castDeviceIcon(route), null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
-                }
-            }
-        },
-    )
-}
-
-private fun castDeviceIcon(route: MediaRouter.RouteInfo) = when (route.deviceType) {
-    MediaRouter.RouteInfo.DEVICE_TYPE_TV -> Icons.Rounded.Tv
-    MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER -> Icons.Rounded.Speaker
-    else -> Icons.Rounded.Cast
-}
-
 fun formatDuration(ms: Long): String {
     val totalSeconds = ms / 1000
     val hours = totalSeconds / 3600
@@ -1126,6 +859,71 @@ fun formatDuration(ms: Long): String {
     } else {
         "%d:%02d".format(minutes, seconds)
     }
+}
+
+// "2h 15m" style, for cumulative listening totals — distinct from formatDuration's "3:45"
+// track-position style above.
+fun formatListenDuration(ms: Long): String {
+    if (ms <= 0) return "0m"
+    val totalMinutes = ms / 60000
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+}
+
+// Codec label derived from mimeType, shared by the player screen's format chip, the song
+// detail info card, and the statistics format-breakdown chart.
+fun audioFormatLabel(mimeType: String): String = when {
+    mimeType.contains("flac", ignoreCase = true) -> "FLAC"
+    mimeType.contains("opus", ignoreCase = true) -> "Opus"
+    mimeType.contains("ogg", ignoreCase = true) || mimeType.contains("vorbis", ignoreCase = true) -> "OGG"
+    mimeType.contains("mp4", ignoreCase = true) || mimeType.contains("aac", ignoreCase = true) -> "AAC"
+    else -> "MP3"
+}
+
+// Renders each artist as its own clickable segment (e.g. "ArtistA, ArtistB" from a raw
+// "ArtistA/ArtistB" tag) instead of one Text with a single click target resolving to only the
+// first artist — see Song.artists/displayArtist.
+@Composable
+fun MultiArtistText(
+    artists: List<String>,
+    onArtistClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    style: TextStyle = LocalTextStyle.current,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    maxLines: Int = 1,
+) {
+    // Memoized on (artists, onArtistClick) — this sits inside the Player's PlaybackControls,
+    // which recomposes continuously as playback position ticks (10x/sec); without this, the
+    // AnnotatedString + LinkAnnotation objects below were being rebuilt from scratch on every
+    // one of those recompositions even though the artist list itself changes only on song change.
+    val text = remember(artists, onArtistClick) {
+        // Explicit no-op styles — LinkAnnotation.Clickable defaults to the usual blue/underlined
+        // hyperlink look, but these should read as plain text that merely happens to be tappable.
+        val linkStyles = TextLinkStyles(style = SpanStyle(color = Color.Unspecified, textDecoration = TextDecoration.None))
+        buildAnnotatedString {
+            artists.forEachIndexed { i, artist ->
+                withLink(
+                    LinkAnnotation.Clickable(
+                        tag = "artist_$i",
+                        styles = linkStyles,
+                        linkInteractionListener = { onArtistClick(artist) },
+                    )
+                ) {
+                    append(artist)
+                }
+                if (i != artists.lastIndex) append(", ")
+            }
+        }
+    }
+    Text(
+        text = text,
+        modifier = modifier,
+        style = style,
+        color = color,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 private data class ConfettiPiece(

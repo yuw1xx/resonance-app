@@ -274,6 +274,47 @@ class NearbyShareManager @Inject constructor(
         stopScanning()
     }
 
+    sealed class DiagnosticResult {
+        data class Success(val message: String) : DiagnosticResult()
+        data class Failure(val message: String) : DiagnosticResult()
+    }
+
+    // Kept on the manager (rather than inline in ShareViewModel) so it's the one place per
+    // flavor that touches GMS-specific availability APIs — the foss flavor's stub always
+    // returns Failure without ever referencing GoogleApiAvailability/ConnectionResult.
+    fun checkAvailability(): DiagnosticResult {
+        val grapheneHint = if (isGrapheneOs) {
+            "\n\nGrapheneOS detected — Sandboxed Google Play Services needs extra permissions:\n" +
+            "Settings → Apps → Google Play Services → Permissions → enable Nearby devices"
+        } else ""
+
+        val gpsResult = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context)
+        if (gpsResult == ConnectionResult.SERVICE_MISSING ||
+            gpsResult == ConnectionResult.SERVICE_DISABLED ||
+            gpsResult == ConnectionResult.SERVICE_INVALID) {
+            return DiagnosticResult.Failure("Google Play Services is not available (code $gpsResult). Nearby Share requires it.$grapheneHint")
+        }
+
+        val required = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            listOf(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+        } else {
+            listOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        val missing = required.filter {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) !=
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) {
+            return DiagnosticResult.Failure("Missing permission: ${missing.joinToString()}$grapheneHint")
+        }
+
+        if (!isLocationEnabled()) {
+            return DiagnosticResult.Failure("System Location is OFF. Nearby requires it even though your coordinates are never used.$grapheneHint")
+        }
+
+        return DiagnosticResult.Success("Google Play Services and permissions look good.$grapheneHint")
+    }
+
     fun clearIncoming() {
         _incomingFile.value = null
         _incomingRequest.value = null

@@ -1,0 +1,27 @@
+Resonance is a powerful local music player built entirely with Kotlin and Jetpack Compose, designed for people who want full control over their listening experience — no ads, no subscriptions, completely FOSS forever.
+
+<b>Playback</b>
+* Gapless playback and configurable crossfade
+* ReplayGain 2.0 with per-track/per-album normalization
+* Skip silence, playback speed and independent pitch control
+* History-aware smart shuffle and a sleep timer
+
+<b>Library</b>
+* Full MediaStore integration with folder browsing and excluded folders
+* Configurable multi-artist tag delimiters
+* Sort and filter by title, artist, album, date added, duration, and play count
+* Persistent queue across restarts
+
+<b>Streaming</b>
+* Navidrome / Subsonic support — browse, stream, and scrobble from your self-hosted server
+* Chromecast support
+
+<b>Lyrics</b>
+* Synced lyrics with LRC, TTML, and word-level karaoke support
+* Reads embedded lyrics from ID3 tags
+* Automatic online lookup via LRCLib
+* Built-in lyrics editor
+
+Resonance also supports peer-to-peer song sharing without an account, Last.fm scrobbling, and a Material You interface that adapts to your device's theme.
+
+Source code: https://github.com/yuw1xx/resonance-app
