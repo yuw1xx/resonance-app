@@ -1325,6 +1325,20 @@ fun SettingsScreen(
                                     onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance-app") },
                                 )
                                 SettingsTextItem(
+                                    title = "Resonance Website",
+                                    subtitle = "Try the web client at resonance.yuwixx.dev",
+                                    icon = Icons.Rounded.Language,
+                                    trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
+                                    onClick = { uriHandler.openUri("https://resonance.yuwixx.dev") },
+                                )
+                                SettingsTextItem(
+                                    title = "Join the Discord",
+                                    subtitle = "Chat, get help, or become a tester",
+                                    icon = Icons.Rounded.Forum,
+                                    trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
+                                    onClick = { uriHandler.openUri("https://discord.gg/SftqvvveMj") },
+                                )
+                                SettingsTextItem(
                                     title = "App License",
                                     subtitle = "View Resonance's open source license",
                                     icon = Icons.Rounded.Gavel,

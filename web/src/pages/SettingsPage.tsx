@@ -889,6 +889,30 @@ export function SettingsPage() {
               <Icon name="open_in_new" size={14} />
             </span>
           </a>
+          <a
+            href="https://github.com/yuw1xx/resonance-app/releases"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-on-surface/5 transition-colors duration-150"
+          >
+            <span className="text-[14px] text-on-surface-var">Android app</span>
+            <span className="flex items-center gap-1 text-[13px] text-primary font-[500]">
+              Download
+              <Icon name="open_in_new" size={14} />
+            </span>
+          </a>
+          <a
+            href="https://discord.gg/SftqvvveMj"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-on-surface/5 transition-colors duration-150"
+          >
+            <span className="text-[14px] text-on-surface-var">Community</span>
+            <span className="flex items-center gap-1 text-[13px] text-primary font-[500]">
+              Discord
+              <Icon name="open_in_new" size={14} />
+            </span>
+          </a>
         </Section>
       </div>
     </div>
