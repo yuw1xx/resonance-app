@@ -1,5 +1,9 @@
 > [!IMPORTANT]
+> The updates for this app will be slower due to me attending a university, thanks for understanding and supporting this project! <3
+
+> [!NOTE]
 > Please join my Discord server, I'm currently looking for testers so I can release the app on Google Play as well, thank you!! https://discord.gg/SftqvvveMj
+
 
 <div align="center">
   <h1>Resonance</h1>
