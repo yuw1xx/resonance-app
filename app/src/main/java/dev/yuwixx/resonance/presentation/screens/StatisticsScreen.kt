@@ -1,35 +1,47 @@
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AccessTime
+import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.CalendarViewWeek
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.PieChart
+import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import dev.yuwixx.resonance.data.database.dao.HourPlayCount
 import dev.yuwixx.resonance.presentation.components.AppSectionHeader
+import dev.yuwixx.resonance.presentation.components.ArtworkImage
+import dev.yuwixx.resonance.presentation.components.BarChart
+import dev.yuwixx.resonance.presentation.components.DonutChart
+import dev.yuwixx.resonance.presentation.components.EmphasizedAccelerate
+import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
+import dev.yuwixx.resonance.presentation.components.LineChart
+import dev.yuwixx.resonance.presentation.components.formatListenDuration
+import dev.yuwixx.resonance.presentation.components.staggeredEntrance
+import dev.yuwixx.resonance.data.repository.toDomain
 import dev.yuwixx.resonance.presentation.viewmodel.StatsPeriod
 import dev.yuwixx.resonance.presentation.viewmodel.StatisticsData
 import dev.yuwixx.resonance.presentation.viewmodel.StatisticsViewModel
-import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,102 +67,195 @@ fun StatisticsScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 24.dp),
+        // Was a LazyColumn of item{}/items{} blocks — switched to a plain scrollable Column so
+        // the whole dashboard body (charts + top lists, all bounded/small content, not the full
+        // library) can live inside one AnimatedContent slot and crossfade as a unit on period
+        // change, instead of every section hard-cutting independently.
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
         ) {
-            item {
-                PeriodSelector(period = period, onSelect = viewModel::setPeriod)
-            }
+            PeriodSelector(period = period, onSelect = viewModel::setPeriod)
 
-            if (stats == null) {
-                item {
+            AnimatedContent(
+                targetState = stats,
+                transitionSpec = {
+                    fadeIn(tween(340, easing = EmphasizedDecelerate)) togetherWith
+                        fadeOut(tween(210, easing = EmphasizedAccelerate))
+                },
+                label = "stats_dashboard",
+            ) { currentStats ->
+                if (currentStats == null) {
                     Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
-                }
-            } else {
-                val data = stats!!
+                } else {
+                    val data = currentStats
+                    Column(modifier = Modifier.padding(bottom = 24.dp)) {
+                        SummaryCards(data)
 
-                item { SummaryCards(data) }
-
-                if (data.hourlyActivity.isNotEmpty()) {
-                    item {
-                        AppSectionHeader("Activity by Hour", Icons.Rounded.AccessTime)
-                        HourlyChart(
-                            data = data.hourlyActivity,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .height(140.dp),
-                        )
-                    }
-                }
-
-                if (data.topSongs.isNotEmpty()) {
-                    item { AppSectionHeader("Top Songs", Icons.Rounded.MusicNote) }
-                    items(data.topSongs) { (song, count) ->
-                        ListItem(
-                            headlineContent = {
-                                Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            },
-                            supportingContent = {
-                                Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            },
-                            leadingContent = {
-                                Icon(
-                                    Icons.Rounded.MusicNote,
-                                    null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            },
-                            trailingContent = {
-                                Text(
-                                    "$count plays",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            },
-                        )
-                    }
-                }
-
-                if (data.topArtists.isNotEmpty()) {
-                    item { AppSectionHeader("Top Artists", Icons.Rounded.Person) }
-                    items(data.topArtists) { (artist, count) ->
-                        ListItem(
-                            headlineContent = {
-                                Text(artist, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            },
-                            leadingContent = {
-                                Icon(
-                                    Icons.Rounded.Person,
-                                    null,
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                )
-                            },
-                            trailingContent = {
-                                Text(
-                                    "$count plays",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            },
-                        )
-                    }
-                }
-
-                if (data.topSongs.isEmpty() && data.topArtists.isEmpty()) {
-                    item {
-                        Box(
-                            Modifier.fillMaxWidth().padding(48.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                "No listening history for this period",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (data.dailyTrend.size > 1) {
+                            AppSectionHeader("Listening Trend", Icons.Rounded.ShowChart)
+                            LineChart(
+                                points = data.dailyTrend.map { it.totalMs.toFloat() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .height(120.dp),
                             )
+                        }
+
+                        if (data.hourlyActivity.isNotEmpty()) {
+                            AppSectionHeader("Activity by Hour", Icons.Rounded.AccessTime)
+                            val hourMap = data.hourlyActivity.associate { it.hour to it.playCount }
+                            BarChart(
+                                values = (0..23).map { (hourMap[it] ?: 0).toFloat() },
+                                labels = listOf("0", "6", "12", "18", "23"),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .height(140.dp),
+                            )
+                        }
+
+                        if (data.dayOfWeekActivity.isNotEmpty()) {
+                            AppSectionHeader("Activity by Day", Icons.Rounded.CalendarViewWeek)
+                            val dowMap = data.dayOfWeekActivity.associate { it.dayOfWeek to it.playCount }
+                            BarChart(
+                                values = (0..6).map { (dowMap[it] ?: 0).toFloat() },
+                                labels = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .height(140.dp),
+                            )
+                        }
+
+                        if (data.genreBreakdown.isNotEmpty()) {
+                            AppSectionHeader("Genres", Icons.Rounded.PieChart)
+                            DonutChart(
+                                entries = data.genreBreakdown,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+
+                        if (data.formatBreakdown.isNotEmpty()) {
+                            AppSectionHeader("Formats", Icons.Rounded.GraphicEq)
+                            BarChart(
+                                values = data.formatBreakdown.map { it.second.toFloat() },
+                                labels = data.formatBreakdown.map { it.first },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .height(120.dp),
+                            )
+                        }
+
+                        if (data.topSongs.isNotEmpty()) {
+                            AppSectionHeader("Top Songs", Icons.Rounded.MusicNote)
+                            data.topSongs.forEachIndexed { index, (song, count) ->
+                                ListItem(
+                                    modifier = Modifier.staggeredEntrance(index),
+                                    headlineContent = {
+                                        Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    },
+                                    supportingContent = {
+                                        Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    },
+                                    leadingContent = {
+                                        ArtworkImage(
+                                            uri = song.toDomain().artworkUri,
+                                            contentDescription = song.album,
+                                            modifier = Modifier.size(44.dp),
+                                            cornerRadius = 8.dp,
+                                            onArtworkMissing = { viewModel.getSongArtworkUrl(song) },
+                                        )
+                                    },
+                                    trailingContent = {
+                                        Text(
+                                            "$count plays",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+
+                        if (data.topArtists.isNotEmpty()) {
+                            AppSectionHeader("Top Artists", Icons.Rounded.Person)
+                            data.topArtists.forEachIndexed { index, (artist, count) ->
+                                ListItem(
+                                    modifier = Modifier.staggeredEntrance(index),
+                                    headlineContent = {
+                                        Text(artist, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    },
+                                    leadingContent = {
+                                        ArtworkImage(
+                                            uri = null,
+                                            contentDescription = artist,
+                                            modifier = Modifier.size(44.dp),
+                                            cornerRadius = 22.dp,
+                                            onArtworkMissing = { viewModel.getArtistArtworkUrl(artist) },
+                                        )
+                                    },
+                                    trailingContent = {
+                                        Text(
+                                            "$count plays",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+
+                        if (data.topAlbums.isNotEmpty()) {
+                            AppSectionHeader("Top Albums", Icons.Rounded.Album)
+                            data.topAlbums.forEachIndexed { index, (song, count) ->
+                                ListItem(
+                                    modifier = Modifier.staggeredEntrance(index),
+                                    headlineContent = {
+                                        Text(song.album.ifBlank { "Unknown Album" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    },
+                                    supportingContent = {
+                                        Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    },
+                                    leadingContent = {
+                                        ArtworkImage(
+                                            uri = song.toDomain().artworkUri,
+                                            contentDescription = song.album,
+                                            modifier = Modifier.size(44.dp),
+                                            cornerRadius = 8.dp,
+                                            onArtworkMissing = { viewModel.getSongArtworkUrl(song) },
+                                        )
+                                    },
+                                    trailingContent = {
+                                        Text(
+                                            "$count plays",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+
+                        if (data.topSongs.isEmpty() && data.topArtists.isEmpty()) {
+                            Box(
+                                Modifier.fillMaxWidth().padding(48.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    "No listening history for this period",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
@@ -184,22 +289,41 @@ private fun SummaryCards(data: StatisticsData) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("Listening Time", formatDuration(data.totalListenTimeMs), Modifier.weight(1f))
-            StatCard("Tracks Played", data.playCount.toString(), Modifier.weight(1f))
+            StatCard("Listening Time", data.totalListenTimeMs, Modifier.weight(1f)) { formatListenDuration(it) }
+            StatCard("Tracks Played", data.playCount.toLong(), Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCard("Unique Tracks", data.uniqueTrackCount.toString(), Modifier.weight(1f))
+            StatCard("Unique Tracks", data.uniqueTrackCount.toLong(), Modifier.weight(1f))
             StatCard(
                 label = "Listen Streak",
-                value = if (data.listenStreak > 0) "${data.listenStreak} days" else "–",
+                rawValue = data.listenStreak.toLong(),
                 modifier = Modifier.weight(1f),
-            )
+            ) { if (it > 0) "$it days" else "–" }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatCard(
+                label = "Longest Streak",
+                rawValue = data.longestStreak.toLong(),
+                modifier = Modifier.weight(1f),
+            ) { if (it > 0) "$it days" else "–" }
+            StatCard("Avg Session", data.avgSessionMs, Modifier.weight(1f)) { formatListenDuration(it) }
         }
     }
 }
 
 @Composable
-private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatCard(
+    label: String,
+    rawValue: Long,
+    modifier: Modifier = Modifier,
+    format: (Long) -> String = { it.toString() },
+) {
+    // Counts up/down toward the new value on period change instead of the number jumping — Long
+    // rather than Int since listening-time totals (ms) can exceed Int range over long periods.
+    val animatedValue = remember { Animatable(0f) }
+    LaunchedEffect(rawValue) {
+        animatedValue.animateTo(rawValue.toFloat(), tween(600, easing = EmphasizedDecelerate))
+    }
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
@@ -207,66 +331,8 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
         ),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(format(animatedValue.value.toLong()), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-}
-
-@Composable
-private fun HourlyChart(data: List<HourPlayCount>, modifier: Modifier = Modifier) {
-    val primary = MaterialTheme.colorScheme.primary
-    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
-    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
-
-    val hourMap = data.associate { it.hour to it.playCount }
-    val maxCount = (data.maxOfOrNull { it.playCount } ?: 1).coerceAtLeast(1)
-
-    Column(modifier = modifier) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-        ) {
-            val barWidth = size.width / 24f
-            val maxBarH = size.height
-
-            for (hour in 0..23) {
-                val count = hourMap[hour] ?: 0
-                val barH = (count.toFloat() / maxCount) * maxBarH
-                val x = hour * barWidth
-
-                drawRect(
-                    color = surfaceVariant,
-                    topLeft = Offset(x + 2f, 0f),
-                    size = Size(barWidth - 4f, maxBarH),
-                )
-                if (barH > 0f) {
-                    drawRect(
-                        color = primary,
-                        topLeft = Offset(x + 2f, maxBarH - barH),
-                        size = Size(barWidth - 4f, barH),
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            listOf("0", "6", "12", "18", "23").forEach { label ->
-                Text(label, style = MaterialTheme.typography.labelSmall, color = onSurfaceVariant)
-            }
-        }
-    }
-}
-
-private fun formatDuration(ms: Long): String {
-    if (ms <= 0) return "0m"
-    val hours = TimeUnit.MILLISECONDS.toHours(ms)
-    val minutes = TimeUnit.MILLISECONDS.toMinutes(ms) % 60
-    return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
 }

@@ -34,6 +34,7 @@ import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.repository.LastFmAuthState
 import dev.yuwixx.resonance.data.repository.NavidromeConnectionState
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
+import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
 import dev.yuwixx.resonance.presentation.viewmodel.SettingsViewModel
 
 private const val TOTAL_STEPS = 5
@@ -88,11 +89,11 @@ fun SetupScreen(onComplete: () -> Unit) {
             AnimatedContent(
                 targetState = currentStep,
                 transitionSpec = {
-                    (slideInHorizontally(tween(420, easing = EmphasizedDecelerate)) { it } +
-                        fadeIn(tween(350, easing = EmphasizedDecelerate)))
+                    (slideInHorizontally(tween(590, easing = EmphasizedDecelerate)) { it } +
+                        fadeIn(tween(490, easing = EmphasizedDecelerate)))
                         .togetherWith(
-                            slideOutHorizontally(tween(340, easing = EmphasizedAccelerate)) { -it } +
-                                fadeOut(tween(180, easing = EmphasizedAccelerate))
+                            slideOutHorizontally(tween(480, easing = EmphasizedAccelerate)) { -it } +
+                                fadeOut(tween(250, easing = EmphasizedAccelerate))
                         )
                 },
                 label = "setup_steps"
@@ -135,65 +136,86 @@ fun SetupScreen(onComplete: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 repeat(visibleSteps) { index ->
                     val dotStep = if (chosenSource == MusicSource.NAVIDROME && index >= 2) index + 1 else index
+                    val isActiveDot = dotStep == currentStep
+                    val dotSize by animateDpAsState(
+                        targetValue = if (isActiveDot) 12.dp else 8.dp,
+                        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+                        label = "setup_dot_size",
+                    )
+                    val dotColor by animateColorAsState(
+                        targetValue = if (isActiveDot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                        animationSpec = tween(280, easing = EmphasizedDecelerate),
+                        label = "setup_dot_color",
+                    )
                     Box(
                         modifier = Modifier
-                            .size(if (dotStep == currentStep) 12.dp else 8.dp)
+                            .size(dotSize)
                             .clip(CircleShape)
-                            .background(
-                                if (dotStep == currentStep) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.outlineVariant
-                            )
+                            .background(dotColor)
                     )
                 }
             }
 
-            when (currentStep) {
-                3 -> {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = { advance() }) { Text("Skip") }
-                        val canContinue = if (chosenSource == MusicSource.NAVIDROME) {
-                            navidromeConnectionState is NavidromeConnectionState.Connected
-                        } else {
-                            lastFmAuthState is LastFmAuthState.Authenticated
-                        }
-                        Button(
-                            onClick = { advance() },
-                            shape = MaterialTheme.shapes.medium,
-                            enabled = canContinue
+            AnimatedContent(
+                targetState = currentStep,
+                transitionSpec = {
+                    (fadeIn(tween(280, easing = EmphasizedDecelerate)) +
+                        scaleIn(tween(280, easing = EmphasizedDecelerate), initialScale = 0.92f))
+                        .togetherWith(
+                            fadeOut(tween(180, easing = EmphasizedAccelerate)) +
+                                scaleOut(tween(180, easing = EmphasizedAccelerate), targetScale = 0.92f)
+                        )
+                },
+                label = "setup_bottom_buttons",
+            ) { step ->
+                when (step) {
+                    3 -> {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Continue")
-                            Icon(
-                                Icons.AutoMirrored.Rounded.ArrowForward, null,
-                                modifier = Modifier.padding(start = 8.dp).size(18.dp)
-                            )
+                            TextButton(onClick = { advance() }) { Text("Skip") }
+                            val canContinue = if (chosenSource == MusicSource.NAVIDROME) {
+                                navidromeConnectionState is NavidromeConnectionState.Connected
+                            } else {
+                                lastFmAuthState is LastFmAuthState.Authenticated
+                            }
+                            Button(
+                                onClick = { advance() },
+                                shape = MaterialTheme.shapes.medium,
+                                enabled = canContinue
+                            ) {
+                                Text("Continue")
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.ArrowForward, null,
+                                    modifier = Modifier.padding(start = 8.dp).size(18.dp)
+                                )
+                            }
                         }
                     }
-                }
-                else -> {
-                    Button(
-                        onClick = {
-                            when {
-                                currentStep < TOTAL_STEPS - 1 -> {
-                                    if (currentStep == 2 && !permissionState.allPermissionsGranted) {
-                                        permissionState.launchMultiplePermissionRequest()
-                                    } else {
-                                        advance()
+                    else -> {
+                        Button(
+                            onClick = {
+                                when {
+                                    currentStep < TOTAL_STEPS - 1 -> {
+                                        if (currentStep == 2 && !permissionState.allPermissionsGranted) {
+                                            permissionState.launchMultiplePermissionRequest()
+                                        } else {
+                                            advance()
+                                        }
                                     }
+                                    else -> onComplete()
                                 }
-                                else -> onComplete()
+                            },
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text(if (step == TOTAL_STEPS - 1) "Get Started" else "Continue")
+                            if (step < TOTAL_STEPS - 1) {
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.ArrowForward, null,
+                                    modifier = Modifier.padding(start = 8.dp).size(18.dp)
+                                )
                             }
-                        },
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Text(if (currentStep == TOTAL_STEPS - 1) "Get Started" else "Continue")
-                        if (currentStep < TOTAL_STEPS - 1) {
-                            Icon(
-                                Icons.AutoMirrored.Rounded.ArrowForward, null,
-                                modifier = Modifier.padding(start = 8.dp).size(18.dp)
-                            )
                         }
                     }
                 }
@@ -284,18 +306,40 @@ private fun SourceCard(
     description: String,
     onClick: () -> Unit,
 ) {
-    val borderColor = if (selected) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.outlineVariant
-    val containerColor = if (selected)
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        animationSpec = tween(280, easing = EmphasizedDecelerate),
+        label = "source_card_border_color",
+    )
+    val borderWidth by animateDpAsState(
+        targetValue = if (selected) 2.dp else 1.dp,
+        animationSpec = tween(280, easing = EmphasizedDecelerate),
+        label = "source_card_border_width",
+    )
+    val containerColor by animateColorAsState(
+        targetValue = if (selected)
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        animationSpec = tween(280, easing = EmphasizedDecelerate),
+        label = "source_card_container_color",
+    )
+    val iconContainerColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = tween(280, easing = EmphasizedDecelerate),
+        label = "source_card_icon_bg",
+    )
+    val iconTint by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(280, easing = EmphasizedDecelerate),
+        label = "source_card_icon_tint",
+    )
 
     Card(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .border(
-                width = if (selected) 2.dp else 1.dp,
+                width = borderWidth,
                 color = borderColor,
                 shape = RoundedCornerShape(16.dp)
             ),
@@ -309,15 +353,13 @@ private fun SourceCard(
         ) {
             Surface(
                 shape = CircleShape,
-                color = if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant,
+                color = iconContainerColor,
                 modifier = Modifier.size(48.dp)
             ) {
                 Icon(
                     icon, null,
                     modifier = Modifier.padding(12.dp),
-                    tint = if (selected) MaterialTheme.colorScheme.onPrimary
-                    else MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = iconTint
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -328,7 +370,13 @@ private fun SourceCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (selected) {
+            AnimatedVisibility(
+                visible = selected,
+                enter = scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) +
+                    fadeIn(tween(200, easing = EmphasizedDecelerate)),
+                exit = scaleOut(tween(140, easing = EmphasizedAccelerate)) +
+                    fadeOut(tween(140, easing = EmphasizedAccelerate)),
+            ) {
                 Icon(
                     Icons.Rounded.CheckCircle, null,
                     tint = MaterialTheme.colorScheme.primary
@@ -483,68 +531,79 @@ private fun NavidromeStep(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             trailingIcon = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                        contentDescription = if (passwordVisible) "Hide" else "Show"
-                    )
+                    AnimatedStateSwap(targetState = passwordVisible, label = "navidrome_password_visibility") { visible ->
+                        Icon(
+                            if (visible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                            contentDescription = if (visible) "Hide" else "Show"
+                        )
+                    }
                 }
             }
         )
 
         Spacer(Modifier.height(16.dp))
 
-        when (connectionState) {
-            is NavidromeConnectionState.Connecting -> {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text("Connecting…", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-            is NavidromeConnectionState.Connected -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-                    )
-                ) {
+        AnimatedStateSwap(
+            targetState = connectionState,
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.CenterStart,
+            label = "navidrome_connection_state",
+        ) { state ->
+            when (state) {
+                is NavidromeConnectionState.Connecting -> {
                     Row(
-                        modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
-                        Text("Connected! Tap Continue below.", style = MaterialTheme.typography.bodyMedium)
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Text("Connecting…", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
-            }
-            is NavidromeConnectionState.Error -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(Icons.Rounded.Error, null, tint = MaterialTheme.colorScheme.error)
-                        Text(
-                            connectionState.message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
+                is NavidromeConnectionState.Connected -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
                         )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                            Text("Connected! Tap Continue below.", style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
+                is NavidromeConnectionState.Error -> {
+                    Column {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(Icons.Rounded.Error, null, tint = MaterialTheme.colorScheme.error)
+                                Text(
+                                    state.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+                else -> Unit
             }
-            else -> Unit
         }
 
         if (connectionState !is NavidromeConnectionState.Connected) {
@@ -603,50 +662,58 @@ private fun LastFmStep(
 
         Spacer(Modifier.height(28.dp))
 
-        when (authState) {
-            is LastFmAuthState.Authenticated -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        AnimatedStateSwap(
+            targetState = authState,
+            modifier = Modifier.fillMaxWidth(),
+            label = "lastfm_auth_state",
+        ) { state ->
+            when (state) {
+                is LastFmAuthState.Authenticated -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                        )
                     ) {
-                        Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
-                        Column {
-                            Text("Linked as ${authState.username}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Text("Tap Continue below to proceed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                            Column {
+                                Text("Linked as ${state.username}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                Text("Tap Continue below to proceed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
-            }
-            is LastFmAuthState.Loading -> CircularProgressIndicator()
-            is LastFmAuthState.Error -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f))
-                ) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Icon(Icons.Rounded.Error, null, tint = MaterialTheme.colorScheme.error)
-                        Text(authState.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                is LastFmAuthState.Loading -> CircularProgressIndicator()
+                is LastFmAuthState.Error -> {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f))
+                        ) {
+                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Icon(Icons.Rounded.Error, null, tint = MaterialTheme.colorScheme.error)
+                                Text(state.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(onClick = { showLoginDialog = true }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
+                            LastFmBadge()
+                            Text("Try Again")
+                        }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = { showLoginDialog = true }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
-                    LastFmBadge()
-                    Text("Try Again")
-                }
-            }
-            LastFmAuthState.Idle -> {
-                Button(onClick = { showLoginDialog = true }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
-                    LastFmBadge()
-                    Text("Link Account")
+                LastFmAuthState.Idle -> {
+                    Button(onClick = { showLoginDialog = true }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
+                        LastFmBadge()
+                        Text("Link Account")
+                    }
                 }
             }
         }
@@ -687,7 +754,12 @@ private fun LastFmLoginDialog(onDismiss: () -> Unit, onLogin: (String, String) -
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, null)
+                            AnimatedStateSwap(targetState = passwordVisible, label = "lastfm_password_visibility") { visible ->
+                                Icon(
+                                    if (visible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                    contentDescription = if (visible) "Hide password" else "Show password",
+                                )
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth()

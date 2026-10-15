@@ -89,7 +89,47 @@ interface LastFmApi {
         @Query("api_key") apiKey: String,
         @Query("format") format: String = "json",
     ): LastFmTopTracksResponse
+
+    // Unauthenticated, read-only — works with the app's default API key even for users who
+    // haven't logged into Last.fm scrobbling. Used to enrich the artist info window (bio, tags)
+    // and the metadata enrichment scan (genre tags).
+    @GET("2.0/")
+    suspend fun getArtistInfo(
+        @Query("method") method: String = "artist.getInfo",
+        @Query("artist") artist: String,
+        @Query("api_key") apiKey: String,
+        @Query("format") format: String = "json",
+    ): LastFmArtistInfoResponse
 }
+
+@JsonClass(generateAdapter = true)
+data class LastFmArtistInfoResponse(
+    val artist: LastFmArtistInfo? = null,
+    val error: Int? = null,
+    val message: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class LastFmArtistInfo(
+    val name: String = "",
+    val bio: LastFmArtistBio? = null,
+    val tags: LastFmArtistTags? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class LastFmArtistBio(
+    val summary: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class LastFmArtistTags(
+    val tag: List<LastFmArtistTag> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class LastFmArtistTag(
+    val name: String = "",
+)
 
 @JsonClass(generateAdapter = true)
 data class LastFmBaseResponse(

@@ -362,6 +362,11 @@ class LastFmRepository @Inject constructor(
         return apiKey to apiSecret
     }
 
+    // Exposed for unauthenticated, read-only Last.fm calls made outside this repository (e.g.
+    // ArtistInfoRepository, MetadataEnrichmentScanner) that only need the API key, not a signed
+    // request.
+    suspend fun getApiKey(): String = getCredentials().first
+
         private suspend fun buildSignedParams(
         method: String,
         extraParams: Map<String, String> = emptyMap(),

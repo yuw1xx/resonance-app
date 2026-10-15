@@ -84,10 +84,10 @@ fun HomeScreen(
             item {
                 AnimatedVisibility(
                     visible = currentSong != null,
-                    enter = fadeIn(tween(400, easing = EmphasizedDecelerate)) +
-                            expandVertically(tween(400, easing = EmphasizedDecelerate)),
-                    exit = fadeOut(tween(300, easing = EmphasizedAccelerate)) +
-                           shrinkVertically(tween(300, easing = EmphasizedAccelerate)),
+                    enter = fadeIn(tween(560, easing = EmphasizedDecelerate)) +
+                            expandVertically(tween(560, easing = EmphasizedDecelerate)),
+                    exit = fadeOut(tween(420, easing = EmphasizedAccelerate)) +
+                           shrinkVertically(tween(420, easing = EmphasizedAccelerate)),
                 ) {
                     currentSong?.let { song ->
                         ResumeCard(
@@ -201,7 +201,7 @@ private fun ResumeCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
         label = "resume_card_press",
     )
     Card(
@@ -282,7 +282,7 @@ private fun MixCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
         label = "mix_card_press",
     )
     Card(
@@ -342,7 +342,7 @@ private fun CompactArtworkCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
         label = "compact_card_press",
     )
     Card(

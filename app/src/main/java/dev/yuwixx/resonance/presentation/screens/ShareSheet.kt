@@ -42,7 +42,12 @@ import com.google.zxing.qrcode.QRCodeWriter
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.service.NearbyShareManager
 import dev.yuwixx.resonance.data.service.ShareTransferManager
+import androidx.compose.foundation.lazy.itemsIndexed
+import dev.yuwixx.resonance.presentation.components.AnimatedPermissionGate
+import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
+import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
 import dev.yuwixx.resonance.presentation.components.SectionCard
+import dev.yuwixx.resonance.presentation.components.staggeredEntrance
 import dev.yuwixx.resonance.presentation.viewmodel.ShareViewModel
 import kotlin.math.*
 
@@ -111,24 +116,26 @@ private fun ShareSheetContent(
     val context = LocalContext.current
     var hasRequested by remember { mutableStateOf(false) }
 
-    if (viewModel.isGrapheneOs || nearbyPermissions.allPermissionsGranted) {
-        ShareMain(viewModel = viewModel, onPlayNow = onPlayNow, onDismiss = onDismiss)
-    } else {
-        val isPermanentlyDenied = hasRequested && nearbyPermissions.permissions.any { !it.status.isGranted && !it.status.shouldShowRationale }
-        PermissionPrompt(
-            isPermanentlyDenied = isPermanentlyDenied,
-            onRequest = {
-                if (isPermanentlyDenied) {
-                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = Uri.fromParts("package", context.packageName, null) }
-                    context.startActivity(intent)
-                } else {
-                    hasRequested = true
-                    nearbyPermissions.launchMultiplePermissionRequest()
-                }
-            },
-            onDismiss = onDismiss,
-        )
-    }
+    AnimatedPermissionGate(
+        granted = viewModel.isGrapheneOs || nearbyPermissions.allPermissionsGranted,
+        prompt = {
+            val isPermanentlyDenied = hasRequested && nearbyPermissions.permissions.any { !it.status.isGranted && !it.status.shouldShowRationale }
+            PermissionPrompt(
+                isPermanentlyDenied = isPermanentlyDenied,
+                onRequest = {
+                    if (isPermanentlyDenied) {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = Uri.fromParts("package", context.packageName, null) }
+                        context.startActivity(intent)
+                    } else {
+                        hasRequested = true
+                        nearbyPermissions.launchMultiplePermissionRequest()
+                    }
+                },
+                onDismiss = onDismiss,
+            )
+        },
+        content = { ShareMain(viewModel = viewModel, onPlayNow = onPlayNow, onDismiss = onDismiss) },
+    )
 }
 
 @Composable
@@ -176,7 +183,20 @@ private fun ShareMain(
         val iFile = incomingFile!!
         AlertDialog(
             onDismissRequest = { viewModel.clearIncoming() },
-            icon = { Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary) },
+            icon = {
+                var appeared by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) { appeared = true }
+                val scale by animateFloatAsState(
+                    targetValue = if (appeared) 1f else 0.5f,
+                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 200f),
+                    label = "incoming_file_icon_scale",
+                )
+                Icon(
+                    Icons.Rounded.CheckCircle, null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+                )
+            },
             title = { Text("Song received!") },
             text = {
                 Text(
@@ -274,10 +294,19 @@ private fun ShareMain(
         Spacer(Modifier.height(4.dp))
 
         // What you're sharing, up front — before how you're sharing it.
-        if (selectedSongs.size > 1) {
-            MultiSongSummary(songs = selectedSongs, modifier = Modifier.padding(horizontal = 20.dp))
-        } else {
-            SongPickerRow(song = selectedSong, onClick = { showSongPicker = true }, modifier = Modifier.padding(horizontal = 20.dp))
+        // Target on the song list itself (not a derived isMulti boolean) so the exiting content
+        // during a crossfade keeps rendering the snapshot it started with, instead of re-reading
+        // the live selection and briefly showing "Choose a song…" mid-transition.
+        AnimatedContent(
+            targetState = selectedSongs,
+            transitionSpec = { fadeIn(tween(280, easing = EmphasizedDecelerate)) togetherWith fadeOut(tween(180)) },
+            label = "share_summary_mode",
+        ) { songsSnapshot ->
+            if (songsSnapshot.size > 1) {
+                MultiSongSummary(songs = songsSnapshot, modifier = Modifier.padding(horizontal = 20.dp))
+            } else {
+                SongPickerRow(song = songsSnapshot.singleOrNull(), onClick = { showSongPicker = true }, modifier = Modifier.padding(horizontal = 20.dp))
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -311,7 +340,7 @@ private fun ShareMain(
 
             AnimatedContent(
                 targetState = statusText,
-                transitionSpec = { (fadeIn(tween(200)) + slideInVertically { -it / 3 }).togetherWith(fadeOut(tween(150))) },
+                transitionSpec = { (fadeIn(tween(280)) + slideInVertically { -it / 3 }).togetherWith(fadeOut(tween(210))) },
                 label = "status_text",
             ) { text ->
                 Text(text = text, style = MaterialTheme.typography.bodySmall, color = when {
@@ -326,8 +355,8 @@ private fun ShareMain(
             val receivingState = nearbyState as? NearbyShareManager.NearbyState.Receiving
             AnimatedVisibility(
                 visible = receivingState != null,
-                enter   = fadeIn(tween(300)) + expandVertically(tween(300)),
-                exit    = fadeOut(tween(200)) + shrinkVertically(tween(200)),
+                enter   = fadeIn(tween(420)) + expandVertically(tween(420)),
+                exit    = fadeOut(tween(280)) + shrinkVertically(tween(280)),
             ) {
                 LinearProgressIndicator(
                     progress   = { receivingState?.progress ?: 0f },
@@ -345,8 +374,8 @@ private fun ShareMain(
             AnimatedVisibility(
                 visible = nearbyState is NearbyShareManager.NearbyState.Error
                        || (nearbyState is NearbyShareManager.NearbyState.GpsUnavailable && !viewModel.isGrapheneOs),
-                enter = fadeIn(tween(300)) + expandVertically(tween(300)),
-                exit  = fadeOut(tween(200)) + shrinkVertically(tween(200)),
+                enter = fadeIn(tween(420)) + expandVertically(tween(420)),
+                exit  = fadeOut(tween(280)) + shrinkVertically(tween(280)),
             ) {
                 Row(
                     modifier = Modifier.padding(top = 4.dp),
@@ -500,24 +529,24 @@ private fun RadarAnimation(
     val infiniteTransition = rememberInfiniteTransition(label = "radar")
     val ring1 by infiniteTransition.animateFloat(
         initialValue   = 0f, targetValue = 1f,
-        animationSpec  = infiniteRepeatable(tween(2_400, easing = LinearEasing)),
+        animationSpec  = infiniteRepeatable(tween(3360, easing = LinearEasing)),
         label          = "ring1",
     )
     val ring2 by infiniteTransition.animateFloat(
         initialValue   = 0.33f, targetValue = 1.33f,
-        animationSpec  = infiniteRepeatable(tween(2_400, easing = LinearEasing)),
+        animationSpec  = infiniteRepeatable(tween(3360, easing = LinearEasing)),
         label          = "ring2",
     )
     val ring3 by infiniteTransition.animateFloat(
         initialValue   = 0.66f, targetValue = 1.66f,
-        animationSpec  = infiniteRepeatable(tween(2_400, easing = LinearEasing)),
+        animationSpec  = infiniteRepeatable(tween(3360, easing = LinearEasing)),
         label          = "ring3",
     )
 
     val centerPulse by infiniteTransition.animateFloat(
         initialValue  = 0.92f, targetValue = 1.08f,
         animationSpec = infiniteRepeatable(
-            tween(900, easing = FastOutSlowInEasing),
+            tween(1260, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
         ),
         label         = "center_pulse",
@@ -525,7 +554,7 @@ private fun RadarAnimation(
 
     val deviceAlpha by animateFloatAsState(
         targetValue   = if (devices.isNotEmpty()) 1f else 0f,
-        animationSpec = tween(400),
+        animationSpec = tween(560),
         label         = "device_alpha",
     )
 
@@ -640,13 +669,24 @@ private fun DeviceBubble(
 
     val scale by animateFloatAsState(
         targetValue   = if (isConnected) 1.12f else 1f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 200f),
         label         = "bubble_scale",
+    )
+
+    // Composes with `scale` above rather than replacing it — this one only ever fires once, on
+    // this bubble's first appearance (a newly-discovered device popping into the radar), while
+    // `scale` keeps handling the connect-state pulse for the rest of the bubble's lifetime.
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
+    val entranceScale by animateFloatAsState(
+        targetValue   = if (appeared) 1f else 0.7f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+        label         = "bubble_entrance_scale",
     )
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+        modifier = Modifier.graphicsLayer { scaleX = scale * entranceScale; scaleY = scale * entranceScale },
     ) {
         Box(
             modifier = Modifier
@@ -697,55 +737,64 @@ private fun SongPickerRow(
             modifier            = Modifier.padding(12.dp),
             verticalAlignment   = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.surface),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (song?.artworkUri != null) {
-                    AsyncImage(
-                        model             = song.artworkUri,
-                        contentDescription = null,
-                        modifier          = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Icon(
-                        Icons.Rounded.MusicNote,
-                        contentDescription = null,
-                        tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier           = Modifier.size(24.dp),
-                    )
-                }
-            }
+            AnimatedContent(
+                targetState = song,
+                transitionSpec = { fadeIn(tween(220, easing = EmphasizedDecelerate)) togetherWith fadeOut(tween(140)) },
+                label = "song_picker_row",
+                modifier = Modifier.weight(1f),
+            ) { currentSong ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(MaterialTheme.colorScheme.surface),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (currentSong?.artworkUri != null) {
+                            AsyncImage(
+                                model             = currentSong.artworkUri,
+                                contentDescription = null,
+                                modifier          = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Icon(
+                                Icons.Rounded.MusicNote,
+                                contentDescription = null,
+                                tint               = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier           = Modifier.size(24.dp),
+                            )
+                        }
+                    }
 
-            Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(12.dp))
 
-            if (song != null) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text     = song.title,
-                        style    = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text     = song.displayArtist,
-                        style    = MaterialTheme.typography.bodySmall,
-                        color    = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (currentSong != null) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text     = currentSong.title,
+                                style    = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text     = currentSong.displayArtist,
+                                style    = MaterialTheme.typography.bodySmall,
+                                color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    } else {
+                        Text(
+                            text     = "Choose a song…",
+                            style    = MaterialTheme.typography.bodyMedium,
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
-            } else {
-                Text(
-                    text     = "Choose a song…",
-                    style    = MaterialTheme.typography.bodyMedium,
-                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
             }
 
             Icon(
@@ -812,7 +861,7 @@ private fun SongPickerSheet(
         LazyColumn(
             contentPadding = PaddingValues(bottom = 24.dp),
         ) {
-            items(songs, key = { it.id }) { song ->
+            itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
                 val isSelected = song.id == selectedSong?.id
                 ListItem(
                     headlineContent   = {
@@ -845,10 +894,19 @@ private fun SongPickerSheet(
                             }
                         }
                     },
-                    trailingContent   = if (isSelected) ({
-                        Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary)
-                    }) else null,
-                    modifier          = Modifier.clickable { onSongPicked(song) },
+                    trailingContent   = {
+                        AnimatedVisibility(
+                            visible = isSelected,
+                            enter = scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(),
+                            exit = scaleOut() + fadeOut(),
+                        ) {
+                            Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    },
+                    modifier          = Modifier
+                        .animateItem()
+                        .staggeredEntrance(index)
+                        .clickable { onSongPicked(song) },
                 )
             }
         }
@@ -861,10 +919,18 @@ private fun LocationDisabledDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon  = {
+            var appeared by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { appeared = true }
+            val scale by animateFloatAsState(
+                targetValue = if (appeared) 1f else 0.5f,
+                animationSpec = spring(dampingRatio = 0.6f, stiffness = 200f),
+                label = "location_disabled_icon_scale",
+            )
             Icon(
                 Icons.Rounded.LocationOff,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
             )
         },
         title = { Text("Location services disabled") },
@@ -897,10 +963,18 @@ private fun NoWifiDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon  = {
+            var appeared by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { appeared = true }
+            val scale by animateFloatAsState(
+                targetValue = if (appeared) 1f else 0.5f,
+                animationSpec = spring(dampingRatio = 0.6f, stiffness = 200f),
+                label = "no_wifi_icon_scale",
+            )
             Icon(
                 Icons.Rounded.WifiOff,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
             )
         },
         title = { Text("Wi-Fi required") },
@@ -964,24 +1038,38 @@ private fun QrTransferDialog(
         return
     }
 
+    // A single "which phase are we in" key drives both the icon and title swaps below, kept in
+    // sync by construction instead of two separate `when` blocks that could drift out of step.
+    val phase = when {
+        isDone -> "done"
+        servingState != null -> "serving"
+        uploadingState != null -> "uploading"
+        readyState?.mode == "remote" || isMulti -> "link_ready"
+        readyState?.mode == "p2p" -> "p2p_scan"
+        else -> "scan"
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         icon             = {
-            when {
-                isDone       -> Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
-                servingState != null || uploadingState != null -> Icon(Icons.Rounded.CloudUpload, null)
-                else         -> Icon(Icons.Rounded.QrCode2, null)
+            AnimatedStateSwap(targetState = phase, label = "qr_dialog_icon") { p ->
+                when (p) {
+                    "done" -> Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                    "serving", "uploading" -> Icon(Icons.Rounded.CloudUpload, null)
+                    else -> Icon(Icons.Rounded.QrCode2, null)
+                }
             }
         },
         title = {
-            Text(when {
-                isDone       -> "Transfer complete"
-                servingState != null -> "Sending…"
-                uploadingState != null -> "Uploading…"
-                readyState?.mode == "remote" || isMulti -> "Link ready"
-                readyState?.mode == "p2p" -> "Scan to join & receive"
-                else         -> "Scan to receive"
-            })
+            AnimatedStateSwap(targetState = phase, label = "qr_dialog_title") { p ->
+                Text(when (p) {
+                    "done" -> "Transfer complete"
+                    "serving" -> "Sending…"
+                    "uploading" -> "Uploading…"
+                    "link_ready" -> "Link ready"
+                    "p2p_scan" -> "Scan to join & receive"
+                    else -> "Scan to receive"
+                })
+            }
         },
         text = {
             Column(
@@ -1012,7 +1100,7 @@ private fun QrTransferDialog(
                 } else {
                     AnimatedContent(
                         targetState = readyState?.qrContent,
-                        transitionSpec = { fadeIn(tween(300)).togetherWith(fadeOut(tween(200))) },
+                        transitionSpec = { fadeIn(tween(420)).togetherWith(fadeOut(tween(280))) },
                         label = "qr_content",
                     ) { content ->
                         if (content != null) {
@@ -1079,29 +1167,31 @@ private fun QrTransferDialog(
                 }
 
                 if (servingState != null) {
+                    val animatedProgress by animateFloatAsState(servingState.progress, tween(300, easing = EmphasizedDecelerate), label = "serving_progress")
                     LinearProgressIndicator(
-                        progress   = { servingState.progress },
+                        progress   = { animatedProgress },
                         modifier   = Modifier.fillMaxWidth().height(6.dp),
                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     )
                     Text(
-                        "${(servingState.progress * 100).toInt()}% transferred",
+                        "${(animatedProgress * 100).toInt()}% transferred",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
                 if (uploadingState != null) {
+                    val animatedProgress by animateFloatAsState(uploadingState.progress, tween(300, easing = EmphasizedDecelerate), label = "uploading_progress")
                     LinearProgressIndicator(
-                        progress   = { uploadingState.progress },
+                        progress   = { animatedProgress },
                         modifier   = Modifier.fillMaxWidth().height(6.dp),
                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     )
                     Text(
                         if (uploadingState.totalSongs > 1)
-                            "Song ${(uploadingState.completedSongs + 1).coerceAtMost(uploadingState.totalSongs)} of ${uploadingState.totalSongs} · ${(uploadingState.progress * 100).toInt()}% uploaded"
+                            "Song ${(uploadingState.completedSongs + 1).coerceAtMost(uploadingState.totalSongs)} of ${uploadingState.totalSongs} · ${(animatedProgress * 100).toInt()}% uploaded"
                         else
-                            "${(uploadingState.progress * 100).toInt()}% uploaded",
+                            "${(animatedProgress * 100).toInt()}% uploaded",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1264,10 +1354,16 @@ fun MaterialQrCode(
         QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, 0, 0, hints)
     }
 
+    val revealAlpha = remember { Animatable(0f) }
+    LaunchedEffect(content) {
+        revealAlpha.snapTo(0f)
+        revealAlpha.animateTo(1f, tween(420, easing = EmphasizedDecelerate))
+    }
     Box(
         modifier = modifier
             .background(containerColor, RoundedCornerShape(40.dp))
-            .padding(32.dp),
+            .padding(32.dp)
+            .graphicsLayer { alpha = revealAlpha.value },
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {

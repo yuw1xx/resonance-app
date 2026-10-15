@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
 import android.media.audiofx.Equalizer
-import android.media.audiofx.Visualizer
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -61,15 +60,12 @@ class MusicService : MediaLibraryService() {
     @Inject lateinit var replayGainProcessor: ReplayGainProcessor
     @Inject lateinit var navidromePreloader: NavidromePreloader
     @Inject lateinit var eqStateHolder: EqStateHolder
-    @Inject lateinit var visualizerStateHolder: VisualizerStateHolder
 
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaLibrarySession
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var equalizer: Equalizer? = null
-    private var visualizer: Visualizer? = null
-    private var visualizerActiveRequested = false
 
     private var crossfadeJob: Job? = null
     private var crossfadeDurationMs: Int = 0
@@ -101,11 +97,6 @@ class MusicService : MediaLibraryService() {
         buildPlayer()
         buildSession()
         setupEqualizer()
-        setupVisualizer()
-        visualizerStateHolder.onActiveRequestChanged = { active ->
-            visualizerActiveRequested = active
-            updateVisualizerEnabled()
-        }
         applyInitialPreferences()
         observePreferences()
         restoreQueue()
@@ -153,8 +144,6 @@ class MusicService : MediaLibraryService() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (!isPlaying && player.playbackState != Player.STATE_ENDED) {
-                }
                 if (isPlaying) {
                     preloadUpcomingTracks()
                     startWidgetProgressUpdates()
@@ -162,7 +151,6 @@ class MusicService : MediaLibraryService() {
                     stopWidgetProgressUpdates()
                     pushWidgetState()
                 }
-                updateVisualizerEnabled()
             }
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -195,7 +183,6 @@ class MusicService : MediaLibraryService() {
 
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 setupEqualizer()
-                setupVisualizer()
             }
         })
     }
@@ -217,6 +204,11 @@ class MusicService : MediaLibraryService() {
 
     companion object {
         private const val PRELOAD_AHEAD = 2
+        // How often scheduleCrossfade's poll loop checks player.duration/currentPosition while
+        // the duration isn't known yet (e.g. some streamed/transcoded tracks briefly report no
+        // duration) — falling back to this much longer interval instead of the normal 50ms avoids
+        // spinning the coroutine dispatcher for nothing until the duration resolves.
+        private const val DURATION_UNKNOWN_POLL_MS = 300L
     }
 
     private fun buildSession() {
@@ -286,96 +278,6 @@ class MusicService : MediaLibraryService() {
         } catch (e: Exception) {
             Log.w("MusicService", "Failed to set up Equalizer (session ${player.audioSessionId})", e)
         }
-    }
-
-    // Cava-style spectrum: attaches to the same audio session as the equalizer (no extra
-    // permission needed — RECORD_AUDIO is only required to capture another app's session).
-    // Capture only runs while the UI actually requests it (Cava seekbar visible) AND audio
-    // is playing, to avoid burning battery for a bar row nobody is looking at.
-    private fun setupVisualizer(retryOnFailure: Boolean = true) {
-        try {
-            val sessionId = player.audioSessionId
-            if (sessionId == 0) return
-
-            visualizer?.release()
-
-            val captureSizeRange = Visualizer.getCaptureSizeRange()
-            val captureSize = captureSizeRange[1].coerceAtMost(1024).coerceAtLeast(captureSizeRange[0])
-
-            val viz = Visualizer(sessionId).apply {
-                enabled = false
-                scalingMode = Visualizer.SCALING_MODE_NORMALIZED
-                setCaptureSize(captureSize)
-                setDataCaptureListener(
-                    object : Visualizer.OnDataCaptureListener {
-                        override fun onWaveFormDataCapture(v: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
-                        override fun onFftDataCapture(v: Visualizer?, fft: ByteArray?, samplingRate: Int) {
-                            if (fft == null) return
-                            visualizerStateHolder.publishMagnitudes(
-                                computeSpectrumBars(fft, VisualizerStateHolder.BAR_COUNT)
-                            )
-                        }
-                    },
-                    Visualizer.getMaxCaptureRate(),
-                    /* waveform= */ false,
-                    /* fft= */ true,
-                )
-            }
-            visualizer = viz
-            updateVisualizerEnabled()
-        } catch (e: Exception) {
-            Log.w("MusicService", "Failed to set up Visualizer (session ${player.audioSessionId})", e)
-            // The underlying AudioTrack may not have fully attached yet when this races
-            // onAudioSessionIdChanged — one short retry covers that without looping forever
-            // on a device that genuinely can't support a Visualizer on this session.
-            if (retryOnFailure) {
-                scope.launch {
-                    delay(300)
-                    setupVisualizer(retryOnFailure = false)
-                }
-            }
-        }
-    }
-
-    private fun updateVisualizerEnabled() {
-        try {
-            visualizer?.enabled = visualizerActiveRequested && player.isPlaying
-        } catch (e: Exception) {
-            Log.w("MusicService", "Failed to update Visualizer enabled state", e)
-        }
-    }
-
-    // Decodes the Visualizer's packed 8-bit FFT format (fft[0]=Re(0), fft[1]=Re(N/2), then
-    // Re(i)/Im(i) pairs) into magnitudes, then groups those linear frequency bins into
-    // `barCount` log-spaced bars — bass notes span few bins so they'd otherwise be crushed
-    // into a single bar next to treble, which spans hundreds.
-    private fun computeSpectrumBars(fft: ByteArray, barCount: Int): FloatArray {
-        val numBins = fft.size / 2
-        if (numBins < 2) return FloatArray(barCount)
-
-        val magnitudes = FloatArray(numBins)
-        magnitudes[0] = kotlin.math.abs(fft[0].toInt()).toFloat()
-        for (i in 1 until numBins) {
-            val re = fft[2 * i].toInt()
-            val im = fft[2 * i + 1].toInt()
-            magnitudes[i] = kotlin.math.sqrt((re * re + im * im).toFloat())
-        }
-
-        val bars = FloatArray(barCount)
-        val logMax = kotlin.math.ln(numBins.toDouble())
-        var startBin = 1
-        for (b in 0 until barCount) {
-            val endBin = kotlin.math.exp(logMax * (b + 1) / barCount)
-                .toInt()
-                .coerceIn(startBin + 1, numBins)
-            var peak = 0f
-            for (i in startBin until endBin) peak = maxOf(peak, magnitudes[i])
-            // fft[] entries are signed 8-bit (-128..127), so a Re/Im pair's magnitude tops
-            // out around sqrt(2)*128 ≈ 181; 128 is a reasonable practical ceiling to scale by.
-            bars[b] = (peak / 128f).coerceIn(0f, 1f)
-            startBin = endBin
-        }
-        return bars
     }
 
     // ─── Preferences ───
@@ -517,7 +419,7 @@ class MusicService : MediaLibraryService() {
                         }
                     }
                 }
-                delay(50)
+                delay(if (duration > 0) 50 else DURATION_UNKNOWN_POLL_MS)
             }
         }
     }
@@ -857,7 +759,6 @@ class MusicService : MediaLibraryService() {
         headphonesReceiver?.let { unregisterReceiver(it) }
         scope.cancel()
         equalizer?.release()
-        visualizer?.release()
         mediaSession.release()
         player.release()
         super.onDestroy()

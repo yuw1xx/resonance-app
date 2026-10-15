@@ -88,6 +88,22 @@ data class AlbumArtworkEntity(
     val fetchedAt: Long = System.currentTimeMillis(),
 )
 
+// Combined MusicBrainz + Last.fm (+ Discogs, if a token is configured) artist facts, cached
+// 7 days like ArtistArtworkEntity above. List fields are comma-joined since Room has no native
+// list-column support here.
+@Entity(tableName = "artist_info")
+data class ArtistInfoEntity(
+    @PrimaryKey val artistName: String,
+    val formedYear: Int?,
+    val dissolvedYear: Int?,
+    val type: String?,
+    val genres: String,
+    val bio: String?,
+    val members: String?,
+    val sourceAttribution: String,
+    val fetchedAt: Long = System.currentTimeMillis(),
+)
+
 // Durable backup for the in-memory pending-scrobble queues in LastFmRepository/MalojaRepository
 // — a killed process shouldn't silently lose scrobbles queued while offline.
 @Entity(tableName = "pending_scrobbles")

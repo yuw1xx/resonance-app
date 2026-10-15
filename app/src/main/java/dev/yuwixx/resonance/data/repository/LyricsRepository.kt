@@ -4,13 +4,15 @@ import android.net.Uri
 import dev.yuwixx.resonance.data.database.dao.LyricsDao
 import dev.yuwixx.resonance.data.database.entity.LyricsEntity
 import dev.yuwixx.resonance.data.model.LyricLine
-import dev.yuwixx.resonance.data.model.WordTiming
 import dev.yuwixx.resonance.data.network.LrclibApi
+import dev.yuwixx.resonance.data.network.LrclibResponse
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.domain.usecase.LrcParser
 import dev.yuwixx.resonance.domain.usecase.TagEditor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,9 +30,21 @@ class LyricsRepository @Inject constructor(
         album: String,
         durationMs: Long,
         songUri: Uri? = null,
+        forceRefresh: Boolean = false,
     ): LyricsResult = withContext(Dispatchers.IO) {
-        // Embedded lyrics take priority over cache — re-read on every call so tag
-        // edits are reflected immediately without clearing the lyrics DB.
+        // Cache first — this runs on every song change (and is prefetched for the next queued
+        // song too), so a repeat play must be a single fast DB read, not a jaudiotagger file
+        // parse on every call. This does mean lyrics embedded into a file by an external tool
+        // after it's already been cached won't be picked up automatically; reloadLyrics()
+        // (wired to the lyrics editor's Save action) passes forceRefresh to bypass this when
+        // that matters.
+        if (!forceRefresh) {
+            val cached = lyricsDao.getLyrics(songId)
+            if (cached != null) {
+                return@withContext parseCached(cached)
+            }
+        }
+
         if (songUri != null) {
             val embedded = tagEditor.readEmbeddedLyrics(songUri)
             if (embedded != null) {
@@ -47,11 +61,6 @@ class LyricsRepository @Inject constructor(
                 else
                     LyricsResult.Plain(embedded.lines())
             }
-        }
-
-        val cached = lyricsDao.getLyrics(songId)
-        if (cached != null) {
-            return@withContext parseCached(cached)
         }
 
         if (!prefs.fetchLyrics.first()) return@withContext LyricsResult.NotFound
@@ -83,9 +92,35 @@ class LyricsRepository @Inject constructor(
             } else {
                 LyricsResult.NotFound
             }
+        } catch (e: HttpException) {
+            // LRCLIB returns a plain 404 for "no match", which is the common, expected case
+            // for most tracks — that's not a failure worth surfacing as an error with a retry.
+            if (e.code() == 404) LyricsResult.NotFound else LyricsResult.Error("HTTP ${e.code()}")
         } catch (e: Exception) {
             LyricsResult.Error(e.message ?: "Unknown error")
         }
+    }
+
+    // Lets the user pick a different match when the auto-fetched lyrics are missing or out of
+    // sync — LRCLIB's search is fuzzy, so this can surface a better-timed submission for the
+    // same track that the exact-match /api/get lookup in getLyrics() didn't find.
+    suspend fun searchLyrics(trackName: String, artistName: String): List<LrclibResponse> =
+        withContext(Dispatchers.IO) {
+            try {
+                lrclibApi.searchLyrics(trackName = trackName, artistName = artistName)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+
+    suspend fun selectLyrics(songId: Long, response: LrclibResponse) {
+        val entity = LyricsEntity(
+            songId = songId,
+            synced = response.syncedLyrics,
+            plain = response.plainLyrics,
+            source = "lrclib",
+        )
+        lyricsDao.upsertLyrics(entity)
     }
 
     private fun parseCached(entity: LyricsEntity): LyricsResult {
@@ -96,47 +131,7 @@ class LyricsRepository @Inject constructor(
         }
     }
 
-        fun parseLrc(lrc: String): List<LyricLine> {
-        val lines = mutableListOf<LyricLine>()
-        val timePattern = Regex("""^\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)$""")
-        val wordPattern = Regex("""<(\d{2}):(\d{2})\.(\d{2,3})>([^<]*)""")
-
-        for (raw in lrc.lines()) {
-            val match = timePattern.matchEntire(raw.trim()) ?: continue
-            val (min, sec, centis, rest) = match.destructured
-            val timeMs = min.toLong() * 60_000 +
-                         sec.toLong() * 1_000 +
-                         centis.toLong() * if (centis.length == 2) 10L else 1L
-
-            val wordMatches = wordPattern.findAll(rest).toList()
-            val wordTimings = if (wordMatches.isNotEmpty()) {
-                wordMatches.mapIndexed { i, wm ->
-                    val (wMin, wSec, wCs, word) = wm.destructured
-                    val startMs = wMin.toLong() * 60_000 +
-                                  wSec.toLong() * 1_000 +
-                                  wCs.toLong() * if (wCs.length == 2) 10L else 1L
-                    val endMs = wordMatches.getOrNull(i + 1)?.let { next ->
-                        val (nm, ns, nc, _) = next.destructured
-                        nm.toLong() * 60_000 + ns.toLong() * 1_000 +
-                                nc.toLong() * if (nc.length == 2) 10L else 1L
-                    } ?: (startMs + 500L)
-                    WordTiming(startMs = startMs, endMs = endMs, word = word.trim())
-                }
-            } else emptyList()
-
-            val text = if (wordTimings.isEmpty()) {
-                rest.trim()
-            } else {
-                wordTimings.joinToString(" ") { it.word }
-            }
-
-            if (text.isNotBlank() || wordTimings.isNotEmpty()) {
-                lines.add(LyricLine(timeMs = timeMs, text = text, wordTimings = wordTimings))
-            }
-        }
-
-        return lines.sortedBy { it.timeMs }
-    }
+    fun parseLrc(lrc: String): List<LyricLine> = LrcParser.parse(lrc)
 
     suspend fun getRawLyrics(songId: Long): String? = withContext(Dispatchers.IO) {
         val entity = lyricsDao.getLyrics(songId) ?: return@withContext null

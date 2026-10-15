@@ -1,7 +1,16 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -16,12 +25,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.yuwixx.resonance.data.service.EqStateHolder
+import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
 import dev.yuwixx.resonance.presentation.components.SectionCard
 import dev.yuwixx.resonance.presentation.viewmodel.EqPreset
 import dev.yuwixx.resonance.presentation.viewmodel.EqualizerViewModel
@@ -59,71 +70,86 @@ fun EqualizerScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            if (capabilities == null) {
-                Surface(
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+            Crossfade(
+                targetState = capabilities,
+                animationSpec = tween(340, easing = EmphasizedDecelerate),
+                label = "eq_capabilities",
+            ) { caps ->
+                if (caps == null) {
+                    Surface(
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     ) {
-                        Icon(Icons.Rounded.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            "Equalizer is not available on this device.\nStart playing a song to initialize it.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            } else {
-                val caps = capabilities!!
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Enable Equalizer", style = MaterialTheme.typography.titleMedium)
-                    Switch(checked = enabled, onCheckedChange = viewModel::setEnabled)
-                }
-
-                SectionCard(icon = Icons.Rounded.Tune, title = "Presets") {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(EqPreset.entries) { preset ->
-                            AssistChip(
-                                onClick = {
-                                    viewModel.applyPreset(preset)
-                                    if (!enabled) viewModel.setEnabled(true)
-                                },
-                                label = { Text(preset.label) },
-                                enabled = caps.bandCount > 0,
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Rounded.Info, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                "Equalizer is not available on this device.\nStart playing a song to initialize it.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
-                }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text("Enable Equalizer", style = MaterialTheme.typography.titleMedium)
+                            Switch(checked = enabled, onCheckedChange = viewModel::setEnabled)
+                        }
 
-                SectionCard(icon = Icons.Rounded.GraphicEq, title = "Bands") {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        bandLevels.forEachIndexed { index, level ->
-                            if (index >= caps.bandCount) return@forEachIndexed
-                            val freqHz = caps.centerFreqs.getOrNull(index) ?: 0
-                            BandSlider(
-                                band = index,
-                                level = level,
-                                min = caps.minLevel,
-                                max = caps.maxLevel,
-                                freqLabel = formatFreq(freqHz),
-                                enabled = enabled,
-                                onLevelChange = { newLevel -> viewModel.setBandLevel(index, newLevel) },
-                                modifier = Modifier.weight(1f).fillMaxHeight(),
-                            )
+                        SectionCard(icon = Icons.Rounded.Tune, title = "Presets") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(EqPreset.entries) { preset ->
+                                    val interactionSource = remember { MutableInteractionSource() }
+                                    val isPressed by interactionSource.collectIsPressedAsState()
+                                    val chipScale by animateFloatAsState(
+                                        targetValue = if (isPressed) 0.92f else 1f,
+                                        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+                                        label = "eq_preset_scale",
+                                    )
+                                    AssistChip(
+                                        onClick = {
+                                            viewModel.applyPreset(preset)
+                                            if (!enabled) viewModel.setEnabled(true)
+                                        },
+                                        label = { Text(preset.label) },
+                                        enabled = caps.bandCount > 0,
+                                        interactionSource = interactionSource,
+                                        modifier = Modifier.scale(chipScale),
+                                    )
+                                }
+                            }
+                        }
+
+                        SectionCard(icon = Icons.Rounded.GraphicEq, title = "Bands") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                bandLevels.forEachIndexed { index, level ->
+                                    if (index >= caps.bandCount) return@forEachIndexed
+                                    val freqHz = caps.centerFreqs.getOrNull(index) ?: 0
+                                    BandSlider(
+                                        band = index,
+                                        level = level,
+                                        min = caps.minLevel,
+                                        max = caps.maxLevel,
+                                        freqLabel = formatFreq(freqHz),
+                                        enabled = enabled,
+                                        onLevelChange = { newLevel -> viewModel.setBandLevel(index, newLevel) },
+                                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -148,6 +174,19 @@ private fun BandSlider(
     val dbLabel = "${(level / 100f).roundToInt()} dB"
 
     val currentLevel = rememberUpdatedState(level)
+    var isDragging by remember { mutableStateOf(false) }
+    // Non-drag changes (preset application, programmatic reset) glide into place; an active
+    // finger-drag snaps instantly so the thumb keeps 1:1 tracking with the touch.
+    val animatedFraction by animateFloatAsState(
+        targetValue = fraction,
+        animationSpec = if (isDragging) snap() else spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMedium),
+        label = "band_slider_fraction",
+    )
+    val labelColor by animateColorAsState(
+        targetValue = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(280, easing = EmphasizedDecelerate),
+        label = "band_slider_label_color",
+    )
 
     Column(
         modifier = modifier,
@@ -157,7 +196,7 @@ private fun BandSlider(
         Text(
             dbLabel,
             style = MaterialTheme.typography.labelSmall,
-            color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = labelColor,
             textAlign = TextAlign.Center,
         )
 
@@ -169,6 +208,7 @@ private fun BandSlider(
                     if (!enabled) return@pointerInput
                     awaitEachGesture {
                         awaitFirstDown()
+                        isDragging = true
                         var localLevel = currentLevel.value
                         do {
                             val event = awaitPointerEvent()
@@ -186,19 +226,24 @@ private fun BandSlider(
                                 change.consume()
                             }
                         } while (event.changes.any { it.pressed })
+                        isDragging = false
                     }
                 },
             contentAlignment = Alignment.Center,
         ) {
             val trackColor = MaterialTheme.colorScheme.surfaceVariant
-            val fillColor = if (enabled) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            val fillColor by animateColorAsState(
+                targetValue = if (enabled) MaterialTheme.colorScheme.primary
+                              else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                animationSpec = tween(280, easing = EmphasizedDecelerate),
+                label = "band_slider_fill_color",
+            )
 
             androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
                 val trackW = 6.dp.toPx()
                 val cx = size.width / 2
                 val trackH = size.height
-                val thumbY = trackH * (1f - fraction)
+                val thumbY = trackH * (1f - animatedFraction)
 
                 drawRect(
                     color = trackColor,

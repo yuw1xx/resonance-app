@@ -23,8 +23,9 @@ import dev.yuwixx.resonance.data.database.entity.*
         PendingScrobbleEntity::class,
         SongDownloadEntity::class,
         PendingStarActionEntity::class,
+        ArtistInfoEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class ResonanceDatabase : RoomDatabase() {
@@ -41,4 +42,5 @@ abstract class ResonanceDatabase : RoomDatabase() {
     abstract fun pendingScrobbleDao(): PendingScrobbleDao
     abstract fun songDownloadDao(): SongDownloadDao
     abstract fun pendingStarActionDao(): PendingStarActionDao
+    abstract fun artistInfoDao(): ArtistInfoDao
 }

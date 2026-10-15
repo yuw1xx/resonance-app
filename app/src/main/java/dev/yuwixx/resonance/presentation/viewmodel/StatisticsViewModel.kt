@@ -3,10 +3,15 @@ package dev.yuwixx.resonance.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.yuwixx.resonance.data.database.dao.DailyTotal
+import dev.yuwixx.resonance.data.database.dao.DayOfWeekPlayCount
 import dev.yuwixx.resonance.data.database.dao.HistoryDao
 import dev.yuwixx.resonance.data.database.dao.HourPlayCount
 import dev.yuwixx.resonance.data.database.dao.SongDao
 import dev.yuwixx.resonance.data.database.entity.SongEntity
+import dev.yuwixx.resonance.data.repository.ArtworkRepository
+import dev.yuwixx.resonance.domain.usecase.StreakCalculator
+import dev.yuwixx.resonance.presentation.components.audioFormatLabel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -26,15 +31,23 @@ data class StatisticsData(
     val playCount: Int,
     val uniqueTrackCount: Int,
     val listenStreak: Int,
+    val longestStreak: Int,
+    val avgSessionMs: Long,
     val topSongs: List<Pair<SongEntity, Int>>,
     val topArtists: List<Pair<String, Int>>,
+    val topAlbums: List<Pair<SongEntity, Int>>,
     val hourlyActivity: List<HourPlayCount>,
+    val dailyTrend: List<DailyTotal>,
+    val genreBreakdown: List<Pair<String, Int>>,
+    val dayOfWeekActivity: List<DayOfWeekPlayCount>,
+    val formatBreakdown: List<Pair<String, Int>>,
 )
 
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
     private val historyDao: HistoryDao,
     private val songDao: SongDao,
+    private val artworkRepository: ArtworkRepository,
 ) : ViewModel() {
 
     private val _period = MutableStateFlow(StatsPeriod.WEEK)
@@ -64,63 +77,89 @@ class StatisticsViewModel @Inject constructor(
         val playCount        = historyDao.getPlayCount(from, to)
         val uniqueTrackCount = historyDao.getUniqueTrackCount(from, to)
         val hourly           = historyDao.getPlaysByHour(from, to)
+        val dailyTrend        = historyDao.getDailyTotals(from, to)
+        val dayOfWeekActivity = historyDao.getPlaysByDayOfWeek(from, to)
 
         // Top songs — batch fetch, no N+1
         val topIds  = historyDao.getTopSongIds(from, to, 10)
         val songMap = songDao.getSongsByIds(topIds.map { it.songId }).associateBy { it.id }
         val topSongs = topIds.mapNotNull { entry -> songMap[entry.songId]?.let { it to entry.playCount } }
 
-        // Top artists — batch fetch, no N+1
+        // Top artists / albums / genre / format breakdown — all sampled from the same top-100
+        // batch fetch (no N+1), same approach the original Top Artists computation already used.
         val allTopIds         = historyDao.getTopSongIds(from, to, 100)
         val allSongsForArtists = songDao.getSongsByIds(allTopIds.map { it.songId }).associateBy { it.id }
         val playCounts        = allTopIds.associate { it.songId to it.playCount }
-        val artistCounts      = mutableMapOf<String, Int>()
+
+        val artistCounts = mutableMapOf<String, Int>()
+        val albumCounts  = mutableMapOf<Long, Int>()
+        val albumSongs   = mutableMapOf<Long, SongEntity>()
+        val genreCounts  = mutableMapOf<String, Int>()
+        val formatCounts = mutableMapOf<String, Int>()
         allSongsForArtists.forEach { (id, song) ->
+            val count = playCounts[id] ?: 0
             val artist = song.artist.ifEmpty { "Unknown" }
-            artistCounts[artist] = (artistCounts[artist] ?: 0) + (playCounts[id] ?: 0)
+            artistCounts[artist] = (artistCounts[artist] ?: 0) + count
+
+            albumCounts[song.albumId] = (albumCounts[song.albumId] ?: 0) + count
+            albumSongs.putIfAbsent(song.albumId, song)
+
+            val genre = song.genre.ifEmpty { "Unknown" }
+            genreCounts[genre] = (genreCounts[genre] ?: 0) + count
+
+            val format = audioFormatLabel(song.mimeType)
+            formatCounts[format] = (formatCounts[format] ?: 0) + count
         }
         val topArtists = artistCounts.entries
             .sortedByDescending { it.value }
             .take(5)
             .map { it.key to it.value }
+        val topAlbums = albumCounts.entries
+            .sortedByDescending { it.value }
+            .take(5)
+            .mapNotNull { entry -> albumSongs[entry.key]?.let { it to entry.value } }
+        val genreBreakdown = genreCounts.entries
+            .sortedByDescending { it.value }
+            .take(6)
+            .map { it.key to it.value }
+        val formatBreakdown = formatCounts.entries
+            .sortedByDescending { it.value }
+            .map { it.key to it.value }
 
-        val listenStreak = computeStreak(historyDao.getDistinctListenDates())
+        val allDates = historyDao.getDistinctListenDates()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val cal = Calendar.getInstance()
+        val today = sdf.format(cal.time)
+        cal.add(Calendar.DAY_OF_YEAR, -1)
+        val yesterday = sdf.format(cal.time)
+        val listenStreak = StreakCalculator.computeStreak(allDates, today, yesterday)
+        val longestStreak = StreakCalculator.computeLongestStreak(allDates)
+        val avgSessionMs = if (playCount > 0) totalTime / playCount else 0L
 
         return StatisticsData(
             totalListenTimeMs = totalTime,
             playCount         = playCount,
             uniqueTrackCount  = uniqueTrackCount,
             listenStreak      = listenStreak,
+            longestStreak     = longestStreak,
+            avgSessionMs      = avgSessionMs,
             topSongs          = topSongs,
             topArtists        = topArtists,
+            topAlbums         = topAlbums,
             hourlyActivity    = hourly,
+            dailyTrend        = dailyTrend,
+            genreBreakdown    = genreBreakdown,
+            dayOfWeekActivity = dayOfWeekActivity,
+            formatBreakdown   = formatBreakdown,
         )
     }
 
-    private fun computeStreak(dates: List<String>): Int {
-        if (dates.isEmpty()) return 0
-        // dates[] comes from history's date(listenedAt / 1000, 'unixepoch', 'localtime') — i.e.
-        // device-local calendar dates — so today/yesterday must be computed in the same (default)
-        // timezone. Forcing UTC here used to desync from that for roughly half of every day at
-        // any negative UTC offset, intermittently zeroing the streak.
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val cal = Calendar.getInstance()
-        val today     = sdf.format(cal.time)
-        cal.add(Calendar.DAY_OF_YEAR, -1)
-        val yesterday = sdf.format(cal.time)
+    suspend fun getSongArtworkUrl(song: SongEntity): String? =
+        artworkRepository.getSongArtworkUrl(song.albumId, song.title, song.artist)
 
-        // Streak is only active if the most recent listen was today or yesterday.
-        if (dates[0] != today && dates[0] != yesterday) return 0
+    suspend fun getArtistArtworkUrl(artistName: String): String? =
+        artworkRepository.getArtistArtworkUrl(artistName)
 
-        var streak = 1
-        for (i in 1 until dates.size) {
-            val d1 = sdf.parse(dates[i - 1]) ?: break
-            val d2 = sdf.parse(dates[i])     ?: break
-            val diffDays = ((d1.time - d2.time) / (24L * 60 * 60 * 1000)).toInt()
-            if (diffDays == 1) streak++ else break
-        }
-        return streak
-    }
 
     private fun periodRange(period: StatsPeriod): Pair<Long, Long> {
         val now = System.currentTimeMillis()

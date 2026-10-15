@@ -1,6 +1,8 @@
 package dev.yuwixx.resonance.presentation.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -9,10 +11,15 @@ import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.yuwixx.resonance.data.network.LrclibResponse
 import dev.yuwixx.resonance.data.repository.LyricsRepository
+import dev.yuwixx.resonance.presentation.components.formatDuration
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,6 +35,7 @@ fun LyricsEditorScreen(
     var lrcText by remember { mutableStateOf("") }
     var isSaving by remember { mutableStateOf(false) }
     var savedSnackbar by remember { mutableStateOf(false) }
+    var showSearchSheet by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -62,6 +70,9 @@ fun LyricsEditorScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showSearchSheet = true }) {
+                        Icon(Icons.Rounded.Search, "Find lyrics on LRCLIB")
+                    }
                     TextButton(
                         onClick = {
                             isSaving = true
@@ -179,5 +190,193 @@ fun LyricsEditorScreen(
             isSaving = false
             savedSnackbar = true
         }
+    }
+
+    if (showSearchSheet) {
+        LyricsSearchSheet(
+            initialTrackName = song.title,
+            initialArtistName = song.artist,
+            lyricsRepository = lyricsRepository,
+            onSelect = { candidate ->
+                lrcText = candidate.syncedLyrics?.takeIf { it.isNotBlank() }
+                    ?: candidate.plainLyrics.orEmpty()
+                showSearchSheet = false
+            },
+            onDismiss = { showSearchSheet = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LyricsSearchSheet(
+    initialTrackName: String,
+    initialArtistName: String,
+    lyricsRepository: LyricsRepository,
+    onSelect: (LrclibResponse) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
+    var trackName by remember { mutableStateOf(initialTrackName) }
+    var artistName by remember { mutableStateOf(initialArtistName) }
+    var results by remember { mutableStateOf<List<LrclibResponse>>(emptyList()) }
+    var isSearching by remember { mutableStateOf(false) }
+    var hasSearched by remember { mutableStateOf(false) }
+
+    fun runSearch() {
+        if (trackName.isBlank()) return
+        isSearching = true
+        scope.launch {
+            results = lyricsRepository.searchLyrics(trackName, artistName)
+            isSearching = false
+            hasSearched = true
+        }
+    }
+
+    LaunchedEffect(Unit) { runSearch() }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 560.dp)
+                .padding(horizontal = 20.dp),
+        ) {
+            Text(
+                "Find Lyrics on LRCLIB",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "If the auto-fetched lyrics are wrong or out of sync, search for a different submission below.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp, bottom = 12.dp),
+            )
+            OutlinedTextField(
+                value = trackName,
+                onValueChange = { trackName = it },
+                label = { Text("Track") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = artistName,
+                onValueChange = { artistName = it },
+                label = { Text("Artist") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = { runSearch() },
+                enabled = trackName.isNotBlank() && !isSearching,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (isSearching) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(Icons.Rounded.Search, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Search")
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+
+            when {
+                isSearching -> {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                hasSearched && results.isEmpty() -> {
+                    Text(
+                        "No results found",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 24.dp),
+                    )
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp),
+                    ) {
+                        items(results) { candidate ->
+                            LyricsCandidateRow(candidate = candidate, onClick = { onSelect(candidate) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LyricsCandidateRow(candidate: LrclibResponse, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                candidate.trackName,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                buildString {
+                    append(candidate.artistName)
+                    if (!candidate.albumName.isNullOrBlank()) append(" • ${candidate.albumName}")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                candidate.duration?.let { LyricsMetaBadge(formatDuration((it * 1000).toLong())) }
+                when {
+                    candidate.instrumental -> LyricsMetaBadge("Instrumental")
+                    !candidate.syncedLyrics.isNullOrBlank() -> LyricsMetaBadge("Synced")
+                    !candidate.plainLyrics.isNullOrBlank() -> LyricsMetaBadge("Plain")
+                    else -> LyricsMetaBadge("No lyrics")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LyricsMetaBadge(text: String) {
+    Surface(
+        shape = MaterialTheme.shapes.extraSmall,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+        )
     }
 }

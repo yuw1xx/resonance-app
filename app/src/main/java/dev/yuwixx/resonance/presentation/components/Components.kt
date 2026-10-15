@@ -197,13 +197,13 @@ fun BigScreenTitle(title: String, modifier: Modifier = Modifier) {
     )
 }
 
-internal const val M3_SHORT2  = 100
-internal const val M3_SHORT4  = 200
-internal const val M3_MEDIUM2 = 300
-internal const val M3_MEDIUM4 = 400
-internal const val M3_LONG2   = 500
-internal const val M3_LONG4   = 600
-internal const val M3_XLONG1  = 700
+internal const val M3_SHORT2  = 140
+internal const val M3_SHORT4  = 280
+internal const val M3_MEDIUM2 = 420
+internal const val M3_MEDIUM4 = 560
+internal const val M3_LONG2   = 700
+internal const val M3_LONG4   = 840
+internal const val M3_XLONG1  = 980
 
 data class AppearanceConfig(
     val compactListMode: Boolean = false,
@@ -226,9 +226,98 @@ data class AppearanceConfig(
     val showEqualizerInPlayer: Boolean = true,
     val hapticEnabled: Boolean = true,
     val showBitrateInfo: Boolean = false,
+    val lyricsFontFamily: String = "DEFAULT",
 )
 
 val LocalAppearanceConfig = compositionLocalOf { AppearanceConfig() }
+
+// ─── Shared motion primitives ───
+// The house animation vocabulary (Emphasized*-eased tweens, spring press/pop feedback, a
+// staggered list-entrance cascade) started as bespoke code at individual call sites; these
+// three wrap the same specs so every screen shares one implementation instead of copies that
+// can drift apart.
+
+/** Swaps between discrete states (an icon, a status row, a connection-state card — anything
+ *  representing "what's happening right now") with a spring pop-in + fade for the incoming
+ *  state and a quick fade+scale-out for the outgoing one. This is the exact spec already used
+ *  for the mini player's play/pause icon (`Components.kt` — `MiniPlayer`) and `SongCard`'s
+ *  selection checkmark, promoted here so every other status swap in the app (sync spinner→
+ *  check/error, download state, connection state, dialog phase icons) uses the same motion. */
+@Composable
+fun <T> AnimatedStateSwap(
+    targetState: T,
+    modifier: Modifier = Modifier,
+    label: String = "animated_state_swap",
+    contentAlignment: Alignment = Alignment.Center,
+    content: @Composable (T) -> Unit,
+) {
+    AnimatedContent(
+        targetState = targetState,
+        modifier = modifier,
+        contentAlignment = contentAlignment,
+        transitionSpec = {
+            (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow), initialScale = 0.85f) +
+                fadeIn(tween(280, easing = EmphasizedDecelerate))) togetherWith
+                (scaleOut(tween(180, easing = EmphasizedAccelerate), targetScale = 0.85f) +
+                    fadeOut(tween(180, easing = EmphasizedAccelerate)))
+        },
+        label = label,
+    ) { state -> content(state) }
+}
+
+/** Wraps a "prompt vs. real content" boolean swap (permission not-yet-granted vs. granted,
+ *  loading vs. loaded) in a fade+slide transition instead of an instant cut. Named for its
+ *  original use — the three near-identical permission-gate composables (`Permissions.kt`,
+ *  `ReceiveSheet.kt`, `ShareSheet.kt`) that all hard-swapped between a request prompt and the
+ *  real screen with zero transition. */
+@Composable
+fun AnimatedPermissionGate(
+    granted: Boolean,
+    modifier: Modifier = Modifier,
+    prompt: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    AnimatedContent(
+        targetState = granted,
+        modifier = modifier,
+        transitionSpec = {
+            (fadeIn(tween(340, easing = EmphasizedDecelerate)) +
+                slideInVertically(tween(340, easing = EmphasizedDecelerate)) { it / 4 }) togetherWith
+                fadeOut(tween(210, easing = EmphasizedAccelerate))
+        },
+        label = "animated_permission_gate",
+    ) { isGranted -> if (isGranted) content() else prompt() }
+}
+
+/** Staggered fade+scale entrance for list items — originated in `LikedSongsScreen`'s song list,
+ *  promoted here for reuse across every other list in the app. Apply alongside
+ *  `Modifier.animateItem()`: `.animateItem().staggeredEntrance(index)`.
+ *
+ *  `animateFloatAsState` only animates on a target *change* — seeding it at the real target from
+ *  frame one would mean there's never a lower value to animate from, so it would silently never
+ *  play. This seeds below target, then flips one frame later via `LaunchedEffect` so it
+ *  genuinely animates in. */
+@Composable
+fun Modifier.staggeredEntrance(index: Int, capMs: Int = 400): Modifier {
+    var started by remember(index) { mutableStateOf(false) }
+    LaunchedEffect(index) { started = true }
+    val delayMs = (index * 40).coerceAtMost(capMs)
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (started) 1f else 0f,
+        animationSpec = tween(700, delayMillis = delayMs, easing = EmphasizedDecelerate),
+        label = "stagger_alpha_$index",
+    )
+    val animatedScale by animateFloatAsState(
+        targetValue = if (started) 1f else 0.92f,
+        animationSpec = tween(700, delayMillis = delayMs, easing = EmphasizedDecelerate),
+        label = "stagger_scale_$index",
+    )
+    return this.graphicsLayer {
+        alpha = animatedAlpha
+        scaleX = animatedScale
+        scaleY = animatedScale
+    }
+}
 
 @android.annotation.SuppressLint("NewApi")
 internal fun Modifier.preferredFrameRateSafe(hz: Float): Modifier =
@@ -237,7 +326,7 @@ internal fun Modifier.preferredFrameRateSafe(hz: Float): Modifier =
 
 @Composable
 fun MaterialYou3Seekbar(
-    positionProvider: () -> Long,
+    position: State<Long>,
     durationMs: Long,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -247,12 +336,12 @@ fun MaterialYou3Seekbar(
 ) {
     val haptics = LocalHapticFeedback.current
     val config = LocalAppearanceConfig.current
-    val positionMs by remember { derivedStateOf { positionProvider() } }
+    val positionMs by position
 
     val targetProgress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
-        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 170, easing = FastOutSlowInEasing),
         label = "m3_progress",
     )
 
@@ -266,14 +355,14 @@ fun MaterialYou3Seekbar(
     // seekbar this style is meant to evoke.
     val activeHeight by animateDpAsState(
         targetValue = if (isDragging) 22.dp else 14.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "m3_height"
     )
     // Always visible, not just while dragging — on a track this thick, a bare color transition
     // alone doesn't read as "there's a handle here."
     val thumbHeight by animateDpAsState(
         targetValue = if (isDragging) 32.dp else 22.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "m3_thumb_height"
     )
 
@@ -342,7 +431,7 @@ fun MaterialYou3Seekbar(
 @Composable
 fun WaveformSeekbar(
     waveformData: WaveformData?,
-    positionProvider: () -> Long,
+    position: State<Long>,
     durationMs: Long,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -355,12 +444,12 @@ fun WaveformSeekbar(
 ) {
     val haptics = LocalHapticFeedback.current
     val config = LocalAppearanceConfig.current
-    val positionMs by remember { derivedStateOf { positionProvider() } }
+    val positionMs by position
 
     val targetProgress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
-        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 170, easing = FastOutSlowInEasing),
         label = "waveform_progress",
     )
 
@@ -369,14 +458,14 @@ fun WaveformSeekbar(
         initialValue = 0.96f,
         targetValue = 1.04f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = EaseInOutSine),
+            animation = tween(2520, easing = EaseInOutSine),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "breathe_amp",
     )
     val ampMultiplier by animateFloatAsState(
         targetValue = if (isPlaying) breathe else 1f,
-        animationSpec = tween(400),
+        animationSpec = tween(560),
         label = "amp_multiplier",
     )
 
@@ -486,7 +575,7 @@ fun SongCard(
         targetValue = if (isPlaying || isSelected) 1.015f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow,
+            stiffness = Spring.StiffnessLow,
         ),
         label = "song_scale",
     )
@@ -502,7 +591,7 @@ fun SongCard(
         targetValue = targetColor,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow,
+            stiffness = Spring.StiffnessLow,
         ),
         label = "song_color",
     )
@@ -553,8 +642,8 @@ fun SongCard(
                 AnimatedContent(
                     targetState = isSelected,
                     transitionSpec = {
-                        fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.8f) togetherWith
-                                fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.8f)
+                        fadeIn(tween(280)) + scaleIn(tween(280), initialScale = 0.8f) togetherWith
+                                fadeOut(tween(210)) + scaleOut(tween(210), targetScale = 0.8f)
                     },
                     label = "leading_selection"
                 ) { selected ->
@@ -685,7 +774,7 @@ fun PlayingBarsIndicator(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
+            animation = tween(1680, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "bars_base",
@@ -792,9 +881,9 @@ fun MiniPlayer(
                 AnimatedContent(
                     targetState = song.title to song.displayArtist,
                     transitionSpec = {
-                        (fadeIn(tween(280, delayMillis = 80, easing = EmphasizedDecelerate)) +
-                            slideInVertically(tween(320, easing = EmphasizedDecelerate)) { (it * 0.12f).toInt() })
-                            .togetherWith(fadeOut(tween(120, easing = EmphasizedAccelerate)))
+                        (fadeIn(tween(390, delayMillis = 110, easing = EmphasizedDecelerate)) +
+                            slideInVertically(tween(450, easing = EmphasizedDecelerate)) { (it * 0.12f).toInt() })
+                            .togetherWith(fadeOut(tween(170, easing = EmphasizedAccelerate)))
                     },
                     label = "mini_song_info",
                     modifier = Modifier.weight(1f),
@@ -821,9 +910,9 @@ fun MiniPlayer(
                     AnimatedContent(
                         targetState = isPlaying,
                         transitionSpec = {
-                            (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium)) +
-                                fadeIn(tween(140, easing = EmphasizedDecelerate))) togetherWith
-                                (scaleOut(tween(80)) + fadeOut(tween(80)))
+                            (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) +
+                                fadeIn(tween(200, easing = EmphasizedDecelerate))) togetherWith
+                                (scaleOut(tween(110)) + fadeOut(tween(110)))
                         },
                         label = "mini_play_icon",
                     ) { playing ->
@@ -959,7 +1048,7 @@ fun ConfettiOverlay(modifier: Modifier = Modifier) {
     val progress by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing)),
+        animationSpec = infiniteRepeatable(tween(12600, easing = LinearEasing)),
         label = "confetti_t",
     )
 

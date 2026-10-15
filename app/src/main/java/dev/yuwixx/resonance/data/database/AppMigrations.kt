@@ -230,3 +230,22 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         """.trimIndent())
     }
 }
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `artist_info` (
+                `artistName` TEXT NOT NULL,
+                `formedYear` INTEGER,
+                `dissolvedYear` INTEGER,
+                `type` TEXT,
+                `genres` TEXT NOT NULL,
+                `bio` TEXT,
+                `members` TEXT,
+                `sourceAttribution` TEXT NOT NULL,
+                `fetchedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`artistName`)
+            )
+        """.trimIndent())
+    }
+}

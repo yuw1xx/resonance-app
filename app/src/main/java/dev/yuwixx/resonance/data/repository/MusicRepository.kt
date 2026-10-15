@@ -14,12 +14,18 @@ import dev.yuwixx.resonance.data.database.dao.*
 import dev.yuwixx.resonance.data.database.entity.*
 import dev.yuwixx.resonance.data.model.*
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.domain.usecase.ArtistSplitter
+import dev.yuwixx.resonance.domain.usecase.AudioTagWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
+
+// Compiled once and reused by naturalCompare() below — it's the comparator for every pairwise
+// comparison during an Albums/Artists sort, so recompiling it per call adds up on large libraries.
+private val NATURAL_SORT_CHUNK_REGEX = Regex("(\\d+|\\D+)")
 
 @Singleton
 class MusicRepository @Inject constructor(
@@ -28,6 +34,7 @@ class MusicRepository @Inject constructor(
     private val historyDao: HistoryDao,
     private val playlistDao: PlaylistDao,
     private val prefs: ResonancePreferences,
+    private val audioTagWriter: AudioTagWriter,
 ) {
 
     // combine() with 5 flows so that changing any pref instantly re-filters/re-maps songs
@@ -115,17 +122,17 @@ class MusicRepository @Inject constructor(
     fun searchSongs(query: String): Flow<List<Song>> =
         combine(songDao.searchSongs(query), prefs.artistDelimiter) { entities, delimiter ->
             entities.map { it.toDomain(delimiter) }
-        }
+        }.flowOn(Dispatchers.Default)
 
     fun getSongsByFolder(folder: String): Flow<List<Song>> =
         combine(songDao.getSongsByFolder(folder), prefs.artistDelimiter) { entities, delimiter ->
             entities.map { it.toDomain(delimiter) }
-        }
+        }.flowOn(Dispatchers.Default)
 
     fun getSongsByGenre(genre: String): Flow<List<Song>> =
         combine(songDao.getSongsByGenre(genre), prefs.artistDelimiter) { entities, delimiter ->
             entities.map { it.toDomain(delimiter) }
-        }
+        }.flowOn(Dispatchers.Default)
 
     // ─── MediaStore Sync ───
 
@@ -339,6 +346,11 @@ class MusicRepository @Inject constructor(
         SmartQueueResult(songs = result, reason = reason)
     }
 
+    // Returns whether the tags were actually saved. The physical file write is attempted first
+    // and the DB is only updated to match on success — previously the DB was updated
+    // unconditionally and a failed write was silently discarded, so a failure looked like success
+    // until the next library sync silently reverted the DB back to the real (unedited) file, with
+    // no feedback to the user about what happened.
     suspend fun updateSongTags(
         songId: Long,
         title: String,
@@ -349,39 +361,78 @@ class MusicRepository @Inject constructor(
         year: Int,
         trackNumber: Int,
         discNumber: Int,
-    ) = withContext(Dispatchers.IO) {
-        val entity = songDao.getSongById(songId) ?: return@withContext
-        val updated = entity.copy(
-            title = title,
-            artist = artist,
-            albumArtist = albumArtist,
-            album = album,
-            genre = genre,
-            year = year,
-            trackNumber = trackNumber,
-            discNumber = discNumber,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val entity = songDao.getSongById(songId) ?: return@withContext false
+
+        val success = audioTagWriter.writeTags(
+            path = entity.path,
+            uri = Uri.parse(entity.uri),
+            fields = mapOf(
+                org.jaudiotagger.tag.FieldKey.TITLE to title,
+                org.jaudiotagger.tag.FieldKey.ARTIST to artist,
+                org.jaudiotagger.tag.FieldKey.ALBUM_ARTIST to albumArtist,
+                org.jaudiotagger.tag.FieldKey.ALBUM to album,
+                org.jaudiotagger.tag.FieldKey.GENRE to genre,
+                org.jaudiotagger.tag.FieldKey.YEAR to year.toString(),
+                org.jaudiotagger.tag.FieldKey.TRACK to trackNumber.toString(),
+                org.jaudiotagger.tag.FieldKey.DISC_NO to discNumber.toString(),
+            ),
         )
-
-        songDao.upsertSongs(listOf(updated))
-
-        try {
-            val file = java.io.File(entity.path)
-            if (file.exists() && file.canWrite()) {
-                val audioFile = org.jaudiotagger.audio.AudioFileIO.read(file)
-                val tag = audioFile.tagOrCreateAndSetDefault
-                tag.setField(org.jaudiotagger.tag.FieldKey.TITLE, title)
-                tag.setField(org.jaudiotagger.tag.FieldKey.ARTIST, artist)
-                tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM_ARTIST, albumArtist)
-                tag.setField(org.jaudiotagger.tag.FieldKey.ALBUM, album)
-                tag.setField(org.jaudiotagger.tag.FieldKey.GENRE, genre)
-                tag.setField(org.jaudiotagger.tag.FieldKey.YEAR, year.toString())
-                tag.setField(org.jaudiotagger.tag.FieldKey.TRACK, trackNumber.toString())
-                tag.setField(org.jaudiotagger.tag.FieldKey.DISC_NO, discNumber.toString())
-                org.jaudiotagger.audio.AudioFileIO.write(audioFile)
-            }
-        } catch (e: Exception) {
-            Log.e("MusicRepository", "Failed to write physical ID3 tag (Likely Android 11+ Scoped Storage restriction). Database updated successfully.", e)
+        if (success) {
+            songDao.upsertSongs(listOf(entity.copy(
+                title = title,
+                artist = artist,
+                albumArtist = albumArtist,
+                album = album,
+                genre = genre,
+                year = year,
+                trackNumber = trackNumber,
+                discNumber = discNumber,
+            )))
         }
+        success
+    }
+
+    // Applies only the fields the caller passes non-null — a multi-song batch edit where each
+    // field is independently opt-in, unlike updateSongTags (single song, every field always
+    // overwritten with the form's current value). Returns how many files were actually rewritten
+    // on disk; the DB is only updated for songs whose physical write succeeded (previously the DB
+    // was updated for every song regardless of per-song write success, same silent-divergence
+    // issue as updateSongTags had).
+    suspend fun batchUpdateSongTags(
+        songIds: List<Long>,
+        albumArtist: String?,
+        album: String?,
+        genre: String?,
+        year: Int?,
+    ): Int = withContext(Dispatchers.IO) {
+        var succeeded = 0
+        val updatedEntities = mutableListOf<SongEntity>()
+
+        for (songId in songIds) {
+            val entity = songDao.getSongById(songId) ?: continue
+
+            val fields = buildMap {
+                if (albumArtist != null) put(org.jaudiotagger.tag.FieldKey.ALBUM_ARTIST, albumArtist)
+                if (album != null) put(org.jaudiotagger.tag.FieldKey.ALBUM, album)
+                if (genre != null) put(org.jaudiotagger.tag.FieldKey.GENRE, genre)
+                if (year != null) put(org.jaudiotagger.tag.FieldKey.YEAR, year.toString())
+            }
+            if (audioTagWriter.writeTags(entity.path, Uri.parse(entity.uri), fields)) {
+                succeeded++
+                updatedEntities.add(
+                    entity.copy(
+                        albumArtist = albumArtist ?: entity.albumArtist,
+                        album = album ?: entity.album,
+                        genre = genre ?: entity.genre,
+                        year = year ?: entity.year,
+                    )
+                )
+            }
+        }
+
+        if (updatedEntities.isNotEmpty()) songDao.upsertSongs(updatedEntities)
+        succeeded
     }
 
     suspend fun updateReplayGain(songId: Long, trackGain: Float?, albumGain: Float?) {
@@ -392,9 +443,8 @@ class MusicRepository @Inject constructor(
 
     // Sorts strings with embedded numbers numerically ("Track 2" before "Track 10").
     private fun naturalCompare(a: String, b: String): Int {
-        val re = Regex("(\\d+|\\D+)")
-        val chunksA = re.findAll(a).map { it.value }.toList()
-        val chunksB = re.findAll(b).map { it.value }.toList()
+        val chunksA = NATURAL_SORT_CHUNK_REGEX.findAll(a).map { it.value }.toList()
+        val chunksB = NATURAL_SORT_CHUNK_REGEX.findAll(b).map { it.value }.toList()
         for (i in 0 until minOf(chunksA.size, chunksB.size)) {
             val ca = chunksA[i]; val cb = chunksB[i]
             val diff = if (ca[0].isDigit() && cb[0].isDigit()) {
@@ -410,11 +460,7 @@ fun SongEntity.toDomain(artistDelimiter: String = ",;/&"): Song {
     val artworkUri = ContentUris.withAppendedId(
         Uri.parse("content://media/external/audio/albumart"), albumId
     )
-    val delimPattern = Regex("[${Regex.escape(artistDelimiter)}]")
-    val artists = artist.split(delimPattern)
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .ifEmpty { listOf(artist) }
+    val artists = ArtistSplitter.split(artist, artistDelimiter)
 
     return Song(
         id = id,

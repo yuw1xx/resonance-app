@@ -46,18 +46,10 @@ class PlayerViewModel @Inject constructor(
     private val castManager: CastManager,
     private val localAudioServer: LocalAudioServer,
     private val artworkRepository: ArtworkRepository,
-    private val visualizerStateHolder: dev.yuwixx.resonance.data.service.VisualizerStateHolder,
     private val replayGainProcessor: dev.yuwixx.resonance.domain.usecase.ReplayGainProcessor,
     private val navidromeDownloadRepository: NavidromeDownloadRepository,
     private val navidromeSyncRepository: NavidromeSyncRepository,
 ) : ViewModel() {
-
-    val visualizerBars: StateFlow<FloatArray> = visualizerStateHolder.magnitudes
-
-    // Only capture while the Cava seekbar is actually composed (see CavaSeekbar's
-    // DisposableEffect) — MusicService also gates on isPlaying, so this is belt-and-suspenders
-    // against burning battery on a bar row nobody can see.
-    fun setVisualizerActive(active: Boolean) = visualizerStateHolder.requestActive(active)
 
     private var _controller: MediaController? = null
 
@@ -486,6 +478,7 @@ class PlayerViewModel @Inject constructor(
                 album = song.album,
                 durationMs = song.duration,
                 songUri = song.uri,
+                forceRefresh = true,
             )
         }
     }
@@ -767,6 +760,7 @@ class PlayerViewModel @Inject constructor(
                 Player.REPEAT_MODE_ALL -> dev.yuwixx.resonance.data.model.RepeatMode.ALL
                 else -> dev.yuwixx.resonance.data.model.RepeatMode.NONE
             }
+            updateNextSong()
         }
 
         override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {

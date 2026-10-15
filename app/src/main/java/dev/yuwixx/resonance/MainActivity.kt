@@ -12,6 +12,8 @@ import android.text.style.URLSpan
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dagger.hilt.android.AndroidEntryPoint
 import dev.yuwixx.resonance.cast.CastManager
+import dev.yuwixx.resonance.data.service.MediaStoreWriteBroker
 import dev.yuwixx.resonance.presentation.components.ConfettiOverlay
 import dev.yuwixx.resonance.presentation.navigation.ResonanceNavGraph
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
@@ -59,14 +62,22 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var castManager: CastManager
+    @Inject lateinit var mediaStoreWriteBroker: MediaStoreWriteBroker
 
     private val receiveUri = MutableStateFlow<Uri?>(null)
+
+    private val writeRequestLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        mediaStoreWriteBroker.onResult(result.resultCode == RESULT_OK)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         castManager.initialize()
+        mediaStoreWriteBroker.bind(writeRequestLauncher)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val layoutParams = window.attributes
@@ -235,6 +246,11 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intent.data?.let { receiveUri.value = it }
+    }
+
+    override fun onDestroy() {
+        mediaStoreWriteBroker.unbind(writeRequestLauncher)
+        super.onDestroy()
     }
 }
 

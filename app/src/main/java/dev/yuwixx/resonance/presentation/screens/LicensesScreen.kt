@@ -1,9 +1,11 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
@@ -15,6 +17,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
+import dev.yuwixx.resonance.presentation.components.staggeredEntrance
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -78,51 +82,60 @@ fun LicensesScreen(onBack: () -> Unit) {
             )
         }
     ) { paddingValues ->
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(
-                    top = paddingValues.calculateTopPadding(),
-                    bottom = paddingValues.calculateBottomPadding() + 32.dp
-                ),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(licenses) { item ->
-                    ListItem(
-                        modifier = Modifier.clickable {
-                            if (item.moduleUrl.isNotBlank()) uriHandler.openUri(item.moduleUrl)
-                        },
-                        headlineContent = {
-                            Text(
-                                text = item.moduleName,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        },
-                        supportingContent = {
-                            Column {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text("Version: ${item.moduleVersion}", style = MaterialTheme.typography.bodySmall)
-                                Text(item.moduleLicense, style = MaterialTheme.typography.bodySmall)
-                            }
-                        },
-                        trailingContent = {
-                            if (item.moduleLicenseUrl.isNotBlank() && item.moduleLicenseUrl != "null") {
-                                IconButton(onClick = { uriHandler.openUri(item.moduleLicenseUrl) }) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
-                                        contentDescription = "View License",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+        Crossfade(
+            targetState = isLoading,
+            animationSpec = tween(340, easing = EmphasizedDecelerate),
+            label = "licenses_loading",
+        ) { loading ->
+            if (loading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(
+                        top = paddingValues.calculateTopPadding(),
+                        bottom = paddingValues.calculateBottomPadding() + 32.dp
+                    ),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    itemsIndexed(licenses, key = { _, item -> item.moduleName }) { index, item ->
+                        ListItem(
+                            modifier = Modifier
+                                .animateItem()
+                                .staggeredEntrance(index)
+                                .clickable {
+                                    if (item.moduleUrl.isNotBlank()) uriHandler.openUri(item.moduleUrl)
+                                },
+                            headlineContent = {
+                                Text(
+                                    text = item.moduleName,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            supportingContent = {
+                                Column {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text("Version: ${item.moduleVersion}", style = MaterialTheme.typography.bodySmall)
+                                    Text(item.moduleLicense, style = MaterialTheme.typography.bodySmall)
                                 }
-                            }
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            },
+                            trailingContent = {
+                                if (item.moduleLicenseUrl.isNotBlank() && item.moduleLicenseUrl != "null") {
+                                    IconButton(onClick = { uriHandler.openUri(item.moduleLicenseUrl) }) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                                            contentDescription = "View License",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    }
                 }
             }
         }

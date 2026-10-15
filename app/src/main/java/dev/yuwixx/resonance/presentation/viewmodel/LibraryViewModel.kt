@@ -77,6 +77,12 @@ class LibraryViewModel @Inject constructor(
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
+    // Same pattern as PlayerViewModel.smartQueueError — a transient, ViewModel-driven error the
+    // UI surfaces once (e.g. via a snackbar) then clears.
+    private val _tagEditError = MutableStateFlow<String?>(null)
+    val tagEditError: StateFlow<String?> = _tagEditError.asStateFlow()
+    fun clearTagEditError() { _tagEditError.value = null }
+
     val navSyncState: StateFlow<NavidromeSyncState> = navidromeRepository.syncState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NavidromeSyncState.Idle)
 
@@ -202,10 +208,28 @@ class LibraryViewModel @Inject constructor(
         year: Int,
         trackNumber: Int,
         discNumber: Int,
+        onResult: (Boolean) -> Unit = {},
     ) {
         viewModelScope.launch {
-            musicRepository.updateSongTags(songId, title, artist, albumArtist, album, genre, year, trackNumber, discNumber)
+            val success = musicRepository.updateSongTags(songId, title, artist, albumArtist, album, genre, year, trackNumber, discNumber)
+            if (!success) _tagEditError.value = "Couldn't save tags — the file couldn't be written"
             syncLibrary(force = true)
+            onResult(success)
+        }
+    }
+
+    fun batchUpdateSongTags(
+        songIds: List<Long>,
+        albumArtist: String?,
+        album: String?,
+        genre: String?,
+        year: Int?,
+        onComplete: (succeeded: Int, total: Int) -> Unit = { _, _ -> },
+    ) {
+        viewModelScope.launch {
+            val succeeded = musicRepository.batchUpdateSongTags(songIds, albumArtist, album, genre, year)
+            syncLibrary(force = true)
+            onComplete(succeeded, songIds.size)
         }
     }
 

@@ -7,6 +7,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.yuwixx.resonance.data.model.BackupPreferenceEntry
 import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.model.RepeatMode
 import dev.yuwixx.resonance.data.model.SortOrder
@@ -103,6 +104,8 @@ class ResonancePreferences @Inject constructor(
         val MALOJA_SERVER_URL = stringPreferencesKey("maloja_server_url")
         val MALOJA_API_KEY    = stringPreferencesKey("maloja_api_key")
 
+        val DISCOGS_API_TOKEN = stringPreferencesKey("discogs_api_token")
+
         val REMOTE_SHARE_SERVER_URL   = stringPreferencesKey("remote_share_server_url")
         val REMOTE_SHARE_UPLOAD_TOKEN = stringPreferencesKey("remote_share_upload_token")
         val DEVICE_ID                 = stringPreferencesKey("device_id")
@@ -143,6 +146,7 @@ class ResonancePreferences @Inject constructor(
         val HOME_RECENTLY_ADDED_COUNT   = intPreferencesKey("home_recently_added_count")
         val DEFAULT_SONGS_SORT          = stringPreferencesKey("default_songs_sort")
         val SHOW_EQUALIZER_IN_PLAYER    = booleanPreferencesKey("show_equalizer_in_player")
+        val LYRICS_FONT_FAMILY          = stringPreferencesKey("lyrics_font_family")
     }
 
     val isFirstRun: Flow<Boolean> = ds.data.map { it[IS_FIRST_RUN] ?: true }
@@ -443,6 +447,9 @@ class ResonancePreferences @Inject constructor(
     val lyricsLineSpacing: Flow<String> = ds.data.map { it[LYRICS_LINE_SPACING] ?: "NORMAL" }
     suspend fun setLyricsLineSpacing(spacing: String) { ds.edit { it[LYRICS_LINE_SPACING] = spacing } }
 
+    val lyricsFontFamily: Flow<String> = ds.data.map { it[LYRICS_FONT_FAMILY] ?: "DEFAULT" }
+    suspend fun setLyricsFontFamily(family: String) { ds.edit { it[LYRICS_FONT_FAMILY] = family } }
+
     val miniPlayerShowProgress: Flow<Boolean> = ds.data.map { it[MINI_PLAYER_SHOW_PROGRESS] ?: true }
     suspend fun setMiniPlayerShowProgress(show: Boolean) { ds.edit { it[MINI_PLAYER_SHOW_PROGRESS] = show } }
 
@@ -470,6 +477,9 @@ class ResonancePreferences @Inject constructor(
     suspend fun setMalojaEnabled(v: Boolean)  { ds.edit { it[MALOJA_ENABLED]    = v } }
     suspend fun setMalojaServerUrl(v: String) { ds.edit { it[MALOJA_SERVER_URL] = v } }
     suspend fun setMalojaApiKey(v: String)    { ds.edit { it[MALOJA_API_KEY]    = v } }
+
+    val discogsApiToken: Flow<String> = ds.data.map { it[DISCOGS_API_TOKEN] ?: "" }
+    suspend fun setDiscogsApiToken(v: String) { ds.edit { it[DISCOGS_API_TOKEN] = v } }
 
     val remoteShareServerUrl: Flow<String>   = ds.data.map { it[REMOTE_SHARE_SERVER_URL] ?: "" }
     val remoteShareUploadToken: Flow<String> = ds.data.map { it[REMOTE_SHARE_UPLOAD_TOKEN] ?: "" }
@@ -500,5 +510,59 @@ class ResonancePreferences @Inject constructor(
             it.remove(LAST_FM_SESSION_KEY)
             it[LAST_FM_ENABLED] = false
         }
+    }
+
+    // ─── Backup / Restore ───
+
+    // Never leaves the device in a backup file, and never gets written back in on restore even
+    // if a hand-edited file claims one of these keys: credentials, tokens, server URLs/usernames,
+    // and device/session identity. (Actual secrets — Navidrome password, Last.fm session key's
+    // sibling encrypted fields — mostly live in SecureCredentialStore, not this DataStore; these
+    // are the sensitive fields that do live here.)
+    private val BACKUP_EXCLUDED_KEYS = setOf(
+        "navidrome_server_url", "navidrome_username", "navidrome_password",
+        "maloja_server_url", "maloja_api_key",
+        "discogs_api_token",
+        "remote_share_server_url", "remote_share_upload_token",
+        "device_id",
+        "last_fm_username", "last_fm_session_key",
+        "music_source",
+        "is_first_run",
+    )
+
+    suspend fun exportBackupPreferences(): List<BackupPreferenceEntry> {
+        val snapshot = ds.data.first()
+        return snapshot.asMap().mapNotNull { (key, value) ->
+            if (key.name in BACKUP_EXCLUDED_KEYS) return@mapNotNull null
+            when (value) {
+                is Boolean -> BackupPreferenceEntry(key.name, "boolean", value.toString())
+                is String  -> BackupPreferenceEntry(key.name, "string", value)
+                is Int     -> BackupPreferenceEntry(key.name, "int", value.toString())
+                is Long    -> BackupPreferenceEntry(key.name, "long", value.toString())
+                is Float   -> BackupPreferenceEntry(key.name, "float", value.toString())
+                is Set<*>  -> BackupPreferenceEntry(key.name, "stringSet", values = value.filterIsInstance<String>())
+                else -> null
+            }
+        }
+    }
+
+    suspend fun importBackupPreferences(entries: List<BackupPreferenceEntry>): Int {
+        var applied = 0
+        ds.edit { mutablePrefs ->
+            entries.forEach entry@{ entry ->
+                if (entry.key in BACKUP_EXCLUDED_KEYS) return@entry
+                val ok = when (entry.type) {
+                    "boolean" -> entry.value?.toBooleanStrictOrNull()?.let { mutablePrefs[booleanPreferencesKey(entry.key)] = it } != null
+                    "string" -> entry.value?.let { mutablePrefs[stringPreferencesKey(entry.key)] = it } != null
+                    "int" -> entry.value?.toIntOrNull()?.let { mutablePrefs[intPreferencesKey(entry.key)] = it } != null
+                    "long" -> entry.value?.toLongOrNull()?.let { mutablePrefs[longPreferencesKey(entry.key)] = it } != null
+                    "float" -> entry.value?.toFloatOrNull()?.let { mutablePrefs[floatPreferencesKey(entry.key)] = it } != null
+                    "stringSet" -> entry.values?.let { mutablePrefs[stringSetPreferencesKey(entry.key)] = it.toSet() } != null
+                    else -> false
+                }
+                if (ok) applied++
+            }
+        }
+        return applied
     }
 }

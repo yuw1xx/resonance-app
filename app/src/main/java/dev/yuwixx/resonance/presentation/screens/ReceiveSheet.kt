@@ -33,6 +33,10 @@ import androidx.compose.ui.unit.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import dev.yuwixx.resonance.data.model.Song
+import dev.yuwixx.resonance.presentation.components.AnimatedPermissionGate
+import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
+import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
+import dev.yuwixx.resonance.presentation.components.staggeredEntrance
 import kotlinx.coroutines.*
 import org.json.JSONArray
 import java.io.File
@@ -150,25 +154,27 @@ private fun StoragePermissionGate(
         rememberMultiplePermissionsState(emptyList())
     }
 
-    if (!needsWritePermission || permissions.allPermissionsGranted) {
-        content()
-    } else {
-        Column(
-            modifier              = Modifier
-                .fillMaxWidth()
-                .padding(32.dp)
-                .navigationBarsPadding(),
-            horizontalAlignment   = Alignment.CenterHorizontally,
-            verticalArrangement   = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(Icons.Rounded.FolderOpen, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
-            Text("Storage permission needed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("Resonance needs storage access to save the incoming track.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(4.dp))
-            Button(onClick = permissions::launchMultiplePermissionRequest, shape = MaterialTheme.shapes.medium) { Text("Grant permission") }
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    }
+    AnimatedPermissionGate(
+        granted = !needsWritePermission || permissions.allPermissionsGranted,
+        prompt = {
+            Column(
+                modifier              = Modifier
+                    .fillMaxWidth()
+                    .padding(32.dp)
+                    .navigationBarsPadding(),
+                horizontalAlignment   = Alignment.CenterHorizontally,
+                verticalArrangement   = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(Icons.Rounded.FolderOpen, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+                Text("Storage permission needed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Resonance needs storage access to save the incoming track.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                Button(onClick = permissions::launchMultiplePermissionRequest, shape = MaterialTheme.shapes.medium) { Text("Grant permission") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+        content = content,
+    )
 }
 
 private sealed class ReceiveState {
@@ -246,19 +252,31 @@ private fun ReceiveTransferContent(
         )
         Spacer(Modifier.height(4.dp))
 
-        val iconRes = when (state) {
-            is ReceiveState.Done  -> Icons.Rounded.CheckCircle
-            is ReceiveState.Error -> Icons.Rounded.ErrorOutline
-            is ReceiveState.Prompting -> Icons.AutoMirrored.Rounded.HelpOutline
-            else                  -> if (params.mode == "p2p") Icons.Rounded.Wifi else Icons.Rounded.Download
+        // Keyed on a coarse "which icon" bucket rather than the raw state — Connecting's
+        // `detail` text and Downloading's `progress` both change several times per second and
+        // share the same icon, so keying on `state` directly would replay the pop-in animation
+        // on every one of those updates instead of only on an actual icon change.
+        val iconKey = when (state) {
+            is ReceiveState.Done      -> "done"
+            is ReceiveState.Error     -> "error"
+            is ReceiveState.Prompting -> "prompting"
+            else                      -> "active"
         }
-        val iconTint = when (state) {
-            is ReceiveState.Done  -> MaterialTheme.colorScheme.primary
-            is ReceiveState.Error -> MaterialTheme.colorScheme.error
-            is ReceiveState.Prompting -> MaterialTheme.colorScheme.primary
-            else                  -> MaterialTheme.colorScheme.onSurfaceVariant
+        AnimatedStateSwap(targetState = iconKey, label = "receive_state_icon") { key ->
+            val iconRes = when (key) {
+                "done"      -> Icons.Rounded.CheckCircle
+                "error"     -> Icons.Rounded.ErrorOutline
+                "prompting" -> Icons.AutoMirrored.Rounded.HelpOutline
+                else        -> if (params.mode == "p2p") Icons.Rounded.Wifi else Icons.Rounded.Download
+            }
+            val iconTint = when (key) {
+                "done"      -> MaterialTheme.colorScheme.primary
+                "error"     -> MaterialTheme.colorScheme.error
+                "prompting" -> MaterialTheme.colorScheme.primary
+                else        -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Icon(iconRes, null, tint = iconTint, modifier = Modifier.size(48.dp))
         }
-        Icon(iconRes, null, tint = iconTint, modifier = Modifier.size(48.dp))
 
         Text(text = params.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         Text(text = params.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -267,7 +285,7 @@ private fun ReceiveTransferContent(
 
         AnimatedContent(
             targetState = state,
-            transitionSpec = { (fadeIn(tween(200)) + slideInVertically { it / 4 }).togetherWith(fadeOut(tween(150))) },
+            transitionSpec = { (fadeIn(tween(280)) + slideInVertically { it / 4 }).togetherWith(fadeOut(tween(210))) },
             label = "receive_state",
         ) { s ->
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -307,8 +325,9 @@ private fun ReceiveTransferContent(
                     }
 
                     is ReceiveState.Downloading -> {
-                        LinearProgressIndicator(progress = { s.progress }, modifier = Modifier.fillMaxWidth().height(6.dp), trackColor = MaterialTheme.colorScheme.surfaceVariant)
-                        Text("${(s.progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val animatedProgress by animateFloatAsState(s.progress, tween(300, easing = EmphasizedDecelerate), label = "receive_progress")
+                        LinearProgressIndicator(progress = { animatedProgress }, modifier = Modifier.fillMaxWidth().height(6.dp), trackColor = MaterialTheme.colorScheme.surfaceVariant)
+                        Text("${(animatedProgress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
 
                     is ReceiveState.Done -> {
@@ -373,7 +392,11 @@ private fun ReceiveMultiTransferContent(
         )
         Spacer(Modifier.height(4.dp))
 
-        when (val s = state) {
+        AnimatedContent(
+            targetState = state,
+            transitionSpec = { (fadeIn(tween(280)) + slideInVertically { it / 4 }).togetherWith(fadeOut(tween(210))) },
+            label = "multi_receive_state",
+        ) { s -> when (s) {
             is MultiReceiveState.Loading -> {
                 CircularProgressIndicator(modifier = Modifier.size(36.dp), strokeWidth = 3.dp)
                 Text("Loading songs…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -402,23 +425,40 @@ private fun ReceiveMultiTransferContent(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    s.songs.forEach { song ->
+                    s.songs.forEachIndexed { index, song ->
                         val status = s.statuses[song.token] ?: SongDownloadStatus.Pending
                         Surface(
                             shape = MaterialTheme.shapes.medium,
                             color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().staggeredEntrance(index),
                         ) {
                             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(song.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(song.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
-                                when (status) {
-                                    is SongDownloadStatus.Pending -> Icon(Icons.Rounded.Download, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-                                    is SongDownloadStatus.Downloading -> CircularProgressIndicator(progress = { status.progress }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                    is SongDownloadStatus.Done -> Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                    is SongDownloadStatus.Failed -> Icon(Icons.Rounded.ErrorOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                // Keyed on a coarse status bucket (frozen per AnimatedContent instance) rather
+                                // than the live `status` object directly — Downloading's `progress` changes many
+                                // times per second and shouldn't replay the pop-in/out swap on every tick; only
+                                // the "downloading" branch below reads the live outer `status` for its progress
+                                // value, which is safe since that branch only runs while the key is "downloading".
+                                val statusKey = when (status) {
+                                    is SongDownloadStatus.Pending     -> "pending"
+                                    is SongDownloadStatus.Downloading -> "downloading"
+                                    is SongDownloadStatus.Done        -> "done"
+                                    is SongDownloadStatus.Failed      -> "failed"
+                                }
+                                AnimatedStateSwap(targetState = statusKey, label = "song_status_$index") { key ->
+                                    when (key) {
+                                        "pending" -> Icon(Icons.Rounded.Download, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                                        "downloading" -> {
+                                            val progress = (status as? SongDownloadStatus.Downloading)?.progress ?: 0f
+                                            val animatedProgress by animateFloatAsState(progress, tween(300, easing = EmphasizedDecelerate), label = "song_progress_$index")
+                                            CircularProgressIndicator(progress = { animatedProgress }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                        }
+                                        "done" -> Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                        else -> Icon(Icons.Rounded.ErrorOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                    }
                                 }
                             }
                         }
@@ -485,7 +525,7 @@ private fun ReceiveMultiTransferContent(
                     }
                 }
             }
-        }
+        } }
     }
 }
 

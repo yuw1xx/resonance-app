@@ -10,6 +10,10 @@
   ![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)
   ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3-4285F4?logo=jetpackcompose&logoColor=white)
   ![License](https://img.shields.io/badge/License-MIT-blue)
+
+  <h3>Available on</h3>
+  <a href="https://rookieenough.github.io/Orion-Data/redirect.html?id=resonance"><img src="https://raw.githubusercontent.com/RookieEnough/Orion-Store/refs/heads/main/assets/orion-badge.png" alt="Get it on Orion Store" width="180"></a>
+  <a href="https://github.com/yuw1xx/resonance-app/releases/latest"><img src="https://badgen.net/github/release/yuw1xx/resonance-app?label=GitHub+Release&amp;color=black&amp;icon=github" alt="GitHub Release"></a>
 </div>
 
 ---

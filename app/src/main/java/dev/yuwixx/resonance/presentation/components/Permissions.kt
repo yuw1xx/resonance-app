@@ -29,44 +29,46 @@ fun PermissionWrapper(
 
     val permissionState = rememberPermissionState(permission)
 
-    if (permissionState.status.isGranted) {
-        content()
-    } else {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+    AnimatedPermissionGate(
+        granted = permissionState.status.isGranted,
+        prompt = {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Rounded.Storage,
-                    null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    "Music Library Access",
-                    style = MaterialTheme.typography.headlineSmall,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Resonance needs permission to access your audio files to build your library.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = { permissionState.launchPermissionRequest() },
-                    shape = MaterialTheme.shapes.medium
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Text("Grant Permission")
+                    Icon(
+                        Icons.Rounded.Storage,
+                        null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "Music Library Access",
+                        style = MaterialTheme.typography.headlineSmall,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Resonance needs permission to access your audio files to build your library.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    Button(
+                        onClick = { permissionState.launchPermissionRequest() },
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Text("Grant Permission")
+                    }
                 }
             }
-        }
-    }
+        },
+        content = content,
+    )
 }

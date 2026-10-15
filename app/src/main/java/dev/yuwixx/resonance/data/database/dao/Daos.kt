@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.Flow
 
 data class SongPlayCount(val songId: Long, val playCount: Int)
 data class HourPlayCount(val hour: Int, val playCount: Int)
+data class DailyTotal(val day: String, val totalMs: Long, val playCount: Int)
+data class DayOfWeekPlayCount(val dayOfWeek: Int, val playCount: Int)
 
 @Dao
 interface SongDao {
@@ -130,6 +132,11 @@ interface PlaylistDao {
 
     @Query("SELECT * FROM playlists WHERE navidromePlaylistId = :navidromePlaylistId LIMIT 1")
     suspend fun getPlaylistByNavidromeId(navidromePlaylistId: String): PlaylistEntity?
+
+    // Used by backup restore to dedupe by name instead of always inserting a new row — isMix = 0
+    // excludes auto-generated Smart Mixes, which backups never contain and shouldn't be merged into.
+    @Query("SELECT * FROM playlists WHERE name = :name AND isMix = 0 LIMIT 1")
+    suspend fun getPlaylistByName(name: String): PlaylistEntity?
 }
 
 @Dao
@@ -201,6 +208,33 @@ interface HistoryDao {
         ORDER BY hour ASC
     """)
     suspend fun getPlaysByHour(from: Long, to: Long): List<HourPlayCount>
+
+    @Query("SELECT COUNT(*) FROM history WHERE songId = :songId")
+    suspend fun getPlayCountForSong(songId: Long): Int
+
+    @Query("SELECT COALESCE(SUM(durationListened), 0) FROM history WHERE songId = :songId")
+    suspend fun getTotalListenTimeForSong(songId: Long): Long
+
+    @Query("""
+        SELECT date(listenedAt / 1000, 'unixepoch', 'localtime') AS day,
+               COALESCE(SUM(durationListened), 0) AS totalMs,
+               COUNT(*) AS playCount
+        FROM history
+        WHERE listenedAt BETWEEN :from AND :to
+        GROUP BY day
+        ORDER BY day ASC
+    """)
+    suspend fun getDailyTotals(from: Long, to: Long): List<DailyTotal>
+
+    @Query("""
+        SELECT CAST(strftime('%w', listenedAt / 1000, 'unixepoch', 'localtime') AS INTEGER) AS dayOfWeek,
+               COUNT(*) AS playCount
+        FROM history
+        WHERE listenedAt BETWEEN :from AND :to
+        GROUP BY dayOfWeek
+        ORDER BY dayOfWeek ASC
+    """)
+    suspend fun getPlaysByDayOfWeek(from: Long, to: Long): List<DayOfWeekPlayCount>
 }
 
 @Dao
@@ -247,6 +281,15 @@ interface ArtworkDao {
 
     @Upsert
     suspend fun upsertAlbumArtwork(artwork: AlbumArtworkEntity)
+}
+
+@Dao
+interface ArtistInfoDao {
+    @Query("SELECT * FROM artist_info WHERE artistName = :artistName")
+    suspend fun getArtistInfo(artistName: String): ArtistInfoEntity?
+
+    @Upsert
+    suspend fun upsert(info: ArtistInfoEntity)
 }
 
 @Dao

@@ -41,10 +41,14 @@ class BackupViewModel @Inject constructor(
         _state.value = BackupUiState.Working
         viewModelScope.launch {
             _state.value = when (val result = backupManager.restoreBackup(uri)) {
-                is RestoreResult.Success ->
+                is RestoreResult.Success -> {
+                    val skipped = result.likedSkipped + result.playlistSongsSkipped + result.historySkipped
+                    val skippedNote = if (skipped > 0) " ($skipped songs not found in this library)" else ""
                     BackupUiState.ImportSuccess(
-                        "Restored ${result.likedRestored} liked songs and ${result.playlistsRestored} playlists"
+                        "Restored ${result.likedRestored} liked songs, ${result.playlistsRestored} playlists, " +
+                            "${result.historyRestored} listening history entries, and ${result.settingsRestored} settings$skippedNote"
                     )
+                }
                 is RestoreResult.Error -> BackupUiState.Error(result.message)
             }
         }

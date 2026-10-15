@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
@@ -43,6 +44,7 @@ import dev.yuwixx.resonance.presentation.components.*
 import dev.yuwixx.resonance.presentation.components.EaseInOutSine
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.ShareViewModel
+import dev.yuwixx.resonance.ui.theme.DmSans
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import java.text.DecimalFormat
@@ -61,12 +63,15 @@ fun PlayerScreen(
     onAddToPlaylist: (Playlist) -> Unit = {},
     onCreatePlaylist: (String) -> Unit = {},
     onArtistClick: (String) -> Unit = {},
+    onSongClick: (Long) -> Unit = {},
 ) {
     val currentSong by playerViewModel.currentSong.collectAsState()
     val isPlaying by playerViewModel.isPlaying.collectAsState()
 
-    val positionMs by playerViewModel.positionMs.collectAsState()
-    val positionProvider: () -> Long = { positionMs }
+    // Not `by` — this obtains the State<Long> reference without reading `.value` here, so
+    // PlayerScreen's own (large) recompose scope isn't subscribed to every ~100ms position tick.
+    // Only SeekBarAndTimeLabels (the one place that actually needs live position) reads `.value`.
+    val positionMsState = playerViewModel.positionMs.collectAsState()
 
     val durationMs by playerViewModel.durationMs.collectAsState()
     val repeatMode by playerViewModel.repeatMode.collectAsState()
@@ -82,7 +87,6 @@ fun PlayerScreen(
     val isTrackLoved by playerViewModel.isCurrentSongLiked.collectAsState()
     val artworkColors by playerViewModel.artworkColors.collectAsState()
     val nextSong by playerViewModel.nextSong.collectAsState()
-    val visualizerBars by playerViewModel.visualizerBars.collectAsState()
     val isLoadingSmartQueue by playerViewModel.isLoadingSmartQueue.collectAsState()
     val smartQueueError by playerViewModel.smartQueueError.collectAsState()
 
@@ -156,7 +160,7 @@ fun PlayerScreen(
             PlaybackControls(
                 song = song,
                 isPlaying = isPlaying,
-                positionProvider = positionProvider,
+                position = positionMsState,
                 durationMs = durationMs,
                 repeatMode = repeatMode,
                 shuffleEnabled = shuffleEnabled,
@@ -165,8 +169,6 @@ fun PlayerScreen(
                 isTrackLoved = isTrackLoved,
                 nextSong = nextSong,
                 artworkColors = artworkColors,
-                visualizerBars = visualizerBars,
-                onVisualizerActiveChanged = { playerViewModel.setVisualizerActive(it) },
                 onPlayPause = { playerViewModel.playPause() },
                 onNext = { playerViewModel.skipNext() },
                 onPrevious = { playerViewModel.skipPrevious() },
@@ -174,7 +176,8 @@ fun PlayerScreen(
                 onRepeatModeChange = { playerViewModel.toggleRepeat() },
                 onShuffleToggle = { playerViewModel.toggleShuffle() },
                 onLoveTrack = { playerViewModel.toggleLike() },
-                onArtistClick = { onArtistClick(song.artists.firstOrNull() ?: song.artist) },
+                onArtistClick = onArtistClick,
+                onSongClick = { onSongClick(song.id) },
             )
 
             PlayerFooter(
@@ -191,27 +194,19 @@ fun PlayerScreen(
 
         AnimatedVisibility(
             visible = showLyricsOverlay,
-            enter = fadeIn(tween(240, easing = EmphasizedDecelerate)) +
-                scaleIn(tween(380, easing = EmphasizedDecelerate), initialScale = 0.95f),
-            exit = fadeOut(tween(200, easing = EmphasizedAccelerate)) +
-                scaleOut(tween(180, easing = EmphasizedAccelerate), targetScale = 0.98f),
+            enter = fadeIn(tween(340, easing = EmphasizedDecelerate)) +
+                scaleIn(tween(530, easing = EmphasizedDecelerate), initialScale = 0.95f),
+            exit = fadeOut(tween(280, easing = EmphasizedAccelerate)) +
+                scaleOut(tween(250, easing = EmphasizedAccelerate), targetScale = 0.98f),
         ) {
-            val lines: List<LyricLine> = when (val r = lyricsResult) {
-                is LyricsResult.Synced -> r.lines
-                is LyricsResult.Plain  -> r.lines.mapIndexed { _, l ->
-                    LyricLine(timeMs = 0L, text = l)
-                }
-                else -> emptyList()
-            }
-            if (lines.isNotEmpty()) {
-                LyricsOverlay(
-                    lyrics = lines,
-                    activeLineIndex = activeLyricIndex,
-                    fontScale = lyricsFontScale,
-                    onSeek = { playerViewModel.seekTo(it) },
-                    onClose = { showLyricsOverlay = false },
-                )
-            }
+            LyricsOverlay(
+                result = lyricsResult,
+                activeLineIndex = activeLyricIndex,
+                fontScale = lyricsFontScale,
+                onSeek = { playerViewModel.seekTo(it) },
+                onClose = { showLyricsOverlay = false },
+                onRetry = { playerViewModel.reloadLyrics() },
+            )
         }
 
         if (showSleepTimerDialog) {
@@ -287,7 +282,7 @@ private fun BouncyIconButton(
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) pressScale else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
         label = "bouncy_press",
     )
     IconButton(
@@ -329,8 +324,8 @@ private fun PlayerHeader(
         val sleepPulse by animateFloatAsState(
             targetValue = if (sleepActive) 1.10f else 1f,
             animationSpec = if (sleepActive)
-                infiniteRepeatable(tween(1100, easing = EaseInOutSine), AnimationRepeatMode.Reverse)
-            else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                infiniteRepeatable(tween(1540, easing = EaseInOutSine), AnimationRepeatMode.Reverse)
+            else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
             label = "sleep_pulse",
         )
         BouncyIconButton(onClick = onSleepTimer, modifier = Modifier.scale(sleepPulse)) {
@@ -373,13 +368,13 @@ private fun ArtworkPanel(
             targetValue = if (isPlaying || !artworkAnimation) 1f else 0.94f,
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMediumLow,
+                stiffness = Spring.StiffnessLow,
             ),
             label = "artwork_scale",
         )
         val elevation by animateDpAsState(
             targetValue = if (isPlaying) 24.dp else 6.dp,
-            animationSpec = tween(600, easing = Emphasized),
+            animationSpec = tween(840, easing = Emphasized),
             label = "artwork_elevation",
         )
 
@@ -417,7 +412,7 @@ private fun ArtworkPanel(
 private fun PlaybackControls(
     song: Song,
     isPlaying: Boolean,
-    positionProvider: () -> Long,
+    position: State<Long>,
     durationMs: Long,
     repeatMode: RepeatMode,
     shuffleEnabled: Boolean,
@@ -426,8 +421,6 @@ private fun PlaybackControls(
     isTrackLoved: Boolean,
     nextSong: Song? = null,
     artworkColors: ArtworkComposeColors? = null,
-    visualizerBars: FloatArray = FloatArray(0),
-    onVisualizerActiveChanged: (Boolean) -> Unit = {},
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -435,9 +428,12 @@ private fun PlaybackControls(
     onRepeatModeChange: () -> Unit,
     onShuffleToggle: () -> Unit,
     onLoveTrack: () -> Unit,
-    onArtistClick: () -> Unit = {},
+    onArtistClick: (String) -> Unit = {},
+    onSongClick: () -> Unit = {},
 ) {
-    val positionMs by remember { derivedStateOf { positionProvider() } }
+    // Deliberately does not read `position.value` anywhere in this function — that's scoped to
+    // SeekBarAndTimeLabels below, so the buttons/animations/song-info here don't recompose on
+    // every ~100ms position tick during playback.
     val config = LocalAppearanceConfig.current
     // The user's Seekbar Colour setting picks which palette channel to prefer once artwork
     // is available; without artwork (or on extraction failure) it falls back to the
@@ -448,22 +444,22 @@ private fun PlaybackControls(
             "TERTIARY" -> artworkColors?.darkVibrant ?: MaterialTheme.colorScheme.tertiary
             else -> artworkColors?.vibrant ?: MaterialTheme.colorScheme.primary
         },
-        animationSpec = tween(400),
+        animationSpec = tween(560),
         label = "seekbar_accent",
     )
     val playButtonColor by animateColorAsState(
         targetValue = artworkColors?.vibrant ?: MaterialTheme.colorScheme.primary,
-        animationSpec = tween(400),
+        animationSpec = tween(560),
         label = "play_button_accent",
     )
     val playButtonContentColor by animateColorAsState(
         targetValue = artworkColors?.onVibrant ?: MaterialTheme.colorScheme.onPrimary,
-        animationSpec = tween(400),
+        animationSpec = tween(560),
         label = "play_button_content_accent",
     )
     val nextSongAccent by animateColorAsState(
         targetValue = artworkColors?.vibrant?.copy(alpha = 0.75f) ?: MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-        animationSpec = tween(400),
+        animationSpec = tween(560),
         label = "next_song_accent",
     )
 
@@ -480,13 +476,13 @@ private fun PlaybackControls(
             AnimatedContent(
                 targetState = song.title to song.displayArtist,
                 transitionSpec = {
-                    (fadeIn(tween(280, delayMillis = 80, easing = EmphasizedDecelerate)) +
-                        slideInVertically(tween(320, easing = EmphasizedDecelerate)) { (it * 0.12f).toInt() })
-                        .togetherWith(fadeOut(tween(120, easing = EmphasizedAccelerate)))
+                    (fadeIn(tween(390, delayMillis = 110, easing = EmphasizedDecelerate)) +
+                        slideInVertically(tween(450, easing = EmphasizedDecelerate)) { (it * 0.12f).toInt() })
+                        .togetherWith(fadeOut(tween(170, easing = EmphasizedAccelerate)))
                 },
                 label = "song_info",
                 modifier = Modifier.weight(1f),
-            ) { (title, artist) ->
+            ) { (title, _) ->
                 Column {
                     Text(
                         text = title,
@@ -494,24 +490,17 @@ private fun PlaybackControls(
                         fontWeight = FontWeight.ExtraBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable(onClick = onSongClick),
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = artist,
+                    MultiArtistText(
+                        artists = song.artists,
+                        onArtistClick = onArtistClick,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable(onClick = onArtistClick),
                     )
                     if (config.showBitrateInfo && song.mimeType.isNotBlank()) {
-                        val fmt = when {
-                            song.mimeType.contains("flac", ignoreCase = true) -> "FLAC"
-                            song.mimeType.contains("opus", ignoreCase = true) -> "Opus"
-                            song.mimeType.contains("ogg", ignoreCase = true) || song.mimeType.contains("vorbis", ignoreCase = true) -> "OGG"
-                            song.mimeType.contains("mp4", ignoreCase = true) || song.mimeType.contains("aac", ignoreCase = true) -> "AAC"
-                            else -> "MP3"
-                        }
+                        val fmt = audioFormatLabel(song.mimeType)
                         val label = if (song.bitrate > 0) "$fmt · ${song.bitrate}kbps" else fmt
                         Text(
                             text = label,
@@ -526,13 +515,13 @@ private fun PlaybackControls(
 
             val loveScale by animateFloatAsState(
                 targetValue = if (isTrackLoved) 1.18f else 1f,
-                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
                 label = "love_scale",
             )
             val loveColor by animateColorAsState(
                 targetValue = if (isTrackLoved) Color(0xFFE8384D)
                 else MaterialTheme.colorScheme.onSurfaceVariant,
-                animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMedium),
+                animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
                 label = "love_color",
             )
             BouncyIconButton(onClick = onLoveTrack, modifier = Modifier.scale(loveScale)) {
@@ -547,79 +536,16 @@ private fun PlaybackControls(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        when (seekbarStyle) {
-            "WAVEFORM" -> {
-                WaveformSeekbar(
-                    waveformData = waveformData,
-                    positionProvider = positionProvider,
-                    durationMs = durationMs,
-                    onSeek = onSeek,
-                    isPlaying = isPlaying,
-                    playedColor = seekbarPlayedColor,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                )
-            }
-            "MATERIAL_YOU_3" -> {
-                MaterialYou3Seekbar(
-                    positionProvider = positionProvider,
-                    durationMs = durationMs,
-                    onSeek = onSeek,
-                    isPlaying = isPlaying,
-                    playedColor = seekbarPlayedColor,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                )
-            }
-            "CAVA" -> {
-                DisposableEffect(Unit) {
-                    onVisualizerActiveChanged(true)
-                    onDispose { onVisualizerActiveChanged(false) }
-                }
-                CavaSeekbar(
-                    magnitudes = visualizerBars,
-                    positionProvider = positionProvider,
-                    durationMs = durationMs,
-                    onSeek = onSeek,
-                    playedColor = seekbarPlayedColor,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                )
-            }
-            else -> {
-                Slider(
-                    value = positionMs.toFloat(),
-                    onValueChange = { onSeek(it.toLong()) },
-                    valueRange = 0f..durationMs.toFloat().coerceAtLeast(1f),
-                    colors = SliderDefaults.colors(
-                        thumbColor = seekbarPlayedColor,
-                        activeTrackColor = seekbarPlayedColor,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                formatDuration(positionMs),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                if (config.showRemainingTime && durationMs > 0)
-                    "-${formatDuration(durationMs - positionMs)}"
-                else formatDuration(durationMs),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        SeekBarAndTimeLabels(
+            position = position,
+            durationMs = durationMs,
+            seekbarStyle = seekbarStyle,
+            waveformData = waveformData,
+            isPlaying = isPlaying,
+            playedColor = seekbarPlayedColor,
+            showRemainingTime = config.showRemainingTime,
+            onSeek = onSeek,
+        )
 
         if (config.showNextSongInPlayer && nextSong != null) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -649,13 +575,13 @@ private fun PlaybackControls(
         val shuffleTint by animateColorAsState(
             targetValue = if (shuffleEnabled) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurfaceVariant,
-            animationSpec = tween(200),
+            animationSpec = tween(280),
             label = "shuffle_tint",
         )
         val repeatTint by animateColorAsState(
             targetValue = if (repeatMode != RepeatMode.NONE) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurfaceVariant,
-            animationSpec = tween(200),
+            animationSpec = tween(280),
             label = "repeat_tint",
         )
 
@@ -667,7 +593,7 @@ private fun PlaybackControls(
                 isPlaying -> 1f
                 else -> 0.96f
             },
-            animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+            animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
             label = "play_scale",
         )
 
@@ -700,9 +626,9 @@ private fun PlaybackControls(
                     AnimatedContent(
                         targetState = isPlaying,
                         transitionSpec = {
-                            scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium)) +
-                                fadeIn(tween(120, easing = EmphasizedDecelerate)) togetherWith
-                                scaleOut(tween(80)) + fadeOut(tween(80))
+                            scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) +
+                                fadeIn(tween(170, easing = EmphasizedDecelerate)) togetherWith
+                                scaleOut(tween(110)) + fadeOut(tween(110))
                         },
                         label = "play_pause_icon",
                     ) { playing ->
@@ -728,6 +654,81 @@ private fun PlaybackControls(
                 )
             }
         }
+    }
+}
+
+// The one place in the Now Playing screen that reads live playback position — pulled out of
+// PlaybackControls so the buttons/animations/song-info there don't recompose on every ~100ms
+// position tick during playback; only this composable does.
+@Composable
+private fun SeekBarAndTimeLabels(
+    position: State<Long>,
+    durationMs: Long,
+    seekbarStyle: String,
+    waveformData: dev.yuwixx.resonance.data.model.WaveformData?,
+    isPlaying: Boolean,
+    playedColor: Color,
+    showRemainingTime: Boolean,
+    onSeek: (Long) -> Unit,
+) {
+    val positionMs by position
+
+    when (seekbarStyle) {
+        "WAVEFORM" -> {
+            WaveformSeekbar(
+                waveformData = waveformData,
+                position = position,
+                durationMs = durationMs,
+                onSeek = onSeek,
+                isPlaying = isPlaying,
+                playedColor = playedColor,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+            )
+        }
+        "MATERIAL_YOU_3" -> {
+            MaterialYou3Seekbar(
+                position = position,
+                durationMs = durationMs,
+                onSeek = onSeek,
+                isPlaying = isPlaying,
+                playedColor = playedColor,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+            )
+        }
+        else -> {
+            Slider(
+                value = positionMs.toFloat(),
+                onValueChange = { onSeek(it.toLong()) },
+                valueRange = 0f..durationMs.toFloat().coerceAtLeast(1f),
+                colors = SliderDefaults.colors(
+                    thumbColor = playedColor,
+                    activeTrackColor = playedColor,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            formatDuration(positionMs),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            if (showRemainingTime && durationMs > 0)
+                "-${formatDuration(durationMs - positionMs)}"
+            else formatDuration(durationMs),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -765,7 +766,7 @@ private fun PlayerFooter(
             val isLyricsPressed by lyricsInteraction.collectIsPressedAsState()
             val lyricsScale by animateFloatAsState(
                 targetValue = if (isLyricsPressed) 0.84f else 1f,
-                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
                 label = "lyrics_press",
             )
             Surface(
@@ -839,11 +840,11 @@ private fun PlayerOptionsSheet(
             targetState = page,
             transitionSpec = {
                 if (targetState == OptionsPage.Main) {
-                    (fadeIn(tween(350, easing = EmphasizedDecelerate)) + slideInHorizontally(tween(400, easing = EmphasizedDecelerate)) { -it / 2 })
-                        .togetherWith(fadeOut(tween(250, easing = EmphasizedAccelerate)) + slideOutHorizontally(tween(300, easing = EmphasizedAccelerate)) { it / 2 })
+                    (fadeIn(tween(490, easing = EmphasizedDecelerate)) + slideInHorizontally(tween(560, easing = EmphasizedDecelerate)) { -it / 2 })
+                        .togetherWith(fadeOut(tween(350, easing = EmphasizedAccelerate)) + slideOutHorizontally(tween(420, easing = EmphasizedAccelerate)) { it / 2 })
                 } else {
-                    (fadeIn(tween(350, easing = EmphasizedDecelerate)) + slideInHorizontally(tween(400, easing = EmphasizedDecelerate)) { it / 2 })
-                        .togetherWith(fadeOut(tween(250, easing = EmphasizedAccelerate)) + slideOutHorizontally(tween(300, easing = EmphasizedAccelerate)) { -it / 2 })
+                    (fadeIn(tween(490, easing = EmphasizedDecelerate)) + slideInHorizontally(tween(560, easing = EmphasizedDecelerate)) { it / 2 })
+                        .togetherWith(fadeOut(tween(350, easing = EmphasizedAccelerate)) + slideOutHorizontally(tween(420, easing = EmphasizedAccelerate)) { -it / 2 })
                 }
             },
             label = "options_page",
@@ -1076,8 +1077,8 @@ private fun SheetPlaylistPage(
 
         AnimatedVisibility(
             visible = showCreatePlaylist,
-            enter = expandVertically(tween(300, easing = Emphasized)) + fadeIn(tween(300, easing = Emphasized)),
-            exit = shrinkVertically(tween(300, easing = Emphasized)) + fadeOut(tween(200, easing = Emphasized)),
+            enter = expandVertically(tween(420, easing = Emphasized)) + fadeIn(tween(420, easing = Emphasized)),
+            exit = shrinkVertically(tween(420, easing = Emphasized)) + fadeOut(tween(280, easing = Emphasized)),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -1288,8 +1289,8 @@ private fun DynamicBackground(
         AnimatedContent(
             targetState = artworkUri,
             transitionSpec = {
-                fadeIn(tween(800, easing = EmphasizedDecelerate)) togetherWith
-                    fadeOut(tween(450, easing = EmphasizedAccelerate))
+                fadeIn(tween(1120, easing = EmphasizedDecelerate)) togetherWith
+                    fadeOut(tween(630, easing = EmphasizedAccelerate))
             },
             label = "bg_artwork",
         ) { uri ->
@@ -1310,15 +1311,22 @@ private fun DynamicBackground(
 
 @Composable
 fun LyricsOverlay(
-    lyrics: List<LyricLine>,
+    result: LyricsResult,
     activeLineIndex: Int,
     fontScale: Float,
     onSeek: (Long) -> Unit,
     onClose: () -> Unit,
+    onRetry: () -> Unit,
 ) {
     val config = LocalAppearanceConfig.current
     val textAlign = if (config.lyricAlignment == "CENTER") TextAlign.Center else TextAlign.Start
     val listState = rememberLazyListState()
+
+    val lyrics: List<LyricLine> = when (result) {
+        is LyricsResult.Synced -> result.lines
+        is LyricsResult.Plain -> result.lines.mapIndexed { _, l -> LyricLine(timeMs = 0L, text = l) }
+        else -> emptyList()
+    }
 
     LaunchedEffect(activeLineIndex) {
         if (activeLineIndex >= 0) {
@@ -1343,54 +1351,116 @@ fun LyricsOverlay(
                 }
             }
 
-            val lyricsSpacing = when (config.lyricsLineSpacing) {
-                "COMPACT" -> 16.dp
-                "SPACIOUS" -> 44.dp
-                else -> 28.dp
-            }
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 32.dp, vertical = 100.dp),
-                verticalArrangement = Arrangement.spacedBy(lyricsSpacing),
-            ) {
-                itemsIndexed(lyrics) { index, line ->
-                    val isActive = index == activeLineIndex
-                    val lineScale by animateFloatAsState(
-                        targetValue = if (isActive) 1.05f else 1f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow,
-                        ),
-                        label = "lyric_scale_$index",
-                    )
-                    val lineAlpha by animateFloatAsState(
-                        targetValue = when {
-                            isActive -> 1f
-                            index < activeLineIndex -> 0.35f
-                            else -> 0.55f
-                        },
-                        animationSpec = tween(350, easing = Emphasized),
-                        label = "lyric_alpha_$index",
-                    )
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                when {
+                    result is LyricsResult.Loading -> {
+                        CircularProgressIndicator()
+                    }
+                    result is LyricsResult.Error -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Icon(
+                                Icons.Rounded.ErrorOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "Couldn't load lyrics",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            FilledTonalButton(onClick = onRetry) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+                    lyrics.isEmpty() -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Icon(
+                                Icons.Rounded.MicExternalOff,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "No lyrics found for this track",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                    else -> {
+                        val lyricsSpacing = when (config.lyricsLineSpacing) {
+                            "COMPACT" -> 16.dp
+                            "SPACIOUS" -> 44.dp
+                            else -> 28.dp
+                        }
+                        val lyricsFontFamily = when (config.lyricsFontFamily) {
+                            "ROUNDED" -> DmSans
+                            "SERIF" -> FontFamily.Serif
+                            "MONOSPACE" -> FontFamily.Monospace
+                            else -> null
+                        }
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 32.dp, vertical = 100.dp),
+                            verticalArrangement = Arrangement.spacedBy(lyricsSpacing),
+                        ) {
+                            itemsIndexed(lyrics) { index, line ->
+                                val isActive = index == activeLineIndex
+                                val lineScale by animateFloatAsState(
+                                    targetValue = if (isActive) 1.05f else 1f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessLow,
+                                    ),
+                                    label = "lyric_scale_$index",
+                                )
+                                val lineAlpha by animateFloatAsState(
+                                    targetValue = when {
+                                        isActive -> 1f
+                                        index < activeLineIndex -> 0.35f
+                                        else -> 0.55f
+                                    },
+                                    animationSpec = tween(490, easing = Emphasized),
+                                    label = "lyric_alpha_$index",
+                                )
 
-                    val baseStyle = if (isActive) MaterialTheme.typography.headlineMedium
-                    else MaterialTheme.typography.titleLarge
-                    val scaledStyle = baseStyle.copy(fontSize = baseStyle.fontSize * fontScale)
+                                val baseStyle = if (isActive) MaterialTheme.typography.headlineMedium
+                                else MaterialTheme.typography.titleLarge
+                                val scaledStyle = baseStyle.copy(
+                                    fontSize = baseStyle.fontSize * fontScale,
+                                    fontFamily = lyricsFontFamily ?: baseStyle.fontFamily,
+                                )
 
-                    Text(
-                        text = line.text,
-                        style = scaledStyle,
-                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isActive) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = lineAlpha),
-                        textAlign = textAlign,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .preferredFrameRateSafe(120f)
-                            .scale(lineScale)
-                            .clickable(enabled = line.timeMs > 0L) { onSeek(line.timeMs) },
-                    )
+                                Text(
+                                    text = line.text,
+                                    style = scaledStyle,
+                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isActive) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = lineAlpha),
+                                    textAlign = textAlign,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .preferredFrameRateSafe(120f)
+                                        .scale(lineScale)
+                                        .clickable(enabled = line.timeMs > 0L) { onSeek(line.timeMs) },
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

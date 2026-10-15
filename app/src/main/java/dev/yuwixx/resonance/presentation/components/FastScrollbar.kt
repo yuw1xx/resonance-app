@@ -86,7 +86,7 @@ fun LazyColumnWithScrollbar(
 
     val thumbAlpha by animateFloatAsState(
         targetValue = if (visible && canScroll) 1f else 0f,
-        animationSpec = tween(durationMillis = if (visible) 150 else 600),
+        animationSpec = tween(durationMillis = if (visible) 210 else 840),
         label = "scrollbar_alpha",
     )
 
@@ -143,7 +143,7 @@ fun LazyColumnWithScrollbar(
     val thumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
     val thumbScale by animateFloatAsState(
         targetValue = if (isDragging) 1.15f else 1f,
-        animationSpec = tween(150),
+        animationSpec = tween(210),
         label = "thumb_scale",
     )
 
@@ -220,7 +220,7 @@ fun LazyGridWithScrollbar(
 
     val thumbAlpha by animateFloatAsState(
         targetValue = if (visible && canScroll) 1f else 0f,
-        animationSpec = tween(durationMillis = if (visible) 150 else 600),
+        animationSpec = tween(durationMillis = if (visible) 210 else 840),
         label = "grid_scrollbar_alpha",
     )
 
@@ -276,7 +276,7 @@ fun LazyGridWithScrollbar(
     val thumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
     val thumbScale by animateFloatAsState(
         targetValue = if (isDragging) 1.15f else 1f,
-        animationSpec = tween(150),
+        animationSpec = tween(210),
         label = "grid_thumb_scale",
     )
 

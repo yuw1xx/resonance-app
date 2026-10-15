@@ -49,6 +49,7 @@ sealed class Screen(val route: String) {
     data object LyricsEditor  : Screen("lyrics_editor")
     data object Statistics    : Screen("statistics")
     data object Equalizer     : Screen("equalizer")
+    data object MetadataEnrichment : Screen("metadata_enrichment")
 
     data object TagEditor : Screen("tag_editor/{songId}") {
         fun createRoute(songId: Long) = "tag_editor/$songId"
@@ -62,6 +63,9 @@ sealed class Screen(val route: String) {
     }
     data object PlaylistDetail : Screen("playlist_detail/{playlistId}") {
         fun createRoute(playlistId: Long) = "playlist_detail/$playlistId"
+    }
+    data object SongDetail : Screen("song_detail/{songId}") {
+        fun createRoute(songId: Long) = "song_detail/$songId"
     }
 }
 
@@ -130,8 +134,9 @@ fun ResonanceNavGraph(
     val showEqualizerInPlayer by libraryViewModel.prefs.showEqualizerInPlayer.collectAsState(initial = true)
     val hapticEnabled by libraryViewModel.prefs.hapticFeedback.collectAsState(initial = true)
     val showBitrateInfo by libraryViewModel.prefs.showBitrateInfo.collectAsState(initial = false)
+    val lyricsFontFamily by libraryViewModel.prefs.lyricsFontFamily.collectAsState(initial = "DEFAULT")
 
-    val appearanceConfig = remember(compactList, showDuration, artworkShape, lyricAlign, seekbarClr, tintedNav, floatingNav, navLabelVis, playlistCols, showAlbumInList, listArtworkSize, showRemainingTime, showNextSongInPlayer, lyricsLineSpacing, miniPlayerShowProgress, miniPlayerShowSkipBtn, showEqualizerInPlayer, hapticEnabled, showBitrateInfo) {
+    val appearanceConfig = remember(compactList, showDuration, artworkShape, lyricAlign, seekbarClr, tintedNav, floatingNav, navLabelVis, playlistCols, showAlbumInList, listArtworkSize, showRemainingTime, showNextSongInPlayer, lyricsLineSpacing, miniPlayerShowProgress, miniPlayerShowSkipBtn, showEqualizerInPlayer, hapticEnabled, showBitrateInfo, lyricsFontFamily) {
         AppearanceConfig(
             compactListMode = compactList,
             showDurationInList = showDuration,
@@ -152,6 +157,7 @@ fun ResonanceNavGraph(
             showEqualizerInPlayer = showEqualizerInPlayer,
             hapticEnabled = hapticEnabled,
             showBitrateInfo = showBitrateInfo,
+            lyricsFontFamily = lyricsFontFamily,
         )
     }
 
@@ -193,10 +199,10 @@ fun ResonanceNavGraph(
                     Column {
                         AnimatedVisibility(
                             visible = currentSong != null && !isPlayerRoute,
-                            enter = slideInVertically(tween(380, easing = EmphasizedDecelerate)) { it } +
-                                fadeIn(tween(300, easing = EmphasizedDecelerate)),
-                            exit = slideOutVertically(tween(300, easing = EmphasizedAccelerate)) { it } +
-                                fadeOut(tween(220, easing = EmphasizedAccelerate)),
+                            enter = slideInVertically(tween(530, easing = EmphasizedDecelerate)) { it } +
+                                fadeIn(tween(420, easing = EmphasizedDecelerate)),
+                            exit = slideOutVertically(tween(420, easing = EmphasizedAccelerate)) { it } +
+                                fadeOut(tween(310, easing = EmphasizedAccelerate)),
                         ) {
                             MiniPlayer(
                                 playerViewModel = playerViewModel,
@@ -218,7 +224,7 @@ fun ResonanceNavGraph(
                                                 targetValue = if (selected) 1.14f else 1f,
                                                 animationSpec = spring(
                                                     dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                    stiffness = Spring.StiffnessMedium,
+                                                    stiffness = Spring.StiffnessMediumLow,
                                                 ),
                                                 label = "${item.screen.route}_icon_scale",
                                             )
@@ -297,12 +303,12 @@ fun ResonanceNavGraph(
                     if (fromIndex != -1 && toIndex != -1) {
                         // Fade Through: crossfade with a subtle scale-up so the swap
                         // reads as motion even between screens sharing the same background.
-                        fadeIn(tween(220, easing = EmphasizedDecelerate)) +
-                            scaleIn(tween(220, easing = EmphasizedDecelerate), initialScale = 0.94f)
+                        fadeIn(tween(310, easing = EmphasizedDecelerate)) +
+                            scaleIn(tween(310, easing = EmphasizedDecelerate), initialScale = 0.94f)
                     } else {
                         // Shared Axis X: slide from right + fade in
-                        slideInHorizontally(tween(480, easing = EmphasizedDecelerate)) { (it * 0.2f).toInt() } +
-                            fadeIn(tween(480, delayMillis = 40, easing = EmphasizedDecelerate))
+                        slideInHorizontally(tween(670, easing = EmphasizedDecelerate)) { (it * 0.2f).toInt() } +
+                            fadeIn(tween(670, delayMillis = 60, easing = EmphasizedDecelerate))
                     }
                 },
                 exitTransition = {
@@ -314,23 +320,23 @@ fun ResonanceNavGraph(
                     if (fromIndex != -1 && toIndex != -1) {
                         // Fade Through: fade out slightly before new screen fades in,
                         // scaling down a touch to sell the "through" depth motion.
-                        fadeOut(tween(160, easing = EmphasizedAccelerate)) +
-                            scaleOut(tween(160, easing = EmphasizedAccelerate), targetScale = 1.04f)
+                        fadeOut(tween(220, easing = EmphasizedAccelerate)) +
+                            scaleOut(tween(220, easing = EmphasizedAccelerate), targetScale = 1.04f)
                     } else {
                         // Shared Axis X: slide to left + fade out
-                        slideOutHorizontally(tween(360, easing = EmphasizedAccelerate)) { -(it * 0.2f).toInt() } +
-                            fadeOut(tween(180, easing = EmphasizedAccelerate))
+                        slideOutHorizontally(tween(500, easing = EmphasizedAccelerate)) { -(it * 0.2f).toInt() } +
+                            fadeOut(tween(250, easing = EmphasizedAccelerate))
                     }
                 },
                 popEnterTransition = {
                     // Shared Axis X reversed: slide in from left + fade in
-                    slideInHorizontally(tween(480, easing = EmphasizedDecelerate)) { -(it * 0.2f).toInt() } +
-                        fadeIn(tween(480, delayMillis = 40, easing = EmphasizedDecelerate))
+                    slideInHorizontally(tween(670, easing = EmphasizedDecelerate)) { -(it * 0.2f).toInt() } +
+                        fadeIn(tween(670, delayMillis = 60, easing = EmphasizedDecelerate))
                 },
                 popExitTransition = {
                     // Shared Axis X reversed: slide out to right + fade out
-                    slideOutHorizontally(tween(360, easing = EmphasizedAccelerate)) { (it * 0.2f).toInt() } +
-                        fadeOut(tween(180, easing = EmphasizedAccelerate))
+                    slideOutHorizontally(tween(500, easing = EmphasizedAccelerate)) { (it * 0.2f).toInt() } +
+                        fadeOut(tween(250, easing = EmphasizedAccelerate))
                 },
             ) {
                 composable(Screen.Setup.route) {
@@ -361,7 +367,7 @@ fun ResonanceNavGraph(
                                 playerViewModel = playerViewModel,
                                 onSearchClick = { navController.navigate(Screen.Search.route) },
                                 onNavigateToPlayer = navigateToPlayer,
-                                onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) }
+                                onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
                             )
                         }
                     } else {
@@ -370,7 +376,7 @@ fun ResonanceNavGraph(
                             playerViewModel = playerViewModel,
                             onSearchClick = { navController.navigate(Screen.Search.route) },
                             onNavigateToPlayer = navigateToPlayer,
-                            onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) }
+                            onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
                         )
                     }
                 }
@@ -449,19 +455,19 @@ fun ResonanceNavGraph(
                     route = Screen.Player.route,
                     // Shared Axis Y: player rises up from below
                     enterTransition = {
-                        slideInVertically(tween(480, easing = EmphasizedDecelerate)) { (it * 0.38f).toInt() } +
-                            fadeIn(tween(360, easing = EmphasizedDecelerate))
+                        slideInVertically(tween(670, easing = EmphasizedDecelerate)) { (it * 0.38f).toInt() } +
+                            fadeIn(tween(500, easing = EmphasizedDecelerate))
                     },
                     exitTransition = {
-                        fadeOut(tween(180, easing = EmphasizedAccelerate))
+                        fadeOut(tween(250, easing = EmphasizedAccelerate))
                     },
                     popEnterTransition = {
-                        fadeIn(tween(240, easing = EmphasizedDecelerate)) +
-                            scaleIn(tween(240, easing = EmphasizedDecelerate), initialScale = 0.98f)
+                        fadeIn(tween(340, easing = EmphasizedDecelerate)) +
+                            scaleIn(tween(340, easing = EmphasizedDecelerate), initialScale = 0.98f)
                     },
                     popExitTransition = {
-                        slideOutVertically(tween(420, easing = EmphasizedAccelerate)) { (it * 0.32f).toInt() } +
-                            fadeOut(tween(260, easing = EmphasizedAccelerate))
+                        slideOutVertically(tween(590, easing = EmphasizedAccelerate)) { (it * 0.32f).toInt() } +
+                            fadeOut(tween(360, easing = EmphasizedAccelerate))
                     },
                 ) {
                     PlayerScreen(
@@ -482,6 +488,7 @@ fun ResonanceNavGraph(
                             libraryViewModel.createPlaylist(name)
                         },
                         onArtistClick = { name -> navController.navigate(Screen.ArtistDetail.createRoute(name)) },
+                        onSongClick = { songId -> navController.navigate(Screen.SongDetail.createRoute(songId)) },
                     )
                 }
 
@@ -543,6 +550,18 @@ fun ResonanceNavGraph(
                 }
 
                 composable(
+                    route = Screen.SongDetail.route,
+                    arguments = listOf(navArgument("songId") { type = NavType.LongType }),
+                ) { backStackEntry ->
+                    val songId = backStackEntry.arguments?.getLong("songId") ?: return@composable
+                    SongDetailScreen(
+                        songId = songId,
+                        onBack = { navController.popBackStack() },
+                        onArtistClick = { name -> navController.navigate(Screen.ArtistDetail.createRoute(name)) },
+                    )
+                }
+
+                composable(
                     route = Screen.PlaylistDetail.route,
                     arguments = listOf(navArgument("playlistId") { type = NavType.LongType }),
                 ) { backStackEntry ->
@@ -569,6 +588,7 @@ fun ResonanceNavGraph(
                         onBack = { navController.popBackStack() },
                         onNavigateToLicenses = { navController.navigate(Screen.Licenses.route) },
                         onNavigateToEqualizer = { navController.navigate(Screen.Equalizer.route) },
+                        onNavigateToMetadataEnrichment = { navController.navigate(Screen.MetadataEnrichment.route) },
                         libraryViewModel = libraryViewModel,
                         settingsViewModel = settingsViewModel,
                     )
@@ -580,6 +600,10 @@ fun ResonanceNavGraph(
 
                 composable(Screen.Equalizer.route) {
                     EqualizerScreen(onBack = { navController.popBackStack() })
+                }
+
+                composable(Screen.MetadataEnrichment.route) {
+                    MetadataEnrichmentScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(Screen.Licenses.route) {
