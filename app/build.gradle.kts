@@ -36,14 +36,14 @@ tasks.preBuild {
 
 android {
     namespace = "dev.yuwixx.resonance"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "dev.yuwixx.resonance"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 8
-        versionName = "2.2.0"
+        targetSdk = 36
+        versionCode = 9
+        versionName = "3.0.0"
     }
 
     // "gms" is the full build (Chromecast + Nearby Share via Google Play Services) shipped to
@@ -75,10 +75,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     buildFeatures {
@@ -113,14 +109,14 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // ── Navigation ───────────────────────────────────────────────────────────
-    implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation(libs.androidx.navigation.compose)
 
     // ── Hilt ─────────────────────────────────────────────────────────────────
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-    implementation("androidx.hilt:hilt-work:1.2.0")
-    ksp("androidx.hilt:hilt-compiler:1.2.0")
+    implementation(libs.androidx.hilt.navigation.compose)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     // ── Room ─────────────────────────────────────────────────────────────────
     implementation(libs.androidx.room.runtime)
@@ -128,54 +124,60 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     // ── Media3 (ExoPlayer) ───────────────────────────────────────────────────
-    implementation("androidx.media3:media3-exoplayer:1.5.0")
-    implementation("androidx.media3:media3-session:1.5.0")
-    implementation("androidx.media3:media3-common:1.5.0")
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.session)
+    implementation(libs.androidx.media3.common)
 
     // ── Google Cast (gms flavor only — pulls in androidx.mediarouter transitively) ──────────
     "gmsImplementation"(libs.play.services.cast.framework)
     implementation("org.nanohttpd:nanohttpd:2.3.1")
 
     // ── WorkManager ──────────────────────────────────────────────────────────
-    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation(libs.androidx.work.runtime.ktx)
 
     // ── DataStore ────────────────────────────────────────────────────────────
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation(libs.androidx.datastore.preferences)
 
     // ── Glance (home screen widget) ──────────────────────────────────────────
-    implementation("androidx.glance:glance-appwidget:1.1.1")
-    implementation("androidx.glance:glance-material3:1.1.1")
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
 
     // ── AppCompat (required for MediaRouteChooserDialog / AppCompatDialog) ──────
     implementation("androidx.appcompat:appcompat:1.7.0")
 
     // ── Splash Screen ────────────────────────────────────────────────────────
-    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation(libs.androidx.core.splashscreen)
+
+    // ── Startup / files / color ──────────────────────────────────────────────
+    implementation(libs.androidx.profileinstaller)
+    implementation(libs.androidx.documentfile)
+    implementation(libs.material.color.utilities)
 
     // ── Palette ──────────────────────────────────────────────────────────────
     implementation("androidx.palette:palette-ktx:1.0.0")
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
 
     // ── Networking ───────────────────────────────────────────────────────────
-    implementation("com.squareup.retrofit2:retrofit:2.11.0")
-    implementation("com.squareup.retrofit2:converter-moshi:2.11.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-    implementation("com.squareup.moshi:moshi:1.15.2")
-    implementation("com.squareup.moshi:moshi-kotlin:1.15.2")
-    ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.2")
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.moshi)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+    implementation(libs.moshi)
+    implementation(libs.moshi.kotlin)
+    ksp(libs.moshi.codegen)
 
     // ── Coil (image loading) ─────────────────────────────────────────────────
-    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation(libs.coil.compose)
 
     // ── Accompanist (permissions) ────────────────────────────────────────────
     implementation("com.google.accompanist:accompanist-permissions:0.36.0")
 
     // ── Coroutines ───────────────────────────────────────────────────────────
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation(libs.kotlinx.coroutines.android)
 
     // ── Guava (used by Media3 internals) ─────────────────────────────────────
     implementation("com.google.guava:guava:33.3.1-android")
@@ -191,8 +193,15 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("androidx.test:core-ktx:1.6.1")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.room.testing)
     testImplementation("io.mockk:mockk:1.14.11")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 // Robolectric's SQLite is backed by a real native library, which resolves 'localtime' in
