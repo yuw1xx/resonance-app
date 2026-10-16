@@ -1,9 +1,12 @@
 package dev.yuwixx.resonance.data.repository
 
-import dev.yuwixx.resonance.data.util.sha256Hex
-import dev.yuwixx.resonance.data.util.md5Hex
+import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.room.withTransaction
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.database.ResonanceDatabase
 import dev.yuwixx.resonance.data.database.dao.NavidromeAlbumDao
 import dev.yuwixx.resonance.data.database.dao.NavidromeSongDao
@@ -12,12 +15,19 @@ import dev.yuwixx.resonance.data.database.entity.NavidromeSongEntity
 import dev.yuwixx.resonance.data.model.*
 import dev.yuwixx.resonance.data.network.*
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
+import dev.yuwixx.resonance.data.util.md5Hex
+import dev.yuwixx.resonance.data.util.sha256Hex
+import java.io.File
+import java.time.Instant
+import java.time.OffsetDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 sealed class NavidromeConnectionState {
     data object Idle : NavidromeConnectionState()
@@ -40,14 +50,14 @@ class NavidromeRepository @Inject constructor(
     private val navidromeSongDao: NavidromeSongDao,
     private val navidromeAlbumDao: NavidromeAlbumDao,
     private val database: ResonanceDatabase,
-    private val moshi: com.squareup.moshi.Moshi,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
+    private val moshi: Moshi,
+    @ApplicationContext private val context: Context,
 ) {
-    private val syncMutex = kotlinx.coroutines.sync.Mutex()
-    private val artistsFile get() = java.io.File(context.filesDir, "navidrome_artists.json")
+    private val syncMutex = Mutex()
+    private val artistsFile get() = File(context.filesDir, "navidrome_artists.json")
     private val artistsAdapter by lazy {
         moshi.adapter<List<SubsonicArtistSummary>>(
-            com.squareup.moshi.Types.newParameterizedType(List::class.java, SubsonicArtistSummary::class.java)
+            Types.newParameterizedType(List::class.java, SubsonicArtistSummary::class.java)
         )
     }
 
@@ -204,14 +214,14 @@ class NavidromeRepository @Inject constructor(
             refreshArtistCache()
             prefs.setNavidromeSyncStamp(stamp)
             _syncState.value = NavidromeSyncState.Done(newSongs.size, newAlbums.size)
-            android.util.Log.i("NavidromeRepository",
+            Log.i("NavidromeRepository",
                 "Sync complete — ${newSongs.size} songs (${changedSongs.size} changed, ${removedSongs.size} removed), " +
                     "${newAlbums.size} albums")
             return true
         } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
+            if (e is CancellationException) throw e
             _syncState.value = NavidromeSyncState.Error(e.message ?: "Sync failed")
-            android.util.Log.e("NavidromeRepository", "syncLibrary failed: ${e.message}", e)
+            Log.e("NavidromeRepository", "syncLibrary failed: ${e.message}", e)
             return false
         }
     }
@@ -245,7 +255,7 @@ class NavidromeRepository @Inject constructor(
                 )
             } ?: emptyList()
         } catch (e: Exception) {
-            android.util.Log.e("NavidromeRepository", "getAllPlaylists failed: ${e.message}", e)
+            Log.e("NavidromeRepository", "getAllPlaylists failed: ${e.message}", e)
             emptyList()
         }
     }
@@ -254,10 +264,10 @@ class NavidromeRepository @Inject constructor(
         val api = navidromeApiProvider.currentApi() ?: return
         try {
             api.scrobble(id = songId, submission = false).ok
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.w("NavidromeRepository", "Now playing failed: ${e.message}")
+            Log.w("NavidromeRepository", "Now playing failed: ${e.message}")
         }
     }
 
@@ -266,10 +276,10 @@ class NavidromeRepository @Inject constructor(
         val api = navidromeApiProvider.currentApi() ?: return
         try {
             api.scrobble(id = songId, timeMs = playedAtMs, submission = true).ok
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            android.util.Log.w("NavidromeRepository", "Scrobble failed: ${e.message}")
+            Log.w("NavidromeRepository", "Scrobble failed: ${e.message}")
         }
     }
 
@@ -321,8 +331,8 @@ internal fun stableLongId(s: String): Long {
 // Accepts both "2025-03-26T22:26:35Z" and offset forms like "2025-03-26T22:26:35+00:00".
 private fun parseIsoMillis(iso: String?): Long? {
     if (iso.isNullOrBlank()) return null
-    return runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }.getOrNull()
-        ?: runCatching { java.time.Instant.parse(iso).toEpochMilli() }.getOrNull()
+    return runCatching { OffsetDateTime.parse(iso).toInstant().toEpochMilli() }.getOrNull()
+        ?: runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull()
 }
 
 private fun SubsonicSong.toEntity(creds: NavidromeApiProvider.Credentials): NavidromeSongEntity {

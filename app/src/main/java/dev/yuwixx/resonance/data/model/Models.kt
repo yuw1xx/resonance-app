@@ -4,6 +4,7 @@ package dev.yuwixx.resonance.data.model
 
 import android.net.Uri
 import androidx.compose.runtime.Immutable
+import dev.yuwixx.resonance.data.playlist.SmartRules
 
 @Immutable
 data class Song(
@@ -76,7 +77,7 @@ data class Playlist(
     val mixSource: String? = null,
     val lastMixGenerated: Long = 0L,
     /** Non-null for a smart playlist: its songs come from these rules, not from manual edits. */
-    val smartRules: dev.yuwixx.resonance.data.playlist.SmartRules? = null,
+    val smartRules: SmartRules? = null,
 ) {
     val isSmart: Boolean get() = smartRules != null
     val songCount: Int get() = songs.size

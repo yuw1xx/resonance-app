@@ -2,11 +2,14 @@ package dev.yuwixx.resonance.domain.usecase
 
 import android.util.Log
 import dev.yuwixx.resonance.data.model.Song
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import org.jaudiotagger.audio.AudioFileIO
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Singleton
 class ReplayGainProcessor @Inject constructor() {
@@ -23,7 +26,7 @@ class ReplayGainProcessor @Inject constructor() {
     // Lazily-populated cache of tag-read ReplayGain values, keyed by song id. Unbounded is fine
     // here — entries are just two floats, not the large arrays WaveformExtractor's bounded cache
     // protects against.
-    private val tagCache = java.util.concurrent.ConcurrentHashMap<Long, Pair<Float?, Float?>>()
+    private val tagCache = ConcurrentHashMap<Long, Pair<Float?, Float?>>()
 
     fun peekCachedGain(songId: Long): Pair<Float?, Float?>? = tagCache[songId]
 
@@ -36,9 +39,9 @@ class ReplayGainProcessor @Inject constructor() {
         withContext(Dispatchers.IO) {
             tagCache[songId]?.let { return@withContext it }
             try {
-                val file = java.io.File(path)
+                val file = File(path)
                 if (!file.exists()) return@withContext null
-                val tag = org.jaudiotagger.audio.AudioFileIO.read(file).tag ?: return@withContext null
+                val tag = AudioFileIO.read(file).tag ?: return@withContext null
                 // Generic string-keyed lookup works uniformly across ID3 TXXX and Vorbis comment
                 // tags, and sidesteps any jaudiotagger FieldKey enum version mismatch.
                 val trackGain = parseGainString(tag.getFirst("REPLAYGAIN_TRACK_GAIN"))

@@ -4,8 +4,12 @@ package dev.yuwixx.resonance.presentation.viewmodel
 
 import android.content.ComponentName
 import android.content.Context
+import android.net.Uri
+import android.os.Bundle
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.compose.ui.graphics.Color
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.C
@@ -13,44 +17,51 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.cast.CastManager
 import dev.yuwixx.resonance.cast.LocalAudioServer
 import dev.yuwixx.resonance.data.database.dao.LikedSongsDao
-import dev.yuwixx.resonance.data.service.NavidromePreloader
 import dev.yuwixx.resonance.data.database.entity.LikedSongEntity
 import dev.yuwixx.resonance.data.model.*
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.*
 import dev.yuwixx.resonance.data.service.MusicService
+import dev.yuwixx.resonance.data.service.NavidromePreloader
 import dev.yuwixx.resonance.data.service.SessionProtocol
+import dev.yuwixx.resonance.domain.usecase.ReplayGainProcessor
+import dev.yuwixx.resonance.domain.usecase.WaveformExtractor
+import java.io.File
+import javax.inject.Inject
+import kotlin.math.abs
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import javax.inject.Inject
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val musicRepository: MusicRepository,
-    private val activeLibrary: dev.yuwixx.resonance.data.repository.ActiveLibrary,
+    private val activeLibrary: ActiveLibrary,
     val lyricsRepository: LyricsRepository,
     private val likedSongsDao: LikedSongsDao,
     private val lastFmRepository: LastFmRepository,
     private val malojaRepository: MalojaRepository,
-    private val waveformExtractor: dev.yuwixx.resonance.domain.usecase.WaveformExtractor,
+    private val waveformExtractor: WaveformExtractor,
     val prefs: ResonancePreferences,
     private val navidromePreloader: NavidromePreloader,
     private val castManager: CastManager,
     private val localAudioServer: LocalAudioServer,
     private val artworkRepository: ArtworkRepository,
-    private val replayGainProcessor: dev.yuwixx.resonance.domain.usecase.ReplayGainProcessor,
+    private val replayGainProcessor: ReplayGainProcessor,
     private val navidromeDownloadRepository: NavidromeDownloadRepository,
     private val navidromeSyncRepository: NavidromeSyncRepository,
-    private val playlistRepository: dev.yuwixx.resonance.data.repository.PlaylistRepository,
+    private val playlistRepository: PlaylistRepository,
 ) : ViewModel() {
 
     private var _controller: MediaController? = null
@@ -81,14 +92,14 @@ class PlayerViewModel @Inject constructor(
     private val _durationMs = MutableStateFlow(0L)
     val durationMs: StateFlow<Long> = _durationMs.asStateFlow()
 
-    private val _repeatMode = MutableStateFlow(dev.yuwixx.resonance.data.model.RepeatMode.NONE)
-    val repeatMode: StateFlow<dev.yuwixx.resonance.data.model.RepeatMode> = _repeatMode.asStateFlow()
+    private val _repeatMode = MutableStateFlow(RepeatMode.NONE)
+    val repeatMode: StateFlow<RepeatMode> = _repeatMode.asStateFlow()
 
     private val _shuffleEnabled = MutableStateFlow(false)
     val shuffleEnabled: StateFlow<Boolean> = _shuffleEnabled.asStateFlow()
 
-    private val _waveformData = MutableStateFlow<dev.yuwixx.resonance.data.model.WaveformData?>(null)
-    val waveformData: StateFlow<dev.yuwixx.resonance.data.model.WaveformData?> = _waveformData.asStateFlow()
+    private val _waveformData = MutableStateFlow<WaveformData?>(null)
+    val waveformData: StateFlow<WaveformData?> = _waveformData.asStateFlow()
 
     private val _sleepTimer = MutableStateFlow<SleepTimer>(SleepTimer.Off)
     val sleepTimer: StateFlow<SleepTimer> = _sleepTimer.asStateFlow()
@@ -186,7 +197,7 @@ class PlayerViewModel @Inject constructor(
 
     // Declared before init{}: initializeController() and the queue sync read these synchronously.
     private val controllerListener = object : MediaController.Listener {
-        override fun onExtrasChanged(controller: MediaController, extras: android.os.Bundle) {
+        override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
             applySessionExtras(extras)
         }
     }
@@ -268,7 +279,7 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private var controllerFuture: com.google.common.util.concurrent.ListenableFuture<MediaController>? = null
+    private var controllerFuture: ListenableFuture<MediaController>? = null
 
     @OptIn(UnstableApi::class)
     private fun initializeController() {
@@ -283,7 +294,7 @@ class PlayerViewModel @Inject constructor(
                     future.get()
                 } catch (e: Exception) {
                     // Cancelled from onCleared(), or the service refused the connection.
-                    android.util.Log.w("PlayerViewModel", "MediaController connection failed", e)
+                    Log.w("PlayerViewModel", "MediaController connection failed", e)
                     return@addListener
                 }
                 _controller = controller
@@ -301,12 +312,12 @@ class PlayerViewModel @Inject constructor(
             },
             // Main thread: the listener touches the controller, which must be used on its
             // application looper.
-            androidx.core.content.ContextCompat.getMainExecutor(context)
+            ContextCompat.getMainExecutor(context)
         )
     }
 
     /** Waveforms are only decoded when the waveform seekbar style is in use. */
-    private suspend fun extractWaveform(songId: Long, uri: android.net.Uri) =
+    private suspend fun extractWaveform(songId: Long, uri: Uri) =
         if (prefs.seekbarStyle.first() == "WAVEFORM") waveformExtractor.extract(songId, uri) else null
 
     private fun startProgressTracker() {
@@ -721,7 +732,7 @@ class PlayerViewModel @Inject constructor(
         _smartQueueError.value = null
     }
 
-    fun loadSmartQueue(reason: dev.yuwixx.resonance.data.model.SmartQueueReason) {
+    fun loadSmartQueue(reason: SmartQueueReason) {
         if (_isLoadingSmartQueue.value) return
         viewModelScope.launch {
             _smartQueueError.value = null
@@ -761,8 +772,8 @@ class PlayerViewModel @Inject constructor(
         val ctrl = _controller ?: return
         when (timer) {
             SleepTimer.Off -> ctrl.sendCustomCommand(
-                androidx.media3.session.SessionCommand(SessionProtocol.CMD_SLEEP_CANCEL, android.os.Bundle.EMPTY),
-                android.os.Bundle.EMPTY,
+                SessionCommand(SessionProtocol.CMD_SLEEP_CANCEL, Bundle.EMPTY),
+                Bundle.EMPTY,
             )
             is SleepTimer.Time -> sendSleepSet(minutes = timer.minutes, tracks = 0, fade = timer.fadeOut)
             is SleepTimer.Tracks -> sendSleepSet(minutes = 0, tracks = timer.tracksLeft, fade = timer.fadeOut)
@@ -774,18 +785,18 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun sendSleepSet(minutes: Int, tracks: Int, fade: Boolean) {
-        val args = android.os.Bundle().apply {
+        val args = Bundle().apply {
             putInt(SessionProtocol.ARG_MINUTES, minutes)
             putInt(SessionProtocol.ARG_TRACKS, tracks)
             putBoolean(SessionProtocol.ARG_FADE, fade)
         }
         _controller?.sendCustomCommand(
-            androidx.media3.session.SessionCommand(SessionProtocol.CMD_SLEEP_SET, android.os.Bundle.EMPTY),
+            SessionCommand(SessionProtocol.CMD_SLEEP_SET, Bundle.EMPTY),
             args,
         )
     }
 
-    private fun applySessionExtras(extras: android.os.Bundle) {
+    private fun applySessionExtras(extras: Bundle) {
         val fade = extras.getBoolean(SessionProtocol.EXTRA_SLEEP_FADE, false)
         _sleepTimer.value = when (extras.getString(SessionProtocol.EXTRA_SLEEP_TYPE)) {
             "time" -> {
@@ -825,7 +836,7 @@ class PlayerViewModel @Inject constructor(
     fun removeQueuedSong(songId: Long, nearIndex: Int? = null) {
         val ctrl = _controller ?: return
         val indices = (0 until ctrl.mediaItemCount).filter { ctrl.getMediaItemAt(it).mediaId == songId.toString() }
-        val target = nearIndex?.let { n -> indices.minByOrNull { kotlin.math.abs(it - n) } } ?: indices.lastOrNull()
+        val target = nearIndex?.let { n -> indices.minByOrNull { abs(it - n) } } ?: indices.lastOrNull()
         target?.takeIf { it != ctrl.currentMediaItemIndex }?.let { ctrl.removeMediaItem(it) }
     }
 
@@ -848,7 +859,7 @@ class PlayerViewModel @Inject constructor(
                 // The queue was cleared.
                 _currentSong.value = null
                 _waveformData.value = null
-                _lyricsResult.value = dev.yuwixx.resonance.data.repository.LyricsResult.NotFound
+                _lyricsResult.value = LyricsResult.NotFound
                 _activeLyricIndex.value = -1
                 return
             }
@@ -864,7 +875,7 @@ class PlayerViewModel @Inject constructor(
                         // placeholder waveform while a redundant (cache-hit) extract() call
                         // round-trips through a coroutine.
                         _waveformData.value = waveformExtractor.peekCached(song.id)
-                        _lyricsResult.value = dev.yuwixx.resonance.data.repository.LyricsResult.Loading
+                        _lyricsResult.value = LyricsResult.Loading
                         _activeLyricIndex.value = -1
 
                         // Kick off waveform and lyrics loading in parallel for the current track.
@@ -924,7 +935,7 @@ class PlayerViewModel @Inject constructor(
         override fun onPlaybackStateChanged(playbackState: Int) {
             _controller?.let { ctrl ->
                 val rawDuration = ctrl.duration
-                if (rawDuration != androidx.media3.common.C.TIME_UNSET && rawDuration > 0) {
+                if (rawDuration != C.TIME_UNSET && rawDuration > 0) {
                     _durationMs.value = rawDuration
                 }
             }
@@ -942,9 +953,9 @@ class PlayerViewModel @Inject constructor(
 
         override fun onRepeatModeChanged(repeatMode: Int) {
             _repeatMode.value = when (repeatMode) {
-                Player.REPEAT_MODE_ONE -> dev.yuwixx.resonance.data.model.RepeatMode.ONE
-                Player.REPEAT_MODE_ALL -> dev.yuwixx.resonance.data.model.RepeatMode.ALL
-                else -> dev.yuwixx.resonance.data.model.RepeatMode.NONE
+                Player.REPEAT_MODE_ONE -> RepeatMode.ONE
+                Player.REPEAT_MODE_ALL -> RepeatMode.ALL
+                else -> RepeatMode.NONE
             }
             updateNextSong()
         }
@@ -954,7 +965,7 @@ class PlayerViewModel @Inject constructor(
             updateNextSong()
         }
 
-        override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+        override fun onTimelineChanged(timeline: Timeline, reason: Int) {
             syncQueueFromController()
         }
     }
@@ -963,9 +974,9 @@ class PlayerViewModel @Inject constructor(
         _controller?.let { ctrl ->
             _isPlaying.value = ctrl.isPlaying
             _repeatMode.value = when (ctrl.repeatMode) {
-                Player.REPEAT_MODE_ONE -> dev.yuwixx.resonance.data.model.RepeatMode.ONE
-                Player.REPEAT_MODE_ALL -> dev.yuwixx.resonance.data.model.RepeatMode.ALL
-                else -> dev.yuwixx.resonance.data.model.RepeatMode.NONE
+                Player.REPEAT_MODE_ONE -> RepeatMode.ONE
+                Player.REPEAT_MODE_ALL -> RepeatMode.ALL
+                else -> RepeatMode.NONE
             }
             _shuffleEnabled.value = ctrl.shuffleModeEnabled
             _currentQueueIndex.value = ctrl.currentMediaItemIndex
@@ -1036,7 +1047,7 @@ class PlayerViewModel @Inject constructor(
         val cached = replayGainProcessor.peekCachedGain(id)
         val trackGain = cached?.first ?: replayGainTrack
         val albumGain = cached?.second ?: replayGainAlbum
-        val extras = android.os.Bundle().apply {
+        val extras = Bundle().apply {
             trackGain?.let { putFloat("replayGainTrack", it) }
             albumGain?.let { putFloat("replayGainAlbum", it) }
             // Read back by MediaItem.toSong() when a song isn't in the library map.
@@ -1048,7 +1059,7 @@ class PlayerViewModel @Inject constructor(
         // Play the downloaded local copy instead of streaming, when one exists (no-op for
         // local MediaStore songs — they never have a song_downloads row).
         val playbackUri = navidromeDownloadRepository.localPathForSync(id)
-            ?.let { android.net.Uri.fromFile(java.io.File(it)) }
+            ?.let { Uri.fromFile(File(it)) }
             ?: uri
 
         return MediaItem.Builder()

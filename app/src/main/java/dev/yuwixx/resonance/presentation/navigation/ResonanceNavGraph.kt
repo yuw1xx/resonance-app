@@ -2,11 +2,11 @@
 // and wires every composable destination to its screen composable.
 package dev.yuwixx.resonance.presentation.navigation
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
@@ -19,31 +19,37 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.*
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
-import dev.yuwixx.resonance.presentation.screens.*
-import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
-import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
-import dev.yuwixx.resonance.presentation.viewmodel.SettingsViewModel
+import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.presentation.components.AppearanceConfig
 import dev.yuwixx.resonance.presentation.components.LocalAppearanceConfig
+import dev.yuwixx.resonance.presentation.components.LocalPlaybackActive
+import dev.yuwixx.resonance.presentation.components.PermissionWrapper
 import dev.yuwixx.resonance.presentation.player.MiniPlayerBar
 import dev.yuwixx.resonance.presentation.player.MiniPlayerMetrics
 import dev.yuwixx.resonance.presentation.player.PlayerSheet
 import dev.yuwixx.resonance.presentation.player.PlayerSheetValue
 import dev.yuwixx.resonance.presentation.player.rememberPlayerSheetState
-import dev.yuwixx.resonance.presentation.components.PermissionWrapper
+import dev.yuwixx.resonance.presentation.screens.*
 import dev.yuwixx.resonance.presentation.screens.library.LibraryScreen
 import dev.yuwixx.resonance.presentation.screens.library.LibrarySection
-import dev.yuwixx.resonance.data.model.MusicSource
+import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
+import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
+import dev.yuwixx.resonance.presentation.viewmodel.SettingsViewModel
+import java.net.URLDecoder
+import java.net.URLEncoder
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -68,7 +74,7 @@ sealed class Screen(val route: String) {
         fun createRoute(albumId: Long) = "album_detail/$albumId"
     }
     data object ArtistDetail  : Screen("artist_detail/{artistName}") {
-        fun createRoute(artistName: String) = "artist_detail/${java.net.URLEncoder.encode(artistName, "UTF-8")}"
+        fun createRoute(artistName: String) = "artist_detail/${URLEncoder.encode(artistName, "UTF-8")}"
     }
     data object PlaylistDetail : Screen("playlist_detail/{playlistId}") {
         fun createRoute(playlistId: Long) = "playlist_detail/$playlistId"
@@ -81,8 +87,8 @@ sealed class Screen(val route: String) {
 data class NavItem(
     val screen: Screen,
     val label: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector = icon,
+    val icon: ImageVector,
+    val selectedIcon: ImageVector = icon,
 )
 
 val navItems = listOf(
@@ -98,7 +104,7 @@ private fun isTab(route: String?) = navItems.any { it.screen.route == route }
 @Composable
 fun ResonanceNavGraph(
     playerViewModel: PlayerViewModel,
-    receiveUri: android.net.Uri? = null,
+    receiveUri: Uri? = null,
     onReceiveDismiss: () -> Unit = {},
 ) {
     val navController = rememberNavController()
@@ -231,7 +237,7 @@ fun ResonanceNavGraph(
     CompositionLocalProvider(
         LocalAppearanceConfig provides appearanceConfig,
         LocalContentColor provides MaterialTheme.colorScheme.onSurface,
-        dev.yuwixx.resonance.presentation.components.LocalPlaybackActive provides isPlaying,
+        LocalPlaybackActive provides isPlaying,
     ) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         if (isFirstRun != null) {
@@ -385,7 +391,7 @@ fun ResonanceNavGraph(
                     route = Screen.ArtistDetail.route,
                     arguments = listOf(navArgument("artistName") { type = NavType.StringType }),
                 ) { backStackEntry ->
-                    val artistName = java.net.URLDecoder.decode(
+                    val artistName = URLDecoder.decode(
                         backStackEntry.arguments?.getString("artistName") ?: return@composable,
                         "UTF-8"
                     )
@@ -564,7 +570,7 @@ private val FloatingNavVerticalMargin = 12.dp
 @Composable
 private fun ResonanceBottomBar(
     items: List<NavItem>,
-    currentDestination: androidx.navigation.NavDestination?,
+    currentDestination: NavDestination?,
     floating: Boolean,
     tinted: Boolean,
     labelVisibility: String,

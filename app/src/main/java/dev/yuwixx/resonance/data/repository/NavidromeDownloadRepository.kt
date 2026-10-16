@@ -13,6 +13,12 @@ import dev.yuwixx.resonance.data.database.dao.SongDownloadDao
 import dev.yuwixx.resonance.data.database.entity.DownloadState
 import dev.yuwixx.resonance.data.database.entity.SongDownloadEntity
 import dev.yuwixx.resonance.data.worker.SongDownloadManager
+import java.io.File
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,11 +27,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import javax.inject.Inject
-import javax.inject.Singleton
 
 @Singleton
 class NavidromeDownloadRepository @Inject constructor(
@@ -133,16 +134,16 @@ class NavidromeDownloadRepository @Inject constructor(
             }
             try {
                 val code = connection.responseCode
-                if (code != HttpURLConnection.HTTP_OK) throw java.io.IOException("Server returned HTTP $code")
+                if (code != HttpURLConnection.HTTP_OK) throw IOException("Server returned HTTP $code")
                 // Subsonic reports errors as a 200 with a JSON/XML body; don't save that as audio.
                 val type = connection.contentType.orEmpty()
                 if (type.contains("json") || type.contains("xml")) {
-                    throw java.io.IOException("Server returned an error instead of audio")
+                    throw IOException("Server returned an error instead of audio")
                 }
                 connection.inputStream.use { input ->
                     partFile.outputStream().use { output -> input.copyTo(output) }
                 }
-                if (!partFile.renameTo(destFile)) throw java.io.IOException("Couldn't save ${destFile.name}")
+                if (!partFile.renameTo(destFile)) throw IOException("Couldn't save ${destFile.name}")
             } finally {
                 connection.disconnect()
                 partFile.delete()

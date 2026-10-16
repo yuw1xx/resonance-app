@@ -1,22 +1,26 @@
 package dev.yuwixx.resonance.data.repository
 
-import java.util.Locale
-import dev.yuwixx.resonance.data.network.ok
 import android.net.Uri
 import dev.yuwixx.resonance.data.database.dao.LyricsDao
 import dev.yuwixx.resonance.data.database.entity.LyricsEntity
 import dev.yuwixx.resonance.data.model.LyricLine
 import dev.yuwixx.resonance.data.network.LrclibApi
 import dev.yuwixx.resonance.data.network.LrclibResponse
+import dev.yuwixx.resonance.data.network.NavidromeApiProvider
+import dev.yuwixx.resonance.data.network.ok
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.domain.usecase.LrcParser
 import dev.yuwixx.resonance.domain.usecase.TagEditor
+import retrofit2.HttpException
+import java.io.File
+import java.util.Locale
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.math.abs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import retrofit2.HttpException
-import javax.inject.Inject
-import javax.inject.Singleton
 
 @Singleton
 class LyricsRepository @Inject constructor(
@@ -24,7 +28,7 @@ class LyricsRepository @Inject constructor(
     private val lyricsDao: LyricsDao,
     private val prefs: ResonancePreferences,
     private val tagEditor: TagEditor,
-    private val navidromeApiProvider: dev.yuwixx.resonance.data.network.NavidromeApiProvider,
+    private val navidromeApiProvider: NavidromeApiProvider,
 ) {
     /**
      * Lyrics for a song, from the first source that has them:
@@ -78,7 +82,7 @@ class LyricsRepository @Inject constructor(
                 else -> rememberMiss(songId)
             }
         } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
+            if (e is CancellationException) throw e
             // Network trouble isn't a "no lyrics" answer: don't cache it, offer a retry.
             LyricsResult.Error(e.message ?: "Unknown error")
         }
@@ -90,7 +94,7 @@ class LyricsRepository @Inject constructor(
         }
         val path = songPath?.takeIf { it.startsWith("/") } ?: songUri?.takeIf { it.scheme == "file" }?.path
         if (path != null) {
-            val sidecar = java.io.File(path.substringBeforeLast('.') + ".lrc")
+            val sidecar = File(path.substringBeforeLast('.') + ".lrc")
             if (sidecar.canRead()) {
                 runCatching { sidecar.readText() }.getOrNull()?.takeIf { it.isNotBlank() }
                     ?.let { return it to SOURCE_SIDECAR }
@@ -146,7 +150,7 @@ class LyricsRepository @Inject constructor(
                 val titleOk = normalize(c.trackName) == cleanTitle
                 val artistOk = normalize(c.artistName).let { it.contains(primaryArtist) || primaryArtist.contains(it) }
                 if (!titleOk || !artistOk) return@mapNotNull null
-                val drift = c.duration?.let { kotlin.math.abs(it - durationSec) } ?: 0.0
+                val drift = c.duration?.let { abs(it - durationSec) } ?: 0.0
                 if (durationMs > 0 && drift > 5.0) return@mapNotNull null
                 // Prefer synced lyrics, then the closest duration.
                 val score = (if (!c.syncedLyrics.isNullOrBlank()) 100.0 else 0.0) - drift

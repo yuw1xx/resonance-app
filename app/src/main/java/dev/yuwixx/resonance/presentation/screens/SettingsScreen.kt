@@ -2,22 +2,19 @@
 // page (Appearance, Playback, Audio, Library, Navidrome, Last.fm, History, Data, About, …).
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
-import dev.yuwixx.resonance.ui.theme.PaletteStyle
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.foundation.selection.toggleable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,23 +33,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.documentfile.provider.DocumentFile
 import androidx.hilt.navigation.compose.hiltViewModel
-import dev.yuwixx.resonance.data.repository.MalojaRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.APP_VERSION
 import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.LastFmAuthState
+import dev.yuwixx.resonance.data.repository.MalojaRepository
 import dev.yuwixx.resonance.data.repository.NavidromeConnectionState
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
 import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
@@ -66,10 +69,12 @@ import dev.yuwixx.resonance.presentation.viewmodel.BackupViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.SettingsViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.ShareViewModel
+import dev.yuwixx.resonance.ui.theme.BrandColors
+import dev.yuwixx.resonance.ui.theme.PaletteStyle
 import dev.yuwixx.resonance.ui.theme.PresetColors
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 enum class SettingsCategory(val title: String, val icon: ImageVector) {
     Main("Settings", Icons.Rounded.Settings),
@@ -1646,7 +1651,7 @@ private fun LastFmSection(
                 ) {
                     Surface(
                         shape = MaterialTheme.shapes.small,
-                        color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm,
+                        color = BrandColors.lastFm,
                         modifier = Modifier.padding(end = 12.dp),
                     ) {
                         Text(
@@ -1790,7 +1795,7 @@ private fun LastFmLoginDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = MaterialTheme.shapes.small, color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm) {
+            Surface(shape = MaterialTheme.shapes.small, color = BrandColors.lastFm) {
                 Text("Last.fm", fontWeight = FontWeight.Bold, color = Color.White,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
@@ -1949,7 +1954,7 @@ private fun MalojaSection(
                 ) {
                     Surface(
                         shape = MaterialTheme.shapes.small,
-                        color = dev.yuwixx.resonance.ui.theme.BrandColors.maloja,
+                        color = BrandColors.maloja,
                         modifier = Modifier.padding(end = 12.dp),
                     ) {
                         Text(
@@ -2050,7 +2055,7 @@ private fun MalojaSetupDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = MaterialTheme.shapes.small, color = dev.yuwixx.resonance.ui.theme.BrandColors.maloja) {
+            Surface(shape = MaterialTheme.shapes.small, color = BrandColors.maloja) {
                 Text("Maloja", fontWeight = FontWeight.Bold, color = Color.White,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
@@ -2347,7 +2352,7 @@ private fun SettingsToggleRow(
             .padding(horizontal = 8.dp, vertical = 1.dp)
             .clip(MaterialTheme.shapes.medium)
             // The whole row is one switch for touch and for TalkBack ("on/off, switch").
-            .toggleable(value = checked, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onToggle),
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onToggle),
         headlineContent = { Text(title, fontWeight = FontWeight.Medium) },
         supportingContent = { Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         trailingContent = {
@@ -2492,7 +2497,7 @@ private fun formatDownloadSize(bytes: Long): String = when {
 private fun SourceRow(
     title: String,
     subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -3117,17 +3122,17 @@ private fun NavTabsDialog(
 @Composable
 private fun PlaylistFolderSyncCard(libraryViewModel: LibraryViewModel, prefs: ResonancePreferences) {
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val folder by prefs.playlistSyncFolder.collectAsStateWithLifecycle(initialValue = null)
     val writeBack by prefs.playlistSyncExport.collectAsStateWithLifecycle(initialValue = false)
     val relative by prefs.playlistSyncRelativePaths.collectAsStateWithLifecycle(initialValue = true)
     var status by remember { mutableStateOf<String?>(null) }
-    val pickFolder = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
+    val pickFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
     ) { uri -> if (uri != null) libraryViewModel.setPlaylistSyncFolder(uri) }
 
     val folderName = remember(folder) {
-        folder?.let { runCatching { androidx.documentfile.provider.DocumentFile.fromTreeUri(context, android.net.Uri.parse(it))?.name }.getOrNull() }
+        folder?.let { runCatching { DocumentFile.fromTreeUri(context, Uri.parse(it))?.name }.getOrNull() }
     }
 
     SectionCard(icon = Icons.Rounded.FolderOpen, title = "Playlist Folder Sync", modifier = Modifier.padding(horizontal = 8.dp)) {

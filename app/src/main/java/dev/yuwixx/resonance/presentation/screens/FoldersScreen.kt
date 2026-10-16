@@ -1,7 +1,5 @@
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.yuwixx.resonance.presentation.screens.library.LocalLibrarySections
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
@@ -25,14 +23,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.presentation.components.AppSectionHeader
 import dev.yuwixx.resonance.presentation.components.EmphasizedAccelerate
 import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
 import dev.yuwixx.resonance.presentation.components.staggeredEntrance
+import dev.yuwixx.resonance.presentation.screens.library.LocalLibrarySections
 import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 
@@ -251,7 +252,7 @@ private fun computeFolderContents(
 private fun FolderRow(
     name: String,
     subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {

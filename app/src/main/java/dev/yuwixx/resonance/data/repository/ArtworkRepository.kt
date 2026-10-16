@@ -14,10 +14,11 @@ import dev.yuwixx.resonance.data.database.dao.ArtworkDao
 import dev.yuwixx.resonance.data.database.entity.AlbumArtworkEntity
 import dev.yuwixx.resonance.data.database.entity.ArtistArtworkEntity
 import dev.yuwixx.resonance.data.network.DeezerApi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Singleton
 class ArtworkRepository @Inject constructor(
@@ -27,7 +28,7 @@ class ArtworkRepository @Inject constructor(
     private val artworkDao: ArtworkDao,
     private val imageLoader: ImageLoader,
 ) {
-    private val paletteCache = java.util.concurrent.ConcurrentHashMap<Long, ArtworkColors>(64)
+    private val paletteCache = ConcurrentHashMap<Long, ArtworkColors>(64)
 
         suspend fun getArtistArtworkUrl(artistName: String): String? = withContext(Dispatchers.IO) {
         val cached = artworkDao.getArtistArtwork(artistName)

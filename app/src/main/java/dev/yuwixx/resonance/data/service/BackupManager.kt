@@ -10,22 +10,25 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.database.dao.HistoryDao
 import dev.yuwixx.resonance.data.database.dao.LikedSongsDao
 import dev.yuwixx.resonance.data.database.dao.PlaylistDao
+import dev.yuwixx.resonance.data.database.dao.SmartPlaylistDao
 import dev.yuwixx.resonance.data.database.dao.SongDao
 import dev.yuwixx.resonance.data.database.entity.HistoryEntity
 import dev.yuwixx.resonance.data.database.entity.LikedSongEntity
 import dev.yuwixx.resonance.data.database.entity.PlaylistEntity
 import dev.yuwixx.resonance.data.database.entity.PlaylistSongCrossRef
+import dev.yuwixx.resonance.data.database.entity.SmartPlaylistEntity
 import dev.yuwixx.resonance.data.database.entity.SongEntity
 import dev.yuwixx.resonance.data.model.BackupFile
 import dev.yuwixx.resonance.data.model.BackupHistoryEntry
 import dev.yuwixx.resonance.data.model.BackupPlaylistEntry
 import dev.yuwixx.resonance.data.model.BackupSongEntry
+import dev.yuwixx.resonance.data.playlist.SmartRules
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
-import javax.inject.Singleton
 
 sealed class RestoreResult {
     data class Success(
@@ -49,10 +52,10 @@ class BackupManager @Inject constructor(
     private val songDao: SongDao,
     private val historyDao: HistoryDao,
     private val prefs: ResonancePreferences,
-    private val smartPlaylistDao: dev.yuwixx.resonance.data.database.dao.SmartPlaylistDao,
+    private val smartPlaylistDao: SmartPlaylistDao,
 ) {
     private val adapter = moshi.adapter(BackupFile::class.java).indent("  ")
-    private val rulesAdapter = moshi.adapter(dev.yuwixx.resonance.data.playlist.SmartRules::class.java)
+    private val rulesAdapter = moshi.adapter(SmartRules::class.java)
 
     suspend fun createBackup(uri: Uri): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -149,7 +152,7 @@ class BackupManager @Inject constructor(
                 if (existing != null) playlistDao.clearPlaylist(playlistId)
                 pb.smartRules?.let { rules ->
                     smartPlaylistDao.upsert(
-                        dev.yuwixx.resonance.data.database.entity.SmartPlaylistEntity(playlistId, rulesAdapter.toJson(rules))
+                        SmartPlaylistEntity(playlistId, rulesAdapter.toJson(rules))
                     )
                     playlistsRestored++
                     continue

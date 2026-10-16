@@ -2,10 +2,6 @@
 
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.compose.runtime.saveable.rememberSaveable
-import dev.yuwixx.resonance.presentation.components.EmphasizedAccelerate
-import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.Manifest
 import android.os.Build
 import androidx.compose.animation.*
@@ -21,6 +17,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,13 +32,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.accompanist.permissions.*
 import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.repository.LastFmAuthState
 import dev.yuwixx.resonance.data.repository.NavidromeConnectionState
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
 import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
+import dev.yuwixx.resonance.presentation.components.EmphasizedAccelerate
+import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
 import dev.yuwixx.resonance.presentation.viewmodel.SettingsViewModel
+import dev.yuwixx.resonance.ui.theme.BrandColors
 
 private const val TOTAL_STEPS = 5
 
@@ -734,7 +735,7 @@ private fun LastFmStep(
 
 @Composable
 private fun LastFmBadge() {
-    Surface(shape = MaterialTheme.shapes.extraSmall, color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm, modifier = Modifier.padding(end = 8.dp)) {
+    Surface(shape = MaterialTheme.shapes.extraSmall, color = BrandColors.lastFm, modifier = Modifier.padding(end = 8.dp)) {
         Text("Last.fm", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
@@ -748,7 +749,7 @@ private fun LastFmLoginDialog(onDismiss: () -> Unit, onLogin: (String, String) -
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = MaterialTheme.shapes.small, color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm) {
+            Surface(shape = MaterialTheme.shapes.small, color = BrandColors.lastFm) {
                 Text("Last.fm", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
         },

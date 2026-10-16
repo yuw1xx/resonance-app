@@ -2,26 +2,30 @@ package dev.yuwixx.resonance.data.repository
 
 import android.content.Context
 import android.net.Uri
+import com.squareup.moshi.Moshi
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.yuwixx.resonance.data.database.dao.LikedSongsDao
 import dev.yuwixx.resonance.data.database.dao.MixNavidromeSongDao
 import dev.yuwixx.resonance.data.database.dao.NavidromeSongDao
 import dev.yuwixx.resonance.data.database.dao.PlaylistDao
+import dev.yuwixx.resonance.data.database.dao.PlaylistSourceDao
+import dev.yuwixx.resonance.data.database.dao.SmartPlaylistDao
 import dev.yuwixx.resonance.data.database.dao.SongDao
 import dev.yuwixx.resonance.data.database.entity.PlaylistEntity
 import dev.yuwixx.resonance.data.database.entity.PlaylistSongCrossRef
+import dev.yuwixx.resonance.data.database.entity.SmartPlaylistEntity
 import dev.yuwixx.resonance.data.model.MixType
 import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.model.Playlist
 import dev.yuwixx.resonance.data.model.Song
-import dev.yuwixx.resonance.data.preferences.ResonancePreferences
-import dev.yuwixx.resonance.data.database.entity.SmartPlaylistEntity
 import dev.yuwixx.resonance.data.playlist.SmartPlaylistMatcher
 import dev.yuwixx.resonance.data.playlist.SmartRules
+import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
-import javax.inject.Singleton
 
 @Singleton
 class PlaylistRepository @Inject constructor(
@@ -32,10 +36,10 @@ class PlaylistRepository @Inject constructor(
     private val mixNavidromeSongDao: MixNavidromeSongDao,
     private val prefs: ResonancePreferences,
     private val navidromeSyncRepository: NavidromeSyncRepository,
-    private val smartPlaylistDao: dev.yuwixx.resonance.data.database.dao.SmartPlaylistDao,
-    private val playlistSourceDao: dev.yuwixx.resonance.data.database.dao.PlaylistSourceDao,
-    private val likedSongsDao: dev.yuwixx.resonance.data.database.dao.LikedSongsDao,
-    private val moshi: com.squareup.moshi.Moshi,
+    private val smartPlaylistDao: SmartPlaylistDao,
+    private val playlistSourceDao: PlaylistSourceDao,
+    private val likedSongsDao: LikedSongsDao,
+    private val moshi: Moshi,
 ) {
     private data class Library(
         val entities: List<PlaylistEntity>,

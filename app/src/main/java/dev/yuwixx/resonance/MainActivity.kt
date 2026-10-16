@@ -2,8 +2,8 @@
 // drives the in-app update flow, and renders ResonanceNavGraph inside ResonanceTheme.
 package dev.yuwixx.resonance
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -41,12 +41,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import dev.yuwixx.resonance.cast.CastManager
 import dev.yuwixx.resonance.data.service.MediaStoreWriteBroker
@@ -54,10 +58,10 @@ import dev.yuwixx.resonance.presentation.components.ConfettiOverlay
 import dev.yuwixx.resonance.presentation.navigation.ResonanceNavGraph
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.SettingsViewModel
+import dev.yuwixx.resonance.ui.theme.PaletteStyle
 import dev.yuwixx.resonance.ui.theme.ResonanceTheme
-import androidx.hilt.navigation.compose.hiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -79,8 +83,8 @@ class MainActivity : ComponentActivity() {
         // Fully transparent system bars; Compose draws behind them and ResonanceTheme picks the
         // icon colors. No contrast scrim over 3-button navigation — the bottom bar is opaque.
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced = false
         castManager.initialize()
@@ -122,7 +126,7 @@ class MainActivity : ComponentActivity() {
                 systemDynamicEnabled = systemDynamicEnabled,
                 amoledMode = amoledMode,
                 cornerRadius = cornerRadius,
-                paletteStyle = dev.yuwixx.resonance.ui.theme.PaletteStyle.from(paletteStyle),
+                paletteStyle = PaletteStyle.from(paletteStyle),
             ) {
                 Box {
                     ResonanceNavGraph(
@@ -200,7 +204,7 @@ class MainActivity : ComponentActivity() {
                                 confirmButton = {
                                     Button(onClick = {
                                         settingsViewModel.dismissUpdate()
-                                        val apkUri = androidx.core.content.FileProvider.getUriForFile(
+                                        val apkUri = FileProvider.getUriForFile(
                                             this@MainActivity,
                                             "${packageName}.provider",
                                             state.apkFile
@@ -339,7 +343,7 @@ private fun AnnotatedString.Builder.appendInlineMarkdown(text: String, bold: Boo
             italicUnd.isNotEmpty() ->
                 withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(italicUnd) }
             code.isNotEmpty() ->
-                withStyle(SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)) { append(code) }
+                withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(code) }
         }
         last = match.range.last + 1
     }

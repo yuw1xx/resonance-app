@@ -7,6 +7,8 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.yuwixx.resonance.data.repository.NavidromeDownloadRepository
+import dev.yuwixx.resonance.data.repository.NotDownloadableException
+import kotlinx.coroutines.CancellationException
 
 @HiltWorker
 class SongDownloadWorker @AssistedInject constructor(
@@ -21,9 +23,9 @@ class SongDownloadWorker @AssistedInject constructor(
         return try {
             downloadRepository.performDownload(songId)
             Result.success()
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
-        } catch (e: dev.yuwixx.resonance.data.repository.NotDownloadableException) {
+        } catch (e: NotDownloadableException) {
             Result.failure()
         } catch (e: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()

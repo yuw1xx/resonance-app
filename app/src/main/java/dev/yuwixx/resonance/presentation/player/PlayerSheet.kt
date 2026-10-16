@@ -4,6 +4,7 @@
 // placement phases only, so dragging never recomposes the player.
 package dev.yuwixx.resonance.presentation.player
 
+import android.net.Uri
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
@@ -14,6 +15,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.Saver
@@ -24,6 +26,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
@@ -37,15 +40,18 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
+import dev.yuwixx.resonance.presentation.components.ArtworkImage
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 enum class PlayerSheetValue { Collapsed, Expanded }
 
@@ -119,7 +125,7 @@ class ArtworkMorph internal constructor(internal val progress: () -> Float) {
     internal var sheet: LayoutCoordinates? = null
     internal var mini: LayoutCoordinates? = null
     internal var full: LayoutCoordinates? = null
-    internal var fullSize by mutableStateOf(androidx.compose.ui.unit.IntSize.Zero)
+    internal var fullSize by mutableStateOf(IntSize.Zero)
     /** Live scale of the full artwork (it shrinks slightly while paused). */
     var fullScale: () -> Float = { 1f }
     var fullCorner: Dp by mutableStateOf(24.dp)
@@ -153,7 +159,7 @@ private class SheetShape(
         val bottom = (size.height - bottomPx).coerceAtLeast(topPx)
         if (insetPx == 0f && topPx == 0f && cornerPx == 0f) return Outline.Rectangle(Rect(0f, 0f, size.width, bottom))
         return Outline.Rounded(
-            androidx.compose.ui.geometry.RoundRect(
+            RoundRect(
                 left = insetPx, top = topPx, right = size.width - insetPx, bottom = bottom,
                 topLeftCornerRadius = CornerRadius(cornerPx), topRightCornerRadius = CornerRadius(cornerPx),
                 bottomLeftCornerRadius = CornerRadius(cornerPx), bottomRightCornerRadius = CornerRadius(cornerPx),
@@ -170,7 +176,7 @@ fun PlayerSheet(
     bottomBarHeightPx: () -> Int,
     collapsedContainerColor: Color,
     expandedContainerColor: Color,
-    artworkUri: android.net.Uri?,
+    artworkUri: Uri?,
     modifier: Modifier = Modifier,
     mini: @Composable (onExpand: () -> Unit) -> Unit,
     full: @Composable (onCollapse: () -> Unit) -> Unit,
@@ -282,11 +288,11 @@ fun PlayerSheet(
 
 /** The floating artwork copy that flies between the mini and full player artwork positions. */
 @Composable
-private fun BoxScope.ArtworkMorphLayer(morph: ArtworkMorph, artworkUri: android.net.Uri?) {
+private fun BoxScope.ArtworkMorphLayer(morph: ArtworkMorph, artworkUri: Uri?) {
     val density = LocalDensity.current
     val size = morph.fullSize
     if (size.width == 0) return
-    dev.yuwixx.resonance.presentation.components.ArtworkImage(
+    ArtworkImage(
         uri = artworkUri,
         contentDescription = null,
         cornerRadius = 0.dp,
@@ -294,7 +300,7 @@ private fun BoxScope.ArtworkMorphLayer(morph: ArtworkMorph, artworkUri: android.
             .align(Alignment.TopStart)
             .layout { measurable, _ ->
                 val placeable = measurable.measure(
-                    androidx.compose.ui.unit.Constraints.fixed(size.width, size.height)
+                    Constraints.fixed(size.width, size.height)
                 )
                 layout(placeable.width, placeable.height) { placeable.place(0, 0) }
             }
@@ -331,7 +337,7 @@ private fun BoxScope.ArtworkMorphLayer(morph: ArtworkMorph, artworkUri: android.
                 val miniR = with(density) { morph.miniCorner.toPx() }
                 val fullR = if (morph.fullIsCircle) fullRect.width / 2f else with(density) { morph.fullCorner.toPx() } * fullScale
                 val displayedRadius = lerp(miniR, fullR, t)
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(displayedRadius / s)
+                shape = RoundedCornerShape(displayedRadius / s)
                 clip = true
             },
     )

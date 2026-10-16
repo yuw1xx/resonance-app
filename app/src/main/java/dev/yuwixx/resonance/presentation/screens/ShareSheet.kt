@@ -2,9 +2,11 @@
 
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import android.app.Activity
 import android.Manifest
+import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -16,6 +18,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,6 +30,7 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -34,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -45,7 +50,6 @@ import com.google.zxing.qrcode.QRCodeWriter
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.service.NearbyShareManager
 import dev.yuwixx.resonance.data.service.ShareTransferManager
-import androidx.compose.foundation.lazy.itemsIndexed
 import dev.yuwixx.resonance.presentation.components.AnimatedPermissionGate
 import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
 import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
@@ -53,6 +57,7 @@ import dev.yuwixx.resonance.presentation.components.SectionCard
 import dev.yuwixx.resonance.presentation.components.staggeredEntrance
 import dev.yuwixx.resonance.presentation.viewmodel.ShareViewModel
 import kotlin.math.*
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -172,7 +177,7 @@ private fun ShareMain(
 
     LaunchedEffect(nearbyState) {
         if (nearbyState is NearbyShareManager.NearbyState.SendSuccess) {
-            kotlinx.coroutines.delay(1_600)
+            delay(1_600)
             onDismiss()
         }
     }
@@ -221,7 +226,7 @@ private fun ShareMain(
                         val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "audio/mpeg"
                         onPlayNow(Song(
                             id              = 0L,
-                            uri             = android.net.Uri.fromFile(iFile.file),
+                            uri             = Uri.fromFile(iFile.file),
                             title           = iFile.songTitle,
                             artist          = iFile.songArtist,
                             artists         = listOf(iFile.songArtist),
@@ -571,7 +576,7 @@ private fun RadarAnimation(
         modifier         = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.foundation.Canvas(
+        Canvas(
             modifier = Modifier.fillMaxSize()
         ) {
             val cx     = size.width / 2f
@@ -587,7 +592,7 @@ private fun RadarAnimation(
                         color  = primaryColor.copy(alpha = alpha),
                         radius = radius,
                         center = Offset(cx, cy),
-                        style  = androidx.compose.ui.graphics.drawscope.Stroke(
+                        style  = Stroke(
                             width     = (3f * (1f - normalised) + 1f).dp.toPx(),
                         ),
                     )
@@ -597,7 +602,7 @@ private fun RadarAnimation(
                     color  = primaryColor.copy(alpha = 0.08f),
                     radius = maxR * 0.72f,
                     center = Offset(cx, cy),
-                    style  = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx()),
+                    style  = Stroke(width = 1.dp.toPx()),
                 )
             }
         }
@@ -1149,8 +1154,8 @@ private fun QrTransferDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
                             onClick = {
-                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Resonance share link", link))
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Resonance share link", link))
                             },
                             shape = MaterialTheme.shapes.medium,
                         ) {
@@ -1412,7 +1417,7 @@ fun MaterialQrCode(
                     ),
                     size = Size(6 * cellSize, 6 * cellSize),
                     cornerRadius = CornerRadius(cellSize * 1.5f, cellSize * 1.5f),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = cellSize)
+                    style = Stroke(width = cellSize)
                 )
                 drawRoundRect(
                     color = eyeColor,

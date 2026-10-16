@@ -2,27 +2,31 @@
 // with offline queue, and track love/unlove. Uses its own DataStore separate from main prefs.
 package dev.yuwixx.resonance.data.repository
 
-import dev.yuwixx.resonance.data.util.md5Hex
-import kotlinx.coroutines.CancellationException
-import dev.yuwixx.resonance.BuildConfig
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.yuwixx.resonance.BuildConfig
 import dev.yuwixx.resonance.data.database.dao.PendingScrobbleDao
 import dev.yuwixx.resonance.data.database.entity.PendingScrobbleEntity
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.network.LastFmApi
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.data.security.SecureCredentialStore
+import dev.yuwixx.resonance.data.util.md5Hex
+import java.util.concurrent.CopyOnWriteArrayList
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import javax.inject.Inject
-import javax.inject.Singleton
 
 private const val TAG = "LastFmRepo"
 private val DEFAULT_API_KEY = BuildConfig.LASTFM_API_KEY
@@ -62,12 +66,12 @@ class LastFmRepository @Inject constructor(
     private val api: LastFmApi,
     private val mainPrefs: ResonancePreferences,
     private val pendingScrobbleDao: PendingScrobbleDao,
-    private val secureCredentialStore: dev.yuwixx.resonance.data.security.SecureCredentialStore,
+    private val secureCredentialStore: SecureCredentialStore,
 ) {
     private val store = context.lastFmStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val pendingScrobbles = java.util.concurrent.CopyOnWriteArrayList<PendingScrobble>()
+    private val pendingScrobbles = CopyOnWriteArrayList<PendingScrobble>()
 
     val username: Flow<String>    = store.data.map { it[LastFmKeys.USERNAME]    ?: "" }
     val isEnabled: Flow<Boolean>  = store.data.map { it[LastFmKeys.ENABLED]     ?: false }
@@ -403,10 +407,10 @@ class LastFmRepository @Inject constructor(
     val pendingScrobbleCount: Int get() = pendingScrobbles.size
 
     private fun isOnWifi(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val net = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(net) ?: return false
-        return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     }
 
     private suspend fun isNetworkAllowedForScrobble(): Boolean {

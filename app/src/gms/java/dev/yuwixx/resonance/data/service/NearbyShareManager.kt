@@ -2,22 +2,26 @@
 // Handles discovery, connection, metadata exchange (META||| protocol), and file transfer progress.
 package dev.yuwixx.resonance.data.service
 
-import android.util.Log
 import android.app.Activity
+import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Environment
 import android.provider.OpenableColumns
+import android.util.Log
+import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.nearby.Nearby
-import com.google.android.gms.nearby.connection.ConnectionsClient
 import com.google.android.gms.nearby.connection.AdvertisingOptions
 import com.google.android.gms.nearby.connection.ConnectionInfo
 import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback
 import com.google.android.gms.nearby.connection.ConnectionResolution
+import com.google.android.gms.nearby.connection.ConnectionsClient
 import com.google.android.gms.nearby.connection.DiscoveredEndpointInfo
 import com.google.android.gms.nearby.connection.DiscoveryOptions
 import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback
@@ -28,6 +32,11 @@ import com.google.android.gms.nearby.connection.Strategy
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.util.DeviceInfo
+import dev.yuwixx.resonance.data.util.IncomingFileStorage
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,9 +44,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.io.File
-import javax.inject.Inject
-import javax.inject.Singleton
 
 @Singleton
 class NearbyShareManager @Inject constructor(
@@ -106,10 +112,10 @@ class NearbyShareManager @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val pendingSongsToSend = java.util.concurrent.ConcurrentHashMap<String, Song>()
-    private val pendingIncomingMeta = java.util.concurrent.ConcurrentHashMap<String, Pair<String, String>>()
+    private val pendingSongsToSend = ConcurrentHashMap<String, Song>()
+    private val pendingIncomingMeta = ConcurrentHashMap<String, Pair<String, String>>()
     // Senders whose song the user accepted; a file from anyone else is refused.
-    private val acceptedSenders = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val acceptedSenders = ConcurrentHashMap.newKeySet<String>()
     private var filePayloadId: Long? = null
 
     // Receiver-side tracking: set when onPayloadReceived fires for FILE, cleared after SUCCESS/FAILURE.
@@ -142,7 +148,7 @@ class NearbyShareManager @Inject constructor(
         }
 
         val wifiEnabled = try {
-            (context.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager)
+            (context.getSystemService(Context.WIFI_SERVICE) as? WifiManager)
                 ?.isWifiEnabled ?: true
         } catch (_: Exception) { true }
         if (!wifiEnabled) {
@@ -151,7 +157,7 @@ class NearbyShareManager @Inject constructor(
         }
 
         val btEnabled = try {
-            (context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)
+            (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
                 ?.adapter?.isEnabled ?: true
         } catch (_: Exception) { true }
         if (!btEnabled) {
@@ -162,8 +168,8 @@ class NearbyShareManager @Inject constructor(
         val permissionError: String? = when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
                 val granted = { perm: String ->
-                    androidx.core.content.ContextCompat.checkSelfPermission(context, perm) ==
-                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ContextCompat.checkSelfPermission(context, perm) ==
+                        PackageManager.PERMISSION_GRANTED
                 }
                 when {
                     !granted(android.Manifest.permission.NEARBY_WIFI_DEVICES) ->
@@ -174,9 +180,9 @@ class NearbyShareManager @Inject constructor(
                 }
             }
             else -> {
-                val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                val granted = ContextCompat.checkSelfPermission(
                     context, android.Manifest.permission.ACCESS_FINE_LOCATION
-                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) == PackageManager.PERMISSION_GRANTED
                 if (!granted)
                     "Location permission missing (required on this Android version).\nGo to Settings → Apps → Resonance → Permissions → Location, then tap Retry."
                 else null
@@ -307,8 +313,8 @@ class NearbyShareManager @Inject constructor(
             listOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
         }
         val missing = required.filter {
-            androidx.core.content.ContextCompat.checkSelfPermission(context, it) !=
-                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, it) !=
+                    PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) {
             return DiagnosticResult.Failure("Missing permission: ${missing.joinToString()}$grapheneHint")
@@ -470,7 +476,7 @@ class NearbyShareManager @Inject constructor(
         try {
             val ext = displayName(tempUri)?.substringAfterLast('.', "")?.ifEmpty { null } ?: "mp3"
             val destFile = context.contentResolver.openInputStream(tempUri)?.use { input ->
-                dev.yuwixx.resonance.data.util.IncomingFileStorage.saveIncoming(
+                IncomingFileStorage.saveIncoming(
                     context = context,
                     input = input,
                     title = title,

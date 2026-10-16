@@ -22,9 +22,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.presentation.components.SongCard
+import dev.yuwixx.resonance.presentation.components.rememberReorderState
 import dev.yuwixx.resonance.presentation.components.reorderHandle
 import dev.yuwixx.resonance.presentation.components.reorderableItem
-import dev.yuwixx.resonance.presentation.components.rememberReorderState
+import dev.yuwixx.resonance.presentation.screens.CreatePlaylistDialog
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 import kotlinx.coroutines.launch
 
@@ -200,7 +201,7 @@ fun QueueSheet(
     }
 
     if (showSaveDialog) {
-        dev.yuwixx.resonance.presentation.screens.CreatePlaylistDialog(
+        CreatePlaylistDialog(
             onDismiss = { showSaveDialog = false },
             onConfirm = { name ->
                 showSaveDialog = false

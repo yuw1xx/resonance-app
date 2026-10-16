@@ -4,9 +4,10 @@ import android.content.Context
 import androidx.work.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
-import kotlinx.coroutines.flow.first
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.first
 
 @Singleton
 class SongDownloadManager @Inject constructor(
@@ -35,7 +36,7 @@ class SongDownloadManager @Inject constructor(
     // data is limited to 10 KB, which a large playlist exceeds.
     suspend fun enqueueBatch(workName: String, songIds: List<Long>) {
         if (songIds.isEmpty()) return
-        val listFile = java.io.File(context.cacheDir, "download_batches/$workName.txt").apply {
+        val listFile = File(context.cacheDir, "download_batches/$workName.txt").apply {
             parentFile?.mkdirs()
             writeText(songIds.joinToString(","))
         }

@@ -1,6 +1,5 @@
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -21,8 +20,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.data.model.MixType
 import dev.yuwixx.resonance.data.model.Playlist
+import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.presentation.components.*
 import dev.yuwixx.resonance.presentation.navigation.Screen
 import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
@@ -193,7 +194,7 @@ fun HomeScreen(
 
 @Composable
 private fun ResumeCard(
-    song: dev.yuwixx.resonance.data.model.Song,
+    song: Song,
     isPlaying: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,

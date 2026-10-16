@@ -8,15 +8,16 @@ package dev.yuwixx.resonance.data.service
 
 import android.app.Activity
 import android.content.Context
+import android.os.Build
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.util.DeviceInfo
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 @Singleton
 class NearbyShareManager @Inject constructor(
@@ -68,7 +69,7 @@ class NearbyShareManager @Inject constructor(
     private val _incomingFile = MutableStateFlow<IncomingFile?>(null)
     val incomingFile: StateFlow<IncomingFile?> = _incomingFile.asStateFlow()
 
-    val localName: String = android.os.Build.MODEL
+    val localName: String = Build.MODEL
 
     val isGrapheneOs: Boolean by lazy { DeviceInfo.isGrapheneOs(context) }
 

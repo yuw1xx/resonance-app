@@ -6,26 +6,32 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.yuwixx.resonance.data.database.entity.SongDownloadEntity
 import dev.yuwixx.resonance.data.model.Album
 import dev.yuwixx.resonance.data.model.Artist
 import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.model.Playlist
 import dev.yuwixx.resonance.data.model.Song
+import dev.yuwixx.resonance.data.playlist.M3uImporter
+import dev.yuwixx.resonance.data.playlist.PlaylistFolderSync
+import dev.yuwixx.resonance.data.playlist.SmartRules
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
-import dev.yuwixx.resonance.data.database.entity.SongDownloadEntity
+import dev.yuwixx.resonance.data.repository.ActiveLibrary
 import dev.yuwixx.resonance.data.repository.ArtworkRepository
 import dev.yuwixx.resonance.data.repository.MixRepository
 import dev.yuwixx.resonance.data.repository.MusicRepository
 import dev.yuwixx.resonance.data.repository.NavidromeDownloadRepository
 import dev.yuwixx.resonance.data.repository.NavidromeRepository
+import dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
 import dev.yuwixx.resonance.data.repository.PlaylistRepository
 import dev.yuwixx.resonance.data.worker.MixGeneratorManager
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
@@ -34,13 +40,13 @@ class LibraryViewModel @Inject constructor(
     val prefs: ResonancePreferences,
     private val artworkRepository: ArtworkRepository,
     private val navidromeRepository: NavidromeRepository,
-    private val activeLibrary: dev.yuwixx.resonance.data.repository.ActiveLibrary,
-    private val navidromeSyncRepository: dev.yuwixx.resonance.data.repository.NavidromeSyncRepository,
-    private val playlistFolderSync: dev.yuwixx.resonance.data.playlist.PlaylistFolderSync,
+    private val activeLibrary: ActiveLibrary,
+    private val navidromeSyncRepository: NavidromeSyncRepository,
+    private val playlistFolderSync: PlaylistFolderSync,
     private val navidromeDownloadRepository: NavidromeDownloadRepository,
     private val mixGeneratorManager: MixGeneratorManager,
     private val mixRepository: MixRepository,
-    private val m3uImporter: dev.yuwixx.resonance.data.playlist.M3uImporter,
+    private val m3uImporter: M3uImporter,
 ) : ViewModel() {
 
     // ─── M3U import / export ───
@@ -48,10 +54,10 @@ class LibraryViewModel @Inject constructor(
     sealed interface M3uImportState {
         data object Idle : M3uImportState
         /** Some picked files clash with existing playlist names; ask how to handle them. */
-        data class ConfirmConflicts(val previews: List<dev.yuwixx.resonance.data.playlist.M3uImporter.Preview>) : M3uImportState
+        data class ConfirmConflicts(val previews: List<M3uImporter.Preview>) : M3uImportState
         data class Importing(val done: Int, val total: Int) : M3uImportState
         data class Finished(
-            val results: List<dev.yuwixx.resonance.data.playlist.M3uImporter.Result>,
+            val results: List<M3uImporter.Result>,
             val failures: List<String>,
         ) : M3uImportState
     }
@@ -67,12 +73,12 @@ class LibraryViewModel @Inject constructor(
             if (previews.any { it.existingPlaylistId != null }) {
                 _m3uImportState.value = M3uImportState.ConfirmConflicts(previews)
             } else {
-                runM3uImport(uris, dev.yuwixx.resonance.data.playlist.M3uImporter.ConflictMode.KEEP_BOTH)
+                runM3uImport(uris, M3uImporter.ConflictMode.KEEP_BOTH)
             }
         }
     }
 
-    fun confirmM3uImport(mode: dev.yuwixx.resonance.data.playlist.M3uImporter.ConflictMode) {
+    fun confirmM3uImport(mode: M3uImporter.ConflictMode) {
         val state = _m3uImportState.value as? M3uImportState.ConfirmConflicts ?: return
         viewModelScope.launch { runM3uImport(state.previews.map { it.uri }, mode) }
     }
@@ -81,14 +87,14 @@ class LibraryViewModel @Inject constructor(
         _m3uImportState.value = M3uImportState.Idle
     }
 
-    private suspend fun runM3uImport(uris: List<Uri>, mode: dev.yuwixx.resonance.data.playlist.M3uImporter.ConflictMode) {
-        val results = mutableListOf<dev.yuwixx.resonance.data.playlist.M3uImporter.Result>()
+    private suspend fun runM3uImport(uris: List<Uri>, mode: M3uImporter.ConflictMode) {
+        val results = mutableListOf<M3uImporter.Result>()
         val failures = mutableListOf<String>()
         uris.forEachIndexed { i, uri ->
             _m3uImportState.value = M3uImportState.Importing(i, uris.size)
             try {
                 results += m3uImporter.import(uri, mode)
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 failures += e.message ?: m3uImporter.displayNameStem(uri)
@@ -102,7 +108,7 @@ class LibraryViewModel @Inject constructor(
         try {
             m3uImporter.exportToUri(playlist, uri)
             null
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             e.message ?: "Unknown error"
@@ -197,11 +203,11 @@ class LibraryViewModel @Inject constructor(
 
     // ─── M3U folder sync ───
 
-    fun setPlaylistSyncFolder(uri: android.net.Uri?) {
+    fun setPlaylistSyncFolder(uri: Uri?) {
         viewModelScope.launch { playlistFolderSync.setFolder(uri) }
     }
 
-    fun syncPlaylistFolderNow(onDone: (dev.yuwixx.resonance.data.playlist.PlaylistFolderSync.Report) -> Unit) {
+    fun syncPlaylistFolderNow(onDone: (PlaylistFolderSync.Report) -> Unit) {
         viewModelScope.launch { onDone(playlistFolderSync.syncNow()) }
     }
 
@@ -209,7 +215,7 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch { onDone(playlistFolderSync.exportAll()) }
     }
 
-    fun saveSmartPlaylist(playlistId: Long?, name: String, rules: dev.yuwixx.resonance.data.playlist.SmartRules) {
+    fun saveSmartPlaylist(playlistId: Long?, name: String, rules: SmartRules) {
         viewModelScope.launch { playlistRepository.saveSmartPlaylist(playlistId, name, rules) }
     }
 

@@ -4,6 +4,8 @@ package dev.yuwixx.resonance.data.playlist
 
 import com.squareup.moshi.JsonClass
 import dev.yuwixx.resonance.data.model.Song
+import kotlin.math.floor
+import kotlin.random.Random
 
 @JsonClass(generateAdapter = true)
 data class SmartRules(
@@ -94,7 +96,7 @@ object SmartPlaylistMatcher {
             SmartSort.MOST_PLAYED -> matching.sortedByDescending { it.listenCount }
             SmartSort.RECENTLY_PLAYED -> matching.filter { it.lastListened > 0 }.sortedByDescending { it.lastListened } +
                 matching.filter { it.lastListened <= 0 }
-            SmartSort.RANDOM -> matching.shuffled(kotlin.random.Random(seed))
+            SmartSort.RANDOM -> matching.shuffled(Random(seed))
         }
         return rules.limit?.takeIf { it > 0 }?.let { sorted.take(it) } ?: sorted
     }
@@ -132,8 +134,8 @@ object SmartPlaylistMatcher {
             if (expected == null || actual == null) false
             else when (rule.op) {
                 // Whole units for "is": a song added 3.4 days ago "is 3 days ago".
-                SmartOp.IS -> kotlin.math.floor(actual) == kotlin.math.floor(expected)
-                SmartOp.IS_NOT -> kotlin.math.floor(actual) != kotlin.math.floor(expected)
+                SmartOp.IS -> floor(actual) == floor(expected)
+                SmartOp.IS_NOT -> floor(actual) != floor(expected)
                 SmartOp.GREATER -> actual > expected
                 SmartOp.LESS -> actual < expected
                 else -> false

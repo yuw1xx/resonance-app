@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.HelpOutline
@@ -35,15 +36,19 @@ import androidx.compose.ui.unit.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import dev.yuwixx.resonance.data.model.Song
+import dev.yuwixx.resonance.data.util.IncomingFileStorage
 import dev.yuwixx.resonance.presentation.components.AnimatedPermissionGate
 import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
 import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
 import dev.yuwixx.resonance.presentation.components.staggeredEntrance
-import kotlinx.coroutines.*
 import org.json.JSONArray
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.coroutines.resume
+import kotlinx.coroutines.*
 
 data class ReceiveParams(
     val mode     : String,
@@ -119,7 +124,7 @@ fun ReceiveSheet(
         onDismissRequest = onDismiss,
         sheetState       = sheetState,
         dragHandle       = null,
-        shape            = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        shape            = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
         if (mode == "remote-multi") {
             val multiParams = remember(uri) { RemoteMultiParams.parse(uri) }
@@ -541,7 +546,7 @@ private fun ReceiveMultiTransferContent(
 
 private suspend fun fetchManifest(serverUrl: String, manifestToken: String): List<ManifestSongEntry> = withContext(Dispatchers.IO) {
     val url = URL("$serverUrl/manifest/$manifestToken")
-    val connection = url.openConnection() as java.net.HttpURLConnection
+    val connection = url.openConnection() as HttpURLConnection
     connection.requestMethod = "GET"
     connection.connectTimeout = 15_000
     connection.readTimeout = 15_000
@@ -603,7 +608,7 @@ private suspend fun downloadToStorage(
     // Resumable: if the connection drops, reconnect and ask for the rest with a Range header
     // (the relay supports it). A server that ignores Range answers 200 and we start over.
     while (true) {
-        val connection = ((network?.openConnection(url) ?: url.openConnection()) as java.net.HttpURLConnection).apply {
+        val connection = ((network?.openConnection(url) ?: url.openConnection()) as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout    = 300_000
             if (received > 0) setRequestProperty("Range", "bytes=$received-")
@@ -616,10 +621,10 @@ private suspend fun downloadToStorage(
                     totalBytes = connection.contentLengthLong
                 }
                 206 -> if (totalBytes <= 0) totalBytes = received + connection.contentLengthLong
-                404, 410 -> throw java.io.IOException("This link has expired or was already used")
-                else -> throw java.io.IOException("Download failed (HTTP $code)")
+                404, 410 -> throw IOException("This link has expired or was already used")
+                else -> throw IOException("Download failed (HTTP $code)")
             }
-            java.io.FileOutputStream(tempFile, received > 0).use { output ->
+            FileOutputStream(tempFile, received > 0).use { output ->
                 connection.inputStream.use { input ->
                     val buf = ByteArray(64 * 1024)
                     var n: Int
@@ -631,20 +636,20 @@ private suspend fun downloadToStorage(
                 }
             }
             if (totalBytes <= 0 || received >= totalBytes) break
-            throw java.io.IOException("Connection ended early")
-        } catch (e: java.io.IOException) {
+            throw IOException("Connection ended early")
+        } catch (e: IOException) {
             val retryable = e.message?.startsWith("This link") != true && e.message?.startsWith("Download failed") != true
             if (!retryable || ++attempt > 5) {
                 tempFile.delete()
                 throw e
             }
-            kotlinx.coroutines.delay(1_000L * attempt)
+            delay(1_000L * attempt)
         } finally {
             connection.disconnect()
         }
     }
     val destFile = tempFile.inputStream().use { input ->
-        dev.yuwixx.resonance.data.util.IncomingFileStorage.saveIncoming(
+        IncomingFileStorage.saveIncoming(
             context = context,
             input = input,
             title = title,
@@ -684,7 +689,7 @@ private suspend fun performReject(params: ReceiveParams) = withContext(Dispatche
     if (params.mode == "remote") return@withContext
     try {
         val url = URL(params.rejectUrl)
-        val connection = url.openConnection() as java.net.HttpURLConnection
+        val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
         connection.connectTimeout = 3000
         connection.responseCode

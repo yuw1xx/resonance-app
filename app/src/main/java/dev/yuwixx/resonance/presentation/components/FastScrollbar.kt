@@ -1,6 +1,5 @@
 package dev.yuwixx.resonance.presentation.components
 
-import kotlin.math.roundToInt
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -29,13 +28,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
-import dev.yuwixx.resonance.presentation.components.LocalAppearanceConfig
 import androidx.compose.ui.unit.dp
+import dev.yuwixx.resonance.presentation.components.LocalAppearanceConfig
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -167,9 +170,9 @@ fun LazyColumnWithScrollbar(
                     val x = size.width - w - 2.dp.toPx()
                     drawRoundRect(
                         color = thumbColor,
-                        topLeft = androidx.compose.ui.geometry.Offset(x, thumbTop),
-                        size = androidx.compose.ui.geometry.Size(w, thumbH),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(w / 2),
+                        topLeft = Offset(x, thumbTop),
+                        size = Size(w, thumbH),
+                        cornerRadius = CornerRadius(w / 2),
                     )
                 }
                 .graphicsLayer { scaleX = thumbScale; scaleY = thumbScale }
@@ -306,9 +309,9 @@ fun LazyGridWithScrollbar(
                     val x = size.width - w - 2.dp.toPx()
                     drawRoundRect(
                         color = thumbColor,
-                        topLeft = androidx.compose.ui.geometry.Offset(x, thumbTop),
-                        size = androidx.compose.ui.geometry.Size(w, thumbH),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(w / 2),
+                        topLeft = Offset(x, thumbTop),
+                        size = Size(w, thumbH),
+                        cornerRadius = CornerRadius(w / 2),
                     )
                 }
                 .graphicsLayer { scaleX = thumbScale; scaleY = thumbScale }

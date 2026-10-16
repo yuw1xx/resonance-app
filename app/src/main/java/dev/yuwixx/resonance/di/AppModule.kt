@@ -3,6 +3,7 @@
 package dev.yuwixx.resonance.di
 
 import android.content.Context
+import android.net.Uri
 import androidx.room.Room
 import coil.ImageLoader
 import coil.disk.DiskCache
@@ -12,8 +13,8 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dev.yuwixx.resonance.BuildConfig
 import dagger.hilt.components.SingletonComponent
+import dev.yuwixx.resonance.BuildConfig
 import dev.yuwixx.resonance.data.database.MIGRATION_1_3
 import dev.yuwixx.resonance.data.database.MIGRATION_2_3
 import dev.yuwixx.resonance.data.database.MIGRATION_3_4
@@ -237,7 +238,7 @@ private object StableSubsonicCacheKeys : coil.intercept.Interceptor {
     }
 
     fun stableKey(url: String): String? {
-        val uri = android.net.Uri.parse(url)
+        val uri = Uri.parse(url)
         val names = uri.queryParameterNames.takeIf { it.isNotEmpty() } ?: return null
         val builder = uri.buildUpon().clearQuery()
         names.filter { it !in authParams }.sorted().forEach { name ->

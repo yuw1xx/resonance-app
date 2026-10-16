@@ -1,12 +1,14 @@
 package dev.yuwixx.resonance.data.service
 
-import kotlinx.coroutines.*
 import java.io.File
+import java.io.IOException
 import java.net.ServerSocket
+import java.net.Socket
 import java.net.SocketTimeoutException
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.*
 
 @Singleton
 class LocalFileServer @Inject constructor() {
@@ -45,7 +47,7 @@ class LocalFileServer @Inject constructor() {
                     val client = socket.accept()
                     val outcome = try {
                         handleConnection(client, token, file, mimeType, onProgress, onDone, onRejected)
-                    } catch (_: java.io.IOException) {
+                    } catch (_: IOException) {
                         Outcome.Ignored // receiver dropped mid-request; let it retry
                     }
                     if (outcome != Outcome.Ignored) break
@@ -74,7 +76,7 @@ class LocalFileServer @Inject constructor() {
     private enum class Outcome { Served, Rejected, Ignored }
 
     private fun handleConnection(
-        client    : java.net.Socket,
+        client    : Socket,
         expected  : String,
         file      : File,
         mimeType  : String,

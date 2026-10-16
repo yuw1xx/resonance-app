@@ -1,10 +1,5 @@
 package dev.yuwixx.resonance.data.service
 
-import kotlinx.coroutines.CancellationException
-import kotlin.coroutines.resumeWithException
-import okhttp3.Response
-import okhttp3.Callback
-import okhttp3.Call
 import android.annotation.SuppressLint
 import android.content.Context
 import android.net.ConnectivityManager
@@ -17,10 +12,8 @@ import android.os.Looper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -29,6 +22,7 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import okio.Buffer
 import okio.BufferedSink
 import okio.ForwardingSink
@@ -36,13 +30,21 @@ import okio.buffer
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
+import java.net.Inet4Address
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 private const val MAX_CONCURRENT_UPLOADS = 4
 
@@ -513,7 +515,7 @@ class ShareTransferManager @Inject constructor(
         val props = cm.getLinkProperties(net) ?: return null
         return props.linkAddresses
             .map { it.address }
-            .filterIsInstance<java.net.Inet4Address>()
+            .filterIsInstance<Inet4Address>()
             .firstOrNull()
             ?.hostAddress
     }
@@ -536,7 +538,7 @@ private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont 
     cont.invokeOnCancellation { cancel() }
     enqueue(object : Callback {
         override fun onResponse(call: Call, response: Response) = cont.resume(response) { _, _, _ -> response.close() }
-        override fun onFailure(call: Call, e: java.io.IOException) {
+        override fun onFailure(call: Call, e: IOException) {
             if (!cont.isCancelled) cont.resumeWithException(e)
         }
     })

@@ -3,13 +3,14 @@
 // artwork background.
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.ClipData
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.animation.core.RepeatMode as AnimationRepeatMode
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.*
 import androidx.compose.foundation.layout.*
@@ -25,17 +26,29 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
+import androidx.graphics.shapes.Morph
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import dev.yuwixx.resonance.data.model.LyricLine
 import dev.yuwixx.resonance.data.model.Playlist
@@ -43,16 +56,22 @@ import dev.yuwixx.resonance.data.model.RepeatMode
 import dev.yuwixx.resonance.data.model.SleepTimer
 import dev.yuwixx.resonance.data.model.SmartQueueReason
 import dev.yuwixx.resonance.data.model.Song
+import dev.yuwixx.resonance.data.model.WaveformData
 import dev.yuwixx.resonance.data.repository.ArtworkComposeColors
 import dev.yuwixx.resonance.data.repository.LyricsResult
 import dev.yuwixx.resonance.presentation.components.*
 import dev.yuwixx.resonance.presentation.components.EaseInOutSine
+import dev.yuwixx.resonance.presentation.player.LocalArtworkMorph
+import dev.yuwixx.resonance.presentation.player.QueueSheet
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.ShareViewModel
+import dev.yuwixx.resonance.ui.theme.BrandColors
 import dev.yuwixx.resonance.ui.theme.DmSans
-import androidx.hilt.navigation.compose.hiltViewModel
-import kotlinx.coroutines.launch
 import java.text.DecimalFormat
+import kotlin.math.abs
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -190,7 +209,7 @@ fun PlayerScreen(
         }
 
         // Back closes the overlay first instead of collapsing the whole player.
-        androidx.activity.compose.BackHandler(enabled = showLyricsOverlay) { showLyricsOverlay = false }
+        BackHandler(enabled = showLyricsOverlay) { showLyricsOverlay = false }
 
         val motion = MaterialTheme.motionScheme
         AnimatedVisibility(
@@ -228,7 +247,7 @@ fun PlayerScreen(
         }
 
         if (showQueueSheet) {
-            dev.yuwixx.resonance.presentation.player.QueueSheet(
+            QueueSheet(
                 playerViewModel = playerViewModel,
                 onDismiss = { showQueueSheet = false },
             )
@@ -384,7 +403,7 @@ private fun ArtworkPanel(
     )
 
     // Register with the sheet's artwork morph so the mini-player artwork can fly into place.
-    val morph = dev.yuwixx.resonance.presentation.player.LocalArtworkMorph.current
+    val morph = LocalArtworkMorph.current
     SideEffect {
         morph?.apply {
             fullScale = { scale.value }
@@ -397,7 +416,7 @@ private fun ArtworkPanel(
     val swipe = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     var widthPx by remember { mutableFloatStateOf(1f) }
-    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val haptics = LocalHapticFeedback.current
 
     Box(
         modifier = modifier
@@ -411,8 +430,8 @@ private fun ArtworkPanel(
                     onDragEnd = {
                         scope.launch {
                             val o = swipe.value
-                            if (kotlin.math.abs(o) > widthPx * 0.25f) {
-                                if (config.hapticEnabled) haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.GestureEnd)
+                            if (abs(o) > widthPx * 0.25f) {
+                                if (config.hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.GestureEnd)
                                 swipe.animateTo(if (o < 0) -widthPx else widthPx, motion.fastSpatialSpec())
                                 if (o < 0) onSwipeNext() else onSwipePrevious()
                                 swipe.snapTo(if (o < 0) widthPx * 0.5f else -widthPx * 0.5f)
@@ -434,7 +453,7 @@ private fun ArtworkPanel(
                     scaleX = s
                     scaleY = s
                     translationX = swipe.value
-                    alpha = 1f - (kotlin.math.abs(swipe.value) / widthPx).coerceIn(0f, 0.6f)
+                    alpha = 1f - (abs(swipe.value) / widthPx).coerceIn(0f, 0.6f)
                     rotationZ = swipe.value / widthPx * 6f
                 },
             shape = artworkShape,
@@ -460,7 +479,7 @@ private fun PlaybackControls(
     durationMs: Long,
     repeatMode: RepeatMode,
     shuffleEnabled: Boolean,
-    waveformData: dev.yuwixx.resonance.data.model.WaveformData?,
+    waveformData: WaveformData?,
     seekbarStyle: String,
     isTrackLoved: Boolean,
     nextSong: Song? = null,
@@ -563,7 +582,7 @@ private fun PlaybackControls(
                 label = "love_scale",
             )
             val loveColor by animateColorAsState(
-                targetValue = if (isTrackLoved) dev.yuwixx.resonance.ui.theme.BrandColors.loved
+                targetValue = if (isTrackLoved) BrandColors.loved
                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
                 label = "love_color",
@@ -649,7 +668,7 @@ private fun TransportControls(
     onRepeatModeChange: () -> Unit,
 ) {
     val motion = MaterialTheme.motionScheme
-    val morph = remember { androidx.graphics.shapes.Morph(MaterialShapes.Square, MaterialShapes.Cookie9Sided) }
+    val morph = remember { Morph(MaterialShapes.Square, MaterialShapes.Cookie9Sided) }
     // Morph, spin and press scale are all read inside graphicsLayer below, so the per-frame
     // spin redraws one layer instead of recomposing the controls row.
     val morphProgress = animateFloatAsState(
@@ -712,7 +731,7 @@ private fun TransportControls(
                 .background(playButtonColor)
                 .clickable(
                     interactionSource = playInteraction,
-                    indication = androidx.compose.material3.ripple(),
+                    indication = ripple(),
                     onClick = onPlayPause,
                 ),
             contentAlignment = Alignment.Center,
@@ -767,7 +786,7 @@ private fun SeekBarAndTimeLabels(
     position: State<Long>,
     durationMs: Long,
     seekbarStyle: String,
-    waveformData: dev.yuwixx.resonance.data.model.WaveformData?,
+    waveformData: WaveformData?,
     isPlaying: Boolean,
     playedColor: Color,
     showRemainingTime: Boolean,
@@ -1371,7 +1390,7 @@ private fun SongInfoRow(
 
 @Composable
 private fun DynamicBackground(
-    artworkUri: android.net.Uri?,
+    artworkUri: Uri?,
     blurBackground: Boolean,
     blurStrength: Float,
 ) {
@@ -1380,7 +1399,7 @@ private fun DynamicBackground(
         Box(modifier = Modifier.fillMaxSize().background(surface))
         return
     }
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val motion = MaterialTheme.motionScheme
 
     // The blur runs on a quarter-resolution layer that's then scaled up 4x: visually identical
@@ -1426,8 +1445,8 @@ private fun DynamicBackground(
 @Composable
 fun LyricsOverlay(
     result: LyricsResult,
-    activeLine: kotlinx.coroutines.flow.StateFlow<Int>,
-    position: kotlinx.coroutines.flow.StateFlow<Long>,
+    activeLine: StateFlow<Int>,
+    position: StateFlow<Long>,
     fontScale: Float,
     onSeek: (Long) -> Unit,
     onClose: () -> Unit,
@@ -1437,8 +1456,8 @@ fun LyricsOverlay(
     val config = LocalAppearanceConfig.current
     val textAlign = if (config.lyricAlignment == "CENTER") TextAlign.Center else TextAlign.Start
     val listState = rememberLazyListState()
-    val clipboard = androidx.compose.ui.platform.LocalClipboard.current
-    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val clipboard = LocalClipboard.current
+    val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     // Collected here, not in PlayerScreen, so a line change only recomposes the overlay.
@@ -1468,7 +1487,7 @@ fun LyricsOverlay(
     }
     LaunchedEffect(followSong, userScrolledAt) {
         if (!followSong) {
-            kotlinx.coroutines.delay(3_000)
+            delay(3_000)
             if (!listState.isScrollInProgress) followSong = true
         }
     }
@@ -1594,11 +1613,11 @@ fun LyricsOverlay(
                                             enabled = !line.isGap,
                                             onClick = { if (line.timeMs >= 0L) onSeek(line.timeMs) },
                                             onLongClick = {
-                                                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                                 scope.launch {
                                                     clipboard.setClipEntry(
-                                                        androidx.compose.ui.platform.ClipEntry(
-                                                            android.content.ClipData.newPlainText("Lyrics", line.text)
+                                                        ClipEntry(
+                                                            ClipData.newPlainText("Lyrics", line.text)
                                                         )
                                                     )
                                                     snackbar.showSnackbar("Line copied")
@@ -1675,8 +1694,8 @@ fun LyricsOverlay(
 @Composable
 private fun KaraokeLine(
     line: LyricLine,
-    position: kotlinx.coroutines.flow.StateFlow<Long>,
-    style: androidx.compose.ui.text.TextStyle,
+    position: StateFlow<Long>,
+    style: TextStyle,
     sungColor: Color,
     unsungColor: Color,
     textAlign: TextAlign,
@@ -1687,12 +1706,12 @@ private fun KaraokeLine(
         derivedStateOf { line.wordTimings.count { it.startMs <= positionMs } }
     }
     val text = remember(line, sung) {
-        androidx.compose.ui.text.buildAnnotatedString {
+        buildAnnotatedString {
             line.wordTimings.forEachIndexed { i, word ->
                 if (i > 0) append(" ")
                 val start = length
                 append(word.word)
-                addStyle(androidx.compose.ui.text.SpanStyle(color = if (i < sung) sungColor else unsungColor), start, length)
+                addStyle(SpanStyle(color = if (i < sung) sungColor else unsungColor), start, length)
             }
         }
     }
@@ -1701,7 +1720,7 @@ private fun KaraokeLine(
 
 @Composable
 private fun LyricsMessage(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     title: String,
     action: String? = null,
     onAction: () -> Unit = {},

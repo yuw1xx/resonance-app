@@ -2,9 +2,6 @@
 
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.compose.runtime.saveable.rememberSaveable
-import java.util.Locale
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,17 +12,21 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.data.network.LrclibResponse
 import dev.yuwixx.resonance.data.repository.LyricsRepository
 import dev.yuwixx.resonance.presentation.components.formatDuration
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
-import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -145,7 +146,7 @@ fun LyricsEditorScreen(
                     Text(
                         "[01:23.45] Lyric line here\n[01:25.00] Next line",
                         style = MaterialTheme.typography.bodySmall,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
@@ -172,7 +173,7 @@ fun LyricsEditorScreen(
                     )
                 },
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    fontFamily = FontFamily.Monospace,
                 ),
                 shape = MaterialTheme.shapes.medium,
                 label = { Text("Lyrics") },

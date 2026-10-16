@@ -11,9 +11,11 @@
 package dev.yuwixx.resonance.data.playlist
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
+import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -21,23 +23,25 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import androidx.hilt.work.HiltWorker
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.database.dao.PlaylistDao
 import dev.yuwixx.resonance.data.database.dao.PlaylistSourceDao
 import dev.yuwixx.resonance.data.database.entity.PlaylistSourceEntity
+import dev.yuwixx.resonance.data.model.Playlist
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.PlaylistRepository
+import java.util.concurrent.TimeUnit
+import java.util.zip.CRC32
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
-import javax.inject.Inject
-import javax.inject.Singleton
 
 @Singleton
 class PlaylistFolderSync @Inject constructor(
@@ -74,7 +78,7 @@ class PlaylistFolderSync @Inject constructor(
             val files = allFiles.filter { it.uri.toString() !in ignored }
             var imported = 0; var updated = 0; var written = 0; var failed = 0
             // Loaded on first need only (write-back), since building it maps the whole library.
-            var playlists: List<dev.yuwixx.resonance.data.model.Playlist>? = null
+            var playlists: List<Playlist>? = null
 
             for (file in files) {
                 val uri = file.uri
@@ -109,7 +113,7 @@ class PlaylistFolderSync @Inject constructor(
                         }
                     }
                 } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    if (e is CancellationException) throw e
                     Log.w(TAG, "Folder sync failed for ${file.name}", e)
                     failed++
                 }
@@ -157,7 +161,7 @@ class PlaylistFolderSync @Inject constructor(
         file.lastModified().takeIf { it > 0 }?.let { return it }
         return runCatching {
             context.contentResolver.openInputStream(file.uri)?.use { input ->
-                val crc = java.util.zip.CRC32()
+                val crc = CRC32()
                 val buf = ByteArray(8 * 1024)
                 while (true) {
                     val n = input.read(buf)
@@ -178,14 +182,14 @@ class PlaylistFolderSync @Inject constructor(
         if (old != null && old != uri) {
             runCatching {
                 context.contentResolver.releasePersistableUriPermission(old,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             }
             sourceDao.getAll().forEach { sourceDao.delete(it.playlistId) }
         }
         if (uri != null) {
             try {
                 context.contentResolver.takePersistableUriPermission(uri,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             } catch (e: SecurityException) {
                 Log.w(TAG, "Can't keep access to $uri", e)
                 return false

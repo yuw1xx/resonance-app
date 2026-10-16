@@ -7,6 +7,15 @@ import android.media.MediaFormat
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.WaveformData
+import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.math.abs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -14,18 +23,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import javax.inject.Inject
-import javax.inject.Singleton
-import kotlin.math.abs
 
 @Singleton
 class WaveformExtractor @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val memCache: MutableMap<Long, WaveformData> = java.util.Collections.synchronizedMap(
+    private val memCache: MutableMap<Long, WaveformData> = Collections.synchronizedMap(
         object : LinkedHashMap<Long, WaveformData>(128, 0.75f, true) {
             override fun removeEldestEntry(eldest: Map.Entry<Long, WaveformData>) = size > 100
         }
@@ -41,7 +44,7 @@ class WaveformExtractor @Inject constructor(
 
     /** In-flight decodes, so the current/next prefetch and the transition handler never
      *  decode the same file twice in parallel. */
-    private val inFlight = java.util.concurrent.ConcurrentHashMap<Long, Deferred<WaveformData?>>()
+    private val inFlight = ConcurrentHashMap<Long, Deferred<WaveformData?>>()
     private val decodeScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     suspend fun extract(songId: Long, uri: Uri, resolution: Int = 200): WaveformData? {
@@ -165,7 +168,7 @@ class WaveformExtractor @Inject constructor(
                 memCache[songId] = result
                 writeToDisk(diskFile, result)
                 result
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) { null }
             finally {

@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import com.materialkolor.dynamiccolor.ColorSpec
+import com.materialkolor.dynamiccolor.DynamicColor
 import com.materialkolor.dynamiccolor.DynamicScheme
 import com.materialkolor.dynamiccolor.MaterialDynamicColors
 import com.materialkolor.hct.Hct
@@ -66,7 +67,7 @@ fun seedColorScheme(seed: Color, dark: Boolean, style: PaletteStyle = PaletteSty
         PaletteStyle.FIDELITY -> SchemeFidelity(hct, dark, 0.0, spec, platform)
         PaletteStyle.NEUTRAL -> SchemeNeutral(hct, dark, 0.0, spec, platform)
     }
-    fun com.materialkolor.dynamiccolor.DynamicColor.c() = Color(getArgb(scheme))
+    fun DynamicColor.c() = Color(getArgb(scheme))
     with(dynamicColors) {
         val base = if (dark) darkColorScheme() else lightColorScheme()
         return base.copy(

@@ -4,18 +4,27 @@ package dev.yuwixx.resonance.data.service
 
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
 import android.media.audiofx.Equalizer
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.util.Log
+import androidx.core.content.ContextCompat
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.media3.common.*
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.ShuffleOrder
 import androidx.media3.session.*
 import com.google.common.collect.ImmutableList
@@ -30,21 +39,29 @@ import dev.yuwixx.resonance.data.database.dao.PlaylistDao
 import dev.yuwixx.resonance.data.database.dao.QueueDao
 import dev.yuwixx.resonance.data.database.dao.SongDao
 import dev.yuwixx.resonance.data.database.entity.LikedSongEntity
+import dev.yuwixx.resonance.data.database.entity.NavidromeSongEntity
 import dev.yuwixx.resonance.data.database.entity.QueueEntity
+import dev.yuwixx.resonance.data.database.entity.SongEntity
 import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.NavidromeDownloadRepository
+import dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
+import dev.yuwixx.resonance.di.ApplicationScope
 import dev.yuwixx.resonance.domain.usecase.ReplayGainProcessor
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.first
-import javax.inject.Inject
 import dev.yuwixx.resonance.ui.glancewidget.ACTION_WIDGET_PLAY_PAUSE
 import dev.yuwixx.resonance.ui.glancewidget.ACTION_WIDGET_SEEK
 import dev.yuwixx.resonance.ui.glancewidget.ACTION_WIDGET_SKIP_NEXT
 import dev.yuwixx.resonance.ui.glancewidget.ACTION_WIDGET_SKIP_PREV
 import dev.yuwixx.resonance.ui.glancewidget.ACTION_WIDGET_TOGGLE_LIKE
 import dev.yuwixx.resonance.ui.glancewidget.EXTRA_SEEK_FRACTION_PCT
+import dev.yuwixx.resonance.ui.glancewidget.PERMISSION_WIDGET_CONTROL
 import dev.yuwixx.resonance.ui.glancewidget.ResonanceWidget
+import java.io.File
+import java.util.Random
+import javax.inject.Inject
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 
 @UnstableApi
 @AndroidEntryPoint
@@ -56,14 +73,14 @@ class MusicService : MediaLibraryService() {
     @Inject lateinit var navidromeSongDao: NavidromeSongDao
     @Inject lateinit var playlistDao: PlaylistDao
     @Inject lateinit var likedSongsDao: LikedSongsDao
-    @Inject lateinit var navidromeSyncRepository: dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
+    @Inject lateinit var navidromeSyncRepository: NavidromeSyncRepository
     @Inject lateinit var navidromeDownloadRepository: NavidromeDownloadRepository
     @Inject lateinit var replayGainProcessor: ReplayGainProcessor
     @Inject lateinit var navidromePreloader: NavidromePreloader
     @Inject lateinit var eqStateHolder: EqStateHolder
     @Inject lateinit var scrobbleTracker: ScrobbleTracker
-    @Inject lateinit var streamCache: androidx.media3.datasource.cache.SimpleCache
-    @Inject @dev.yuwixx.resonance.di.ApplicationScope lateinit var applicationScope: CoroutineScope
+    @Inject lateinit var streamCache: SimpleCache
+    @Inject @ApplicationScope lateinit var applicationScope: CoroutineScope
 
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaLibrarySession
@@ -73,7 +90,7 @@ class MusicService : MediaLibraryService() {
 
     private var crossfadeJob: Job? = null
     /** Mirrors player.isPlaying so loops can suspend while paused instead of polling. */
-    private val playingState = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private val playingState = MutableStateFlow(false)
     private var crossfadeDurationMs: Int = 0
     private var gaplessEnabled: Boolean = true
 
@@ -103,7 +120,7 @@ class MusicService : MediaLibraryService() {
     private var widgetCornerRadius = 28
 
     private var widgetActionsReceiver: BroadcastReceiver? = null
-    private var widgetProgressJob: kotlinx.coroutines.Job? = null
+    private var widgetProgressJob: Job? = null
 
     // True while restoreQueue applies the saved shuffle order, which must not be reshuffled.
     private var restoringShuffle = false
@@ -138,18 +155,18 @@ class MusicService : MediaLibraryService() {
             .build()
 
         // Network reads go through the stream cache; content:// and file:// are read directly.
-        val upstream = androidx.media3.datasource.DefaultDataSource.Factory(this)
+        val upstream = DefaultDataSource.Factory(this)
         val dataSourceFactory = StreamCachingDataSource.Factory(
-            cached = androidx.media3.datasource.cache.CacheDataSource.Factory()
+            cached = CacheDataSource.Factory()
                 .setCache(streamCache)
                 .setUpstreamDataSourceFactory(upstream)
-                .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
             direct = upstream,
         )
 
         player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(
-                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this)
+                DefaultMediaSourceFactory(this)
                     .setDataSourceFactory(dataSourceFactory)
             )
             .setLoadControl(loadControl)
@@ -678,7 +695,7 @@ class MusicService : MediaLibraryService() {
             }
             lockscreenArtworkEnabled && stashed != null -> {
                 val extras = Bundle(metadata.extras ?: Bundle()).apply { remove(EXTRA_STASHED_ARTWORK) }
-                metadata.buildUpon().setArtworkUri(android.net.Uri.parse(stashed)).setExtras(extras).build()
+                metadata.buildUpon().setArtworkUri(Uri.parse(stashed)).setExtras(extras).build()
             }
             else -> return
         }
@@ -749,11 +766,11 @@ class MusicService : MediaLibraryService() {
                 val mediaItems = if (isNavidrome) {
                     songIds.mapNotNull { id ->
                         val entity = navidromeSongDao.getSongByNumericId(id) ?: return@mapNotNull null
-                        val artworkUri = entity.coverArtUrl?.let { android.net.Uri.parse(it) }
+                        val artworkUri = entity.coverArtUrl?.let { Uri.parse(it) }
                         // Play the downloaded local copy instead of streaming, when one exists.
                         val localPath = navidromeDownloadRepository.localPathFor(id)
-                        val playbackUri = localPath?.let { android.net.Uri.fromFile(java.io.File(it)) }
-                            ?: android.net.Uri.parse(entity.streamUrl)
+                        val playbackUri = localPath?.let { Uri.fromFile(File(it)) }
+                            ?: Uri.parse(entity.streamUrl)
                         MediaItem.Builder()
                             .setMediaId(entity.numericId.toString())
                             .setUri(playbackUri)
@@ -763,7 +780,7 @@ class MusicService : MediaLibraryService() {
                                     .setArtist(entity.artist)
                                     .setAlbumTitle(entity.album)
                                     .setArtworkUri(artworkUri)
-                                    .setExtras(android.os.Bundle())
+                                    .setExtras(Bundle())
                                     .build()
                             )
                             .setRequestMetadata(
@@ -776,17 +793,17 @@ class MusicService : MediaLibraryService() {
                 } else {
                     songIds.mapNotNull { id ->
                         val entity = songDao.getSongById(id) ?: return@mapNotNull null
-                        val artworkUri = android.content.ContentUris.withAppendedId(
-                            android.net.Uri.parse("content://media/external/audio/albumart"),
+                        val artworkUri = ContentUris.withAppendedId(
+                            Uri.parse("content://media/external/audio/albumart"),
                             entity.albumId
                         )
-                        val extras = android.os.Bundle().apply {
+                        val extras = Bundle().apply {
                             entity.replayGainTrack?.let { putFloat("replayGainTrack", it) }
                             entity.replayGainAlbum?.let { putFloat("replayGainAlbum", it) }
                         }
                         MediaItem.Builder()
                             .setMediaId(entity.id.toString())
-                            .setUri(android.net.Uri.parse(entity.uri))
+                            .setUri(Uri.parse(entity.uri))
                             .setMediaMetadata(
                                 MediaMetadata.Builder()
                                     .setTitle(entity.title)
@@ -798,7 +815,7 @@ class MusicService : MediaLibraryService() {
                             )
                             .setRequestMetadata(
                                 MediaItem.RequestMetadata.Builder()
-                                    .setMediaUri(android.net.Uri.parse(entity.uri))
+                                    .setMediaUri(Uri.parse(entity.uri))
                                     .build()
                             )
                             .build()
@@ -948,7 +965,7 @@ class MusicService : MediaLibraryService() {
                 .associate { it.songId to it.playCount }
         }
         val maxListens = listenCounts.values.maxOrNull()?.coerceAtLeast(1) ?: 1
-        val rng = java.util.Random()
+        val rng = Random()
         val shuffledIndices = (0 until count)
             .sortedByDescending { i ->
                 val listens = listenCounts[songIds[i]] ?: 0
@@ -1064,9 +1081,9 @@ class MusicService : MediaLibraryService() {
         widgetProgressJob = scope.launch {
             // Only the progress bar needs ticking, and only when someone can see it: stop if
             // there are no widgets, and don't wake up while the screen is off.
-            val widgets = androidx.glance.appwidget.GlanceAppWidgetManager(this@MusicService)
+            val widgets = GlanceAppWidgetManager(this@MusicService)
             if (widgets.getGlanceIds(ResonanceWidget::class.java).isEmpty()) return@launch
-            val power = getSystemService(android.os.PowerManager::class.java)
+            val power = getSystemService(PowerManager::class.java)
             while (isActive) {
                 if (power?.isInteractive != false) pushWidgetState()
                 delay(WIDGET_PROGRESS_INTERVAL_MS)
@@ -1129,11 +1146,11 @@ class MusicService : MediaLibraryService() {
             addAction(ACTION_WIDGET_SEEK)
             addAction(ACTION_WIDGET_TOGGLE_LIKE)
         }
-        androidx.core.content.ContextCompat.registerReceiver(
+        ContextCompat.registerReceiver(
             this, widgetActionsReceiver, filter,
-            dev.yuwixx.resonance.ui.glancewidget.PERMISSION_WIDGET_CONTROL,
+            PERMISSION_WIDGET_CONTROL,
             /* scheduler= */ null,
-            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
     }
 
@@ -1324,10 +1341,10 @@ class MusicService : MediaLibraryService() {
             return ids.mapNotNull { id -> local[id]?.toAutoMediaItem() ?: remote[id]?.toAutoMediaItem() }
         }
 
-        private fun dev.yuwixx.resonance.data.database.entity.NavidromeSongEntity.toAutoMediaItem(): MediaItem {
+        private fun NavidromeSongEntity.toAutoMediaItem(): MediaItem {
             val localPath = navidromeDownloadRepository.localPathForSync(numericId)
-            val playbackUri = localPath?.let { android.net.Uri.fromFile(java.io.File(it)) }
-                ?: android.net.Uri.parse(streamUrl)
+            val playbackUri = localPath?.let { Uri.fromFile(File(it)) }
+                ?: Uri.parse(streamUrl)
             return MediaItem.Builder()
                 .setMediaId(numericId.toString())
                 .setUri(playbackUri)
@@ -1337,7 +1354,7 @@ class MusicService : MediaLibraryService() {
                         .setTitle(title)
                         .setArtist(artist)
                         .setAlbumTitle(album)
-                        .setArtworkUri(coverArtUrl?.let { android.net.Uri.parse(it) })
+                        .setArtworkUri(coverArtUrl?.let { Uri.parse(it) })
                         .setIsBrowsable(false)
                         .setIsPlayable(true)
                         .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
@@ -1357,17 +1374,17 @@ class MusicService : MediaLibraryService() {
                         .build()
                 ).build()
 
-        private fun dev.yuwixx.resonance.data.database.entity.SongEntity.toAutoMediaItem(): MediaItem {
-            val artworkUri = android.content.ContentUris.withAppendedId(
-                android.net.Uri.parse("content://media/external/audio/albumart"),
+        private fun SongEntity.toAutoMediaItem(): MediaItem {
+            val artworkUri = ContentUris.withAppendedId(
+                Uri.parse("content://media/external/audio/albumart"),
                 albumId
             )
             return MediaItem.Builder()
                 .setMediaId(id.toString())
-                .setUri(android.net.Uri.parse(uri))
+                .setUri(Uri.parse(uri))
                 .setRequestMetadata(
                     MediaItem.RequestMetadata.Builder()
-                        .setMediaUri(android.net.Uri.parse(uri))
+                        .setMediaUri(Uri.parse(uri))
                         .build()
                 )
                 .setMediaMetadata(

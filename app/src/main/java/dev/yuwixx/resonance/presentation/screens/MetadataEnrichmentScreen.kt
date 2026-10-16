@@ -4,7 +4,6 @@
 // Done. TagEditor.writeTags is only ever reached from the "Apply Selected" button in Reviewing.
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
@@ -23,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.domain.usecase.MetadataEnrichmentScanner
 import dev.yuwixx.resonance.presentation.components.EmphasizedAccelerate
 import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
@@ -30,6 +30,7 @@ import dev.yuwixx.resonance.presentation.components.formatListenDuration
 import dev.yuwixx.resonance.presentation.components.staggeredEntrance
 import dev.yuwixx.resonance.presentation.viewmodel.EnrichmentUiState
 import dev.yuwixx.resonance.presentation.viewmodel.MetadataEnrichmentViewModel
+import kotlin.reflect.KClass
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,7 +62,7 @@ fun MetadataEnrichmentScreen(
             // recomposes normally in between.
             // Latest state of each kind, so the outgoing pane keeps showing its own content
             // while it animates out instead of the incoming state.
-            val latestByKind = remember { mutableMapOf<kotlin.reflect.KClass<*>, EnrichmentUiState>() }
+            val latestByKind = remember { mutableMapOf<KClass<*>, EnrichmentUiState>() }
             latestByKind[uiState::class] = uiState
             AnimatedContent(
                 targetState = uiState::class,

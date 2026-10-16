@@ -2,6 +2,7 @@
 // progress, and a results sheet listing anything that couldn't be matched.
 package dev.yuwixx.resonance.presentation.components
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -39,7 +40,7 @@ val M3U_MIME_TYPES = arrayOf(
 )
 
 @Composable
-fun rememberM3uImportLauncher(onPicked: (List<android.net.Uri>) -> Unit): () -> Unit {
+fun rememberM3uImportLauncher(onPicked: (List<Uri>) -> Unit): () -> Unit {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) onPicked(uris)
     }

@@ -1,20 +1,15 @@
 package dev.yuwixx.resonance.presentation.components
 
-import androidx.compose.ui.semantics.setProgress
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.progressBarRangeInfo
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.ProgressBarRangeInfo
-import androidx.compose.foundation.gestures.horizontalDrag
-import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitEachGesture
 import android.annotation.SuppressLint
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,19 +17,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -52,10 +54,10 @@ import dev.yuwixx.resonance.data.model.MixType
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.model.WaveformData
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
-import kotlinx.coroutines.delay
 import kotlin.math.*
 import kotlin.math.pow
 import kotlin.random.Random
+import kotlinx.coroutines.delay
 
 val Emphasized = CubicBezierEasing(0.2f, 0.0f, 0f, 1.0f)
 val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
@@ -331,7 +333,7 @@ private fun rememberAnimatedProgress(position: State<Long>, durationMs: Long): S
             if (d > 0) (position.value.toFloat() / d).coerceIn(0f, 1f) else 0f
         }.collect { target ->
             // Big jumps (a seek, a track change) snap; normal ticks glide.
-            if (kotlin.math.abs(target - progress.value) > 0.05f) progress.snapTo(target)
+            if (abs(target - progress.value) > 0.05f) progress.snapTo(target)
             else progress.animateTo(target, tween(durationMillis = 170, easing = LinearEasing))
         }
     }
@@ -458,16 +460,16 @@ fun MaterialYou3Seekbar(
             drawRoundRect(
                 color = playedColor,
                 topLeft = Offset(0f, cy - height / 2f),
-                size = androidx.compose.ui.geometry.Size(playedEnd, height),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(height / 2f)
+                size = Size(playedEnd, height),
+                cornerRadius = CornerRadius(height / 2f)
             )
         }
         if (remainingStart < width) {
             drawRoundRect(
                 color = remainingColor,
                 topLeft = Offset(remainingStart, cy - height / 2f),
-                size = androidx.compose.ui.geometry.Size(width - remainingStart, height),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(height / 2f)
+                size = Size(width - remainingStart, height),
+                cornerRadius = CornerRadius(height / 2f)
             )
         }
 
@@ -475,8 +477,8 @@ fun MaterialYou3Seekbar(
         drawRoundRect(
             color = playedColor,
             topLeft = Offset(splitX - thumbWidth / 2f, cy - thumbH / 2f),
-            size = androidx.compose.ui.geometry.Size(thumbWidth, thumbH),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(thumbWidth / 2f)
+            size = Size(thumbWidth, thumbH),
+            cornerRadius = CornerRadius(thumbWidth / 2f)
         )
     }
 }
@@ -506,7 +508,7 @@ fun WaveformSeekbar(
     // a redraw per frame instead of a recomposition per frame.
     // Only animates while playing — an infinite transition would redraw every frame even
     // when paused (where its effect is multiplied away).
-    val breathe = remember { androidx.compose.animation.core.Animatable(1f) }
+    val breathe = remember { Animatable(1f) }
     LaunchedEffect(isPlaying) {
         if (!isPlaying) {
             breathe.animateTo(1f, tween(600, easing = EaseInOutSine))
@@ -801,13 +803,13 @@ fun PlayingBarsIndicator(
         // Paused: static bars, no per-frame animation.
         Canvas(modifier = modifier) {
             val barW = size.width / (barCount * 2 - 1)
-            val cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2f)
+            val cornerRadius = CornerRadius(barW / 2f)
             for (i in 0 until barCount) {
                 val h = size.height * if (i % 2 == 0) 0.45f else 0.75f
                 drawRoundRect(
                     color = color,
                     topLeft = Offset(i * barW * 2f, (size.height - h) / 2f),
-                    size = androidx.compose.ui.geometry.Size(barW, h),
+                    size = Size(barW, h),
                     cornerRadius = cornerRadius,
                 )
             }
@@ -827,7 +829,7 @@ fun PlayingBarsIndicator(
     )
     Canvas(modifier = modifier) {
         val barW = size.width / (barCount * 2 - 1)
-        val cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2f)
+        val cornerRadius = CornerRadius(barW / 2f)
         for (i in 0 until barCount) {
             val phase = (baseAnim.value + i / barCount.toFloat()) % 1f
             val sineVal = (sin(phase * 2 * PI).toFloat() + 1f) / 2f
@@ -835,7 +837,7 @@ fun PlayingBarsIndicator(
             drawRoundRect(
                 color = color,
                 topLeft = Offset(i * barW * 2f, (size.height - h) / 2f),
-                size = androidx.compose.ui.geometry.Size(barW, h),
+                size = Size(barW, h),
                 cornerRadius = cornerRadius,
             )
         }
@@ -973,8 +975,8 @@ fun ConfettiOverlay(modifier: Modifier = Modifier) {
             }) {
                 drawRect(
                     color = p.color,
-                    topLeft = androidx.compose.ui.geometry.Offset(-half, -half * 0.5f),
-                    size = androidx.compose.ui.geometry.Size(half * 2f, half),
+                    topLeft = Offset(-half, -half * 0.5f),
+                    size = Size(half * 2f, half),
                     alpha = alpha,
                 )
             }

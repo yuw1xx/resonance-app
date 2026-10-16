@@ -1,12 +1,5 @@
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.compose.ui.semantics.setProgress
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.progressBarRangeInfo
-import androidx.compose.ui.semantics.disabled
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.ProgressBarRangeInfo
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -14,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -33,11 +27,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.*
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.data.service.EqStateHolder
 import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
 import dev.yuwixx.resonance.presentation.components.SectionCard
@@ -259,7 +262,7 @@ private fun BandSlider(
                 label = "band_slider_fill_color",
             )
 
-            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
                 val trackW = 6.dp.toPx()
                 val cx = size.width / 2
                 val trackH = size.height
@@ -267,18 +270,18 @@ private fun BandSlider(
 
                 drawRect(
                     color = trackColor,
-                    topLeft = androidx.compose.ui.geometry.Offset(cx - trackW / 2, 0f),
-                    size = androidx.compose.ui.geometry.Size(trackW, trackH),
+                    topLeft = Offset(cx - trackW / 2, 0f),
+                    size = Size(trackW, trackH),
                 )
                 drawRect(
                     color = fillColor,
-                    topLeft = androidx.compose.ui.geometry.Offset(cx - trackW / 2, thumbY),
-                    size = androidx.compose.ui.geometry.Size(trackW, trackH - thumbY),
+                    topLeft = Offset(cx - trackW / 2, thumbY),
+                    size = Size(trackW, trackH - thumbY),
                 )
                 drawCircle(
                     color = fillColor,
                     radius = 10.dp.toPx(),
-                    center = androidx.compose.ui.geometry.Offset(cx, thumbY),
+                    center = Offset(cx, thumbY),
                 )
             }
         }

@@ -4,14 +4,11 @@
 // AlbumDetail, ArtistDetail, PlaylistDetail, Queue, and the TagEditor screen.
 package dev.yuwixx.resonance.presentation.screens
 
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.yuwixx.resonance.presentation.screens.library.LocalLibrarySections
-import dev.yuwixx.resonance.presentation.screens.library.LibraryTitle
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -35,9 +32,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
@@ -46,13 +40,18 @@ import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -60,22 +59,28 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.data.database.entity.DownloadState
 import dev.yuwixx.resonance.data.database.entity.SongDownloadEntity
 import dev.yuwixx.resonance.data.model.*
 import dev.yuwixx.resonance.data.model.RepeatMode as AppRepeatMode
+import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
 import dev.yuwixx.resonance.presentation.components.*
 import dev.yuwixx.resonance.presentation.components.LazyColumnWithScrollbar
 import dev.yuwixx.resonance.presentation.components.LazyGridWithScrollbar
 import dev.yuwixx.resonance.presentation.components.LocalAppearanceConfig
+import dev.yuwixx.resonance.presentation.navigation.Screen
+import dev.yuwixx.resonance.presentation.screens.library.LibraryTitle
+import dev.yuwixx.resonance.presentation.screens.library.LocalLibrarySections
+import dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoState
+import dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.ShareViewModel
-import androidx.hilt.navigation.compose.hiltViewModel
-import dev.yuwixx.resonance.data.preferences.ResonancePreferences
-import dev.yuwixx.resonance.presentation.navigation.Screen
 import dev.yuwixx.resonance.ui.theme.PresetColors
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -113,7 +118,7 @@ fun SongsScreen(
     var selectedSongs by remember { mutableStateOf(setOf<Song>()) }
     val isSelectionMode = selectedSongs.isNotEmpty()
     // Back clears the selection before it leaves the screen.
-    androidx.activity.compose.BackHandler(enabled = isSelectionMode) { selectedSongs = emptySet() }
+    BackHandler(enabled = isSelectionMode) { selectedSongs = emptySet() }
 
     val shareViewModel: ShareViewModel = hiltViewModel()
     var showShareSheet by remember { mutableStateOf(false) }
@@ -700,7 +705,7 @@ fun ArtistsScreen(
                                     coil.compose.AsyncImage(
                                         model = imageUrl,
                                         contentDescription = artist.name,
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                        contentScale = ContentScale.Crop,
                                         modifier = Modifier
                                             .size(52.dp)
                                             .clip(CircleShape),
@@ -806,7 +811,7 @@ fun PlaylistsScreen(
     }
 
     if (showSmartEditor) {
-        dev.yuwixx.resonance.presentation.components.SmartPlaylistEditor(
+        SmartPlaylistEditor(
             onDismiss = { showSmartEditor = false },
             onSave = { name, rules ->
                 libraryViewModel.saveSmartPlaylist(null, name, rules)
@@ -1112,7 +1117,7 @@ fun ArtistDetailScreen(
     }
 
     var showArtistInfoSheet by remember { mutableStateOf(false) }
-    val artistInfoViewModel: dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoViewModel = hiltViewModel()
+    val artistInfoViewModel: ArtistInfoViewModel = hiltViewModel()
     val artistInfoState by artistInfoViewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(showArtistInfoSheet, artistName) {
         if (showArtistInfoSheet) artistInfoViewModel.load(artistName)
@@ -1259,7 +1264,7 @@ fun ArtistHeader(
                 coil.compose.AsyncImage(
                     model = imageUrl,
                     contentDescription = artist.name,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(160.dp)
                         .shadow(8.dp, CircleShape)
@@ -1628,7 +1633,7 @@ fun PlaylistDetailScreen(
                                                     val fromIndex = localOrder.indexOfFirst { it.id == currentId }
                                                     if (fromIndex == -1) return@detectDragGesturesAfterLongPress
                                                     val heightPx = rowHeightPx.coerceAtLeast(1)
-                                                    if (kotlin.math.abs(dragOffsetY) >= heightPx) {
+                                                    if (abs(dragOffsetY) >= heightPx) {
                                                         val moveBy = (dragOffsetY / heightPx).toInt()
                                                         val toIndex = (fromIndex + moveBy).coerceIn(0, localOrder.lastIndex)
                                                         if (toIndex != fromIndex) {
@@ -1657,7 +1662,7 @@ fun PlaylistDetailScreen(
 
     if (showSmartEditor) {
         playlist?.smartRules?.let { rules ->
-            dev.yuwixx.resonance.presentation.components.SmartPlaylistEditor(
+            SmartPlaylistEditor(
                 initialName = playlist.name,
                 initialRules = rules,
                 onDismiss = { showSmartEditor = false },
@@ -2053,7 +2058,7 @@ fun BatchTagEditDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArtistInfoBottomSheet(
-    state: dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoState,
+    state: ArtistInfoState,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -2063,20 +2068,20 @@ fun ArtistInfoBottomSheet(
                 .padding(bottom = 32.dp),
         ) {
             when (state) {
-                is dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoState.Loading,
-                is dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoState.Idle -> {
+                is ArtistInfoState.Loading,
+                is ArtistInfoState.Idle -> {
                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                         LoadingIndicator()
                     }
                 }
-                is dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoState.Error -> {
+                is ArtistInfoState.Error -> {
                     Text(
                         "Couldn't load artist info.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                is dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoState.Loaded -> {
+                is ArtistInfoState.Loaded -> {
                     val info = state.info
                     Text("About", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(12.dp))
@@ -2274,7 +2279,7 @@ fun LikedSongsScreen(
     var selectedSongs by remember { mutableStateOf(setOf<Song>()) }
     val isSelectionMode = selectedSongs.isNotEmpty()
     // Back clears the selection before it leaves the screen.
-    androidx.activity.compose.BackHandler(enabled = isSelectionMode) { selectedSongs = emptySet() }
+    BackHandler(enabled = isSelectionMode) { selectedSongs = emptySet() }
 
     val shareViewModel: ShareViewModel = hiltViewModel()
     var showShareSheet by remember { mutableStateOf(false) }
@@ -2378,7 +2383,7 @@ fun LikedSongsScreen(
                     val heartScale by pulse.animateFloat(
                         initialValue = 1f,
                         targetValue = 1.12f,
-                        animationSpec = infiniteRepeatable(tween(1120), androidx.compose.animation.core.RepeatMode.Reverse),
+                        animationSpec = infiniteRepeatable(tween(1120), RepeatMode.Reverse),
                         label = "heart_scale",
                     )
                     Icon(
@@ -2534,7 +2539,7 @@ fun SearchScreen(
     var selectedSongs by remember { mutableStateOf(setOf<Song>()) }
     val isSelectionMode = selectedSongs.isNotEmpty()
     // Back clears the selection before it leaves the screen.
-    androidx.activity.compose.BackHandler(enabled = isSelectionMode) { selectedSongs = emptySet() }
+    BackHandler(enabled = isSelectionMode) { selectedSongs = emptySet() }
 
     val shareViewModel: ShareViewModel = hiltViewModel()
     var showShareSheet by remember { mutableStateOf(false) }
@@ -2602,10 +2607,10 @@ fun SearchScreen(
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                                    unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                                    focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                                    unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
                                 ),
                                 leadingIcon = {
                                     Icon(Icons.Rounded.Search, contentDescription = null)

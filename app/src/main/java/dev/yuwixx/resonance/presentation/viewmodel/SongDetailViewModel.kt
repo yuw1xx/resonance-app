@@ -8,21 +8,22 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.yuwixx.resonance.data.database.dao.HistoryDao
 import dev.yuwixx.resonance.data.model.Song
+import dev.yuwixx.resonance.data.repository.ActiveLibrary
 import dev.yuwixx.resonance.data.repository.ArtworkRepository
 import dev.yuwixx.resonance.data.repository.LyricsRepository
 import dev.yuwixx.resonance.data.repository.LyricsResult
 import dev.yuwixx.resonance.data.repository.MusicRepository
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @HiltViewModel
 class SongDetailViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
-    private val activeLibrary: dev.yuwixx.resonance.data.repository.ActiveLibrary,
+    private val activeLibrary: ActiveLibrary,
     private val lyricsRepository: LyricsRepository,
     private val historyDao: HistoryDao,
     private val artworkRepository: ArtworkRepository,

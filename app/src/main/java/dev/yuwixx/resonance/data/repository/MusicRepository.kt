@@ -14,14 +14,19 @@ import dev.yuwixx.resonance.data.database.dao.*
 import dev.yuwixx.resonance.data.database.entity.*
 import dev.yuwixx.resonance.data.model.*
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.di.ApplicationScope
 import dev.yuwixx.resonance.domain.usecase.ArtistSplitter
 import dev.yuwixx.resonance.domain.usecase.AudioTagWriter
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.withContext
+import org.jaudiotagger.tag.FieldKey
+import java.io.File
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.withContext
 
 // Compiled once and reused by naturalCompare() below — it's the comparator for every pairwise
 // comparison during an Albums/Artists sort, so recompiling it per call adds up on large libraries.
@@ -35,7 +40,7 @@ class MusicRepository @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val prefs: ResonancePreferences,
     private val audioTagWriter: AudioTagWriter,
-    @dev.yuwixx.resonance.di.ApplicationScope private val appScope: kotlinx.coroutines.CoroutineScope,
+    @ApplicationScope private val appScope: CoroutineScope,
 ) {
     // The library flows below are shared: one mapping/grouping pass per change for every
     // collector (player, library screens, home, search…), replayed to late subscribers, and
@@ -60,7 +65,7 @@ class MusicRepository @Inject constructor(
             }
             .map { entity ->
                 val song = entity.toDomain(delimiter)
-                if (showFilename) song.copy(title = java.io.File(song.path).nameWithoutExtension) else song
+                if (showFilename) song.copy(title = File(song.path).nameWithoutExtension) else song
             }
     }.flowOn(Dispatchers.Default).shared()
 
@@ -358,7 +363,7 @@ class MusicRepository @Inject constructor(
                         if (entry.listenedAt >= oneYearAgoMs) return@filter false
                         cal.timeInMillis = entry.listenedAt
                         val entryDay = cal.get(Calendar.DAY_OF_YEAR)
-                        val diff = kotlin.math.abs(entryDay - todayDayOfYear)
+                        val diff = abs(entryDay - todayDayOfYear)
                         diff <= 7 || diff >= daysInYear - 7
                     }
                     .map { it.songId }
@@ -393,14 +398,14 @@ class MusicRepository @Inject constructor(
             path = entity.path,
             uri = Uri.parse(entity.uri),
             fields = mapOf(
-                org.jaudiotagger.tag.FieldKey.TITLE to title,
-                org.jaudiotagger.tag.FieldKey.ARTIST to artist,
-                org.jaudiotagger.tag.FieldKey.ALBUM_ARTIST to albumArtist,
-                org.jaudiotagger.tag.FieldKey.ALBUM to album,
-                org.jaudiotagger.tag.FieldKey.GENRE to genre,
-                org.jaudiotagger.tag.FieldKey.YEAR to year.toString(),
-                org.jaudiotagger.tag.FieldKey.TRACK to trackNumber.toString(),
-                org.jaudiotagger.tag.FieldKey.DISC_NO to discNumber.toString(),
+                FieldKey.TITLE to title,
+                FieldKey.ARTIST to artist,
+                FieldKey.ALBUM_ARTIST to albumArtist,
+                FieldKey.ALBUM to album,
+                FieldKey.GENRE to genre,
+                FieldKey.YEAR to year.toString(),
+                FieldKey.TRACK to trackNumber.toString(),
+                FieldKey.DISC_NO to discNumber.toString(),
             ),
         )
         if (success) {
@@ -438,10 +443,10 @@ class MusicRepository @Inject constructor(
             val entity = songDao.getSongById(songId) ?: continue
 
             val fields = buildMap {
-                if (albumArtist != null) put(org.jaudiotagger.tag.FieldKey.ALBUM_ARTIST, albumArtist)
-                if (album != null) put(org.jaudiotagger.tag.FieldKey.ALBUM, album)
-                if (genre != null) put(org.jaudiotagger.tag.FieldKey.GENRE, genre)
-                if (year != null) put(org.jaudiotagger.tag.FieldKey.YEAR, year.toString())
+                if (albumArtist != null) put(FieldKey.ALBUM_ARTIST, albumArtist)
+                if (album != null) put(FieldKey.ALBUM, album)
+                if (genre != null) put(FieldKey.GENRE, genre)
+                if (year != null) put(FieldKey.YEAR, year.toString())
             }
             if (audioTagWriter.writeTags(entity.path, Uri.parse(entity.uri), fields)) {
                 succeeded++

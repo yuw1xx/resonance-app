@@ -13,6 +13,15 @@ import dev.yuwixx.resonance.data.database.entity.PendingScrobbleEntity
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.network.MalojaApi
 import dev.yuwixx.resonance.data.network.MalojaScrobbleRequest
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.moshi.MoshiConverterFactory
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,14 +29,6 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.moshi.MoshiConverterFactory
-import java.util.concurrent.TimeUnit
-import javax.inject.Inject
-import javax.inject.Singleton
 
 private val Context.malojaStore: DataStore<Preferences> by preferencesDataStore(name = "maloja_prefs")
 
@@ -54,7 +55,7 @@ class MalojaRepository @Inject constructor(
 ) {
     private val store = context.malojaStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val pending = java.util.concurrent.CopyOnWriteArrayList<PendingMalojaScrobble>()
+    private val pending = CopyOnWriteArrayList<PendingMalojaScrobble>()
     private val flushMutex = Mutex()
 
     val isEnabled: Flow<Boolean> = store.data.map { it[MalojaKeys.ENABLED] ?: false }

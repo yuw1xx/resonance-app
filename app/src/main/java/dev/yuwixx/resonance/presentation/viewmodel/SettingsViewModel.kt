@@ -1,18 +1,15 @@
 package dev.yuwixx.resonance.presentation.viewmodel
 
-import java.io.IOException
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.Job
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.yuwixx.resonance.data.database.entity.DownloadState
+import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.network.GitHubApi
 import dev.yuwixx.resonance.data.network.GitHubRelease
-import dev.yuwixx.resonance.data.preferences.ResonancePreferences
-import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.network.NavidromeApiProvider
+import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.LastFmAuthState
 import dev.yuwixx.resonance.data.repository.LastFmRepository
 import dev.yuwixx.resonance.data.repository.MalojaRepository
@@ -21,19 +18,25 @@ import dev.yuwixx.resonance.data.repository.NavidromeDownloadRepository
 import dev.yuwixx.resonance.data.repository.NavidromeRepository
 import dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.IOException
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.io.File
-import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -60,7 +63,7 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
 
     val downloadedSongCount: StateFlow<Int> = navidromeDownloadRepository.downloadStates
-        .map { states -> states.values.count { it.state == dev.yuwixx.resonance.data.database.entity.DownloadState.DOWNLOADED } }
+        .map { states -> states.values.count { it.state == DownloadState.DOWNLOADED } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     fun removeAllDownloads() {
@@ -233,10 +236,10 @@ class SettingsViewModel @Inject constructor(
 
     // Pending queues live in memory in the repositories; poll them only while the Settings
     // UI is actually showing the counts.
-    private fun pollWhileSubscribed(read: () -> Int): StateFlow<Int> = kotlinx.coroutines.flow.flow {
+    private fun pollWhileSubscribed(read: () -> Int): StateFlow<Int> = flow {
         while (true) {
             emit(read())
-            kotlinx.coroutines.delay(5000)
+            delay(5000)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(1_000), 0)
 

@@ -2,11 +2,6 @@
 // bar, and playback controls. Receives state pushes from MusicService via updateState().
 package dev.yuwixx.resonance.ui.glancewidget
 
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -14,7 +9,14 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -25,6 +27,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.glance.*
+import androidx.glance.action.Action
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.*
@@ -32,8 +35,6 @@ import androidx.glance.appwidget.action.actionSendBroadcast
 import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.layout.*
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.glance.material3.ColorProviders
 import androidx.glance.state.GlanceStateDefinition
 import androidx.glance.state.PreferencesGlanceStateDefinition
@@ -42,10 +43,10 @@ import dev.yuwixx.resonance.MainActivity
 import dev.yuwixx.resonance.R
 import dev.yuwixx.resonance.ui.theme.ResonanceSeed
 import dev.yuwixx.resonance.ui.theme.seedColorScheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val TAG = "ResonanceWidget"
 private const val APP_PACKAGE = "dev.yuwixx.resonance"
@@ -636,7 +637,7 @@ private fun ControlButton(
     description: String,
     active: Boolean,
     primary: Boolean = false,
-    action: androidx.glance.action.Action,
+    action: Action,
 ) {
     val bgColor   = if (primary) GlanceTheme.colors.primaryContainer else GlanceTheme.colors.secondaryContainer
     val iconColor = when {
