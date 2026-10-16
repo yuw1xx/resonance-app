@@ -175,7 +175,9 @@ fun ResonanceNavGraph(
 
     // The Now Playing sheet replaces the old `player` route: "open the player" expands it.
     val sheetState = rememberPlayerSheetState()
-    val miniMetrics = remember(miniPlayerStyle) { MiniPlayerMetrics.forStyle(miniPlayerStyle) }
+    val miniMetrics = remember(miniPlayerStyle, miniPlayerShowProgress) {
+        MiniPlayerMetrics.forStyle(miniPlayerStyle, showProgress = miniPlayerShowProgress)
+    }
     val showSheet = currentSong != null && !isSetupRoute && isFirstRun == false && !imeVisible
     val navigateToPlayer: () -> Unit = { scope.launch { sheetState.expand() } }
     // Screens reached from inside the player open beneath it, so collapse first.

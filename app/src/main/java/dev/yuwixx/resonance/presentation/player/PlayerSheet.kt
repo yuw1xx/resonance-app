@@ -97,10 +97,18 @@ data class MiniPlayerMetrics(val contentHeight: Dp, val horizontalInset: Dp, val
     val totalHeight: Dp get() = contentHeight + verticalInset * 2
 
     companion object {
-        fun forStyle(style: String) = when (style) {
-            "COMPACT" -> MiniPlayerMetrics(64.dp, 0.dp, 0.dp, 0.dp)
-            "FLOATING" -> MiniPlayerMetrics(64.dp, 12.dp, 8.dp, 28.dp)
-            else -> MiniPlayerMetrics(64.dp, 8.dp, 6.dp, 18.dp)
+        /** Height of the artwork/title/controls row. */
+        val RowHeight = 64.dp
+        /** Extra lane under the row for the wavy progress line, so it never crosses the artwork. */
+        val ProgressLane = 14.dp
+
+        fun forStyle(style: String, showProgress: Boolean = true): MiniPlayerMetrics {
+            val height = RowHeight + if (showProgress) ProgressLane else 0.dp
+            return when (style) {
+                "COMPACT" -> MiniPlayerMetrics(height, 0.dp, 0.dp, 0.dp)
+                "FLOATING" -> MiniPlayerMetrics(height, 12.dp, 8.dp, 28.dp)
+                else -> MiniPlayerMetrics(height, 8.dp, 6.dp, 18.dp)
+            }
         }
     }
 }

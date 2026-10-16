@@ -166,11 +166,11 @@ fun MiniPlayerBar(
                     if (d > 0) (position.value.toFloat() / d).coerceIn(0f, 1f) else 0f
                 },
                 amplitude = { amplitude },
+                // Sits in its own lane below the row (see MiniPlayerMetrics.ProgressLane).
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 3.dp),
+                    .padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
         }
@@ -187,8 +187,9 @@ private fun MiniPlayerRow(
 ) {
     Row(
         modifier = modifier
-            .fillMaxSize()
-            .padding(start = 8.dp, end = 8.dp, bottom = 4.dp),
+            .fillMaxWidth()
+            .height(MiniPlayerMetrics.RowHeight)
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
