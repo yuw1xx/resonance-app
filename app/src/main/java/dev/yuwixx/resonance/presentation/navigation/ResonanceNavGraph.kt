@@ -186,11 +186,7 @@ fun ResonanceNavGraph(
     LaunchedEffect(showSheet) {
         if (!showSheet && sheetState.currentValue == PlayerSheetValue.Expanded) sheetState.collapse()
     }
-    val miniPlayerPadding by animateDpAsState(
-        targetValue = if (showSheet) miniMetrics.totalHeight else 0.dp,
-        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        label = "mini_player_padding",
-    )
+    val miniPlayerPadding = if (showSheet) miniMetrics.totalHeight else 0.dp
 
     // Top-level destinations keep their own back stacks, like M3 navigation bars expect.
     val navigateToTab: (String) -> Unit = { route ->
@@ -218,11 +214,14 @@ fun ResonanceNavGraph(
         else if (floatingNav) FloatingNavHeight + FloatingNavVerticalMargin * 2 + navInsetBottom
         else ShortNavHeight + navInsetBottom
     val bottomBarHeightPx = with(density) { bottomBarHeight.roundToPx() }
-    val contentBottomPadding by animateDpAsState(
+    // Effects spec, not spatial: padding must not overshoot (a bouncy spring went below
+    // zero when the keyboard hid the bar, and negative padding crashes).
+    val animatedBottomPadding by animateDpAsState(
         targetValue = bottomBarHeight + miniPlayerPadding,
-        animationSpec = motion.defaultSpatialSpec(),
+        animationSpec = motion.defaultEffectsSpec(),
         label = "content_bottom_padding",
     )
+    val contentBottomPadding = animatedBottomPadding.coerceAtLeast(0.dp)
 
     // Root content color: text/icons not inside a Surface would otherwise default to black.
     CompositionLocalProvider(
