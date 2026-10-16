@@ -111,7 +111,7 @@ fun EqualizerScreen(
                                     val isPressed by interactionSource.collectIsPressedAsState()
                                     val chipScale by animateFloatAsState(
                                         targetValue = if (isPressed) 0.92f else 1f,
-                                        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+                                        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
                                         label = "eq_preset_scale",
                                     )
                                     AssistChip(

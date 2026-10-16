@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package dev.yuwixx.resonance.presentation.screens
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -90,7 +92,7 @@ fun StatisticsScreen(
             ) { currentStats ->
                 if (currentStats == null) {
                     Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        LoadingIndicator()
                     }
                 } else {
                     val data = currentStats

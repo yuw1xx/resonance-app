@@ -291,7 +291,7 @@ private fun BouncyIconButton(
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) pressScale else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
         label = "bouncy_press",
     )
     IconButton(
@@ -334,7 +334,7 @@ private fun PlayerHeader(
             targetValue = if (sleepActive) 1.10f else 1f,
             animationSpec = if (sleepActive)
                 infiniteRepeatable(tween(1540, easing = EaseInOutSine), AnimationRepeatMode.Reverse)
-            else spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+            else MaterialTheme.motionScheme.defaultSpatialSpec(),
             label = "sleep_pulse",
         )
         BouncyIconButton(onClick = onSleepTimer, modifier = Modifier.scale(sleepPulse)) {
@@ -558,7 +558,7 @@ private fun PlaybackControls(
 
             val loveScale by animateFloatAsState(
                 targetValue = if (isTrackLoved) 1.18f else 1f,
-                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+                animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                 label = "love_scale",
             )
             val loveColor by animateColorAsState(
@@ -868,7 +868,7 @@ private fun PlayerFooter(
             val isLyricsPressed by lyricsInteraction.collectIsPressedAsState()
             val lyricsScale by animateFloatAsState(
                 targetValue = if (isLyricsPressed) 0.84f else 1f,
-                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+                animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                 label = "lyrics_press",
             )
             Surface(
@@ -1014,7 +1014,7 @@ private fun SheetMainPage(
                 )
             },
             leadingContent = {
-                Surface(shape = RoundedCornerShape(10.dp), tonalElevation = 2.dp) {
+                Surface(shape = MaterialTheme.shapes.small, tonalElevation = 2.dp) {
                     ArtworkImage(
                         uri = song.artworkUri,
                         contentDescription = song.album,
@@ -1229,7 +1229,7 @@ private fun SheetPlaylistPage(
                     },
                     leadingContent = {
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = MaterialTheme.shapes.small,
                             color = MaterialTheme.colorScheme.secondaryContainer,
                             modifier = Modifier.size(40.dp),
                         ) {
@@ -1276,7 +1276,7 @@ private fun SheetInfoPage(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Surface(shape = RoundedCornerShape(14.dp), tonalElevation = 4.dp) {
+            Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 4.dp) {
                 ArtworkImage(
                     uri = song.artworkUri,
                     contentDescription = song.album,

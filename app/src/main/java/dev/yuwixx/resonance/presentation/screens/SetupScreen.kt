@@ -1,5 +1,9 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package dev.yuwixx.resonance.presentation.screens
 
+import dev.yuwixx.resonance.presentation.components.EmphasizedAccelerate
+import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.Manifest
 import android.os.Build
@@ -39,8 +43,6 @@ import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
 import dev.yuwixx.resonance.presentation.viewmodel.SettingsViewModel
 
 private const val TOTAL_STEPS = 5
-private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
-private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -140,7 +142,7 @@ fun SetupScreen(onComplete: () -> Unit) {
                     val isActiveDot = dotStep == currentStep
                     val dotSize by animateDpAsState(
                         targetValue = if (isActiveDot) 12.dp else 8.dp,
-                        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+                        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                         label = "setup_dot_size",
                     )
                     val dotColor by animateColorAsState(
@@ -342,9 +344,9 @@ private fun SourceCard(
             .border(
                 width = borderWidth,
                 color = borderColor,
-                shape = RoundedCornerShape(16.dp)
+                shape = MaterialTheme.shapes.medium
             ),
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
         Row(
@@ -373,7 +375,7 @@ private fun SourceCard(
             }
             AnimatedVisibility(
                 visible = selected,
-                enter = scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) +
+                enter = scaleIn(MaterialTheme.motionScheme.defaultSpatialSpec()) +
                     fadeIn(tween(200, easing = EmphasizedDecelerate)),
                 exit = scaleOut(tween(140, easing = EmphasizedAccelerate)) +
                     fadeOut(tween(140, easing = EmphasizedAccelerate)),
@@ -563,7 +565,7 @@ private fun NavidromeStep(
                 is NavidromeConnectionState.Connected -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = MaterialTheme.shapes.medium,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
                         )
@@ -582,7 +584,7 @@ private fun NavidromeStep(
                     Column {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = MaterialTheme.shapes.medium,
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f)
                             )
@@ -672,7 +674,7 @@ private fun LastFmStep(
                 is LastFmAuthState.Authenticated -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = MaterialTheme.shapes.medium,
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
                         )
@@ -690,12 +692,12 @@ private fun LastFmStep(
                         }
                     }
                 }
-                is LastFmAuthState.Loading -> CircularProgressIndicator()
+                is LastFmAuthState.Loading -> LoadingIndicator()
                 is LastFmAuthState.Error -> {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = MaterialTheme.shapes.medium,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f))
                         ) {
                             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -727,7 +729,7 @@ private fun LastFmStep(
 
 @Composable
 private fun LastFmBadge() {
-    Surface(shape = RoundedCornerShape(6.dp), color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm, modifier = Modifier.padding(end = 8.dp)) {
+    Surface(shape = MaterialTheme.shapes.extraSmall, color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm, modifier = Modifier.padding(end = 8.dp)) {
         Text("Last.fm", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
@@ -741,7 +743,7 @@ private fun LastFmLoginDialog(onDismiss: () -> Unit, onLogin: (String, String) -
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = RoundedCornerShape(8.dp), color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm) {
+            Surface(shape = MaterialTheme.shapes.small, color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm) {
                 Text("Last.fm", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
         },

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package dev.yuwixx.resonance.presentation.screens
 
 import androidx.compose.animation.Crossfade
@@ -89,7 +91,7 @@ fun LicensesScreen(onBack: () -> Unit) {
         ) { loading ->
             if (loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                    CircularProgressIndicator()
+                    LoadingIndicator()
                 }
             } else {
                 LazyColumn(

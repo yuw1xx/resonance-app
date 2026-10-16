@@ -2,6 +2,9 @@
 // page (Appearance, Playback, Audio, Library, Navidrome, Last.fm, History, Data, About, …).
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.selection.toggleable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -114,10 +117,28 @@ fun SettingsScreen(
         currentCategory = SettingsCategory.Main
     }
 
+    // M3 Expressive large flexible app bar: big title that collapses as the page scrolls,
+    // re-expanded whenever another page opens.
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    LaunchedEffect(currentCategory) { scrollBehavior.state.heightOffset = 0f }
+    val motion = MaterialTheme.motionScheme
+    val enterSpatial = motion.defaultSpatialSpec<IntOffset>()
+    val enterEffects = motion.defaultEffectsSpec<Float>()
+    val exitEffects = motion.fastEffectsSpec<Float>()
+
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = {},
+            @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+            LargeFlexibleTopAppBar(
+                title = {
+                    AnimatedContent(
+                        targetState = currentCategory.title,
+                        transitionSpec = { fadeIn(enterEffects) togetherWith fadeOut(exitEffects) },
+                        label = "settings_title",
+                    ) { Text(it) }
+                },
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = {
                         if (currentCategory == SettingsCategory.Main) onBack()
@@ -127,7 +148,8 @@ fun SettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                 ),
             )
         },
@@ -136,23 +158,12 @@ fun SettingsScreen(
         AnimatedContent(
             targetState = currentCategory,
             transitionSpec = {
-                if (targetState != SettingsCategory.Main) {
-                    // Drill into sub-page: shared axis X forward
-                    (slideInHorizontally(tween(700, easing = EmphasizedDecelerate)) { (it * 0.15f).toInt() } +
-                        fadeIn(tween(700, delayMillis = 70, easing = EmphasizedDecelerate)))
-                        .togetherWith(
-                            slideOutHorizontally(tween(560, easing = EmphasizedAccelerate)) { -(it * 0.15f).toInt() } +
-                                fadeOut(tween(280, easing = EmphasizedAccelerate))
-                        )
-                } else {
-                    // Back to main: shared axis X reverse
-                    (slideInHorizontally(tween(700, easing = EmphasizedDecelerate)) { -(it * 0.15f).toInt() } +
-                        fadeIn(tween(700, delayMillis = 70, easing = EmphasizedDecelerate)))
-                        .togetherWith(
-                            slideOutHorizontally(tween(560, easing = EmphasizedAccelerate)) { (it * 0.15f).toInt() } +
-                                fadeOut(tween(280, easing = EmphasizedAccelerate))
-                        )
-                }
+                // M3 shared axis X: forward into a sub-page, reverse back to the main list.
+                val forward = targetState != SettingsCategory.Main
+                (slideInHorizontally(enterSpatial) { (if (forward) it else -it) * 15 / 100 } + fadeIn(enterEffects))
+                    .togetherWith(
+                        slideOutHorizontally(enterSpatial) { (if (forward) -it else it) * 15 / 100 } + fadeOut(exitEffects)
+                    )
             },
             label = "settings_content"
         ) { category ->
@@ -163,7 +174,6 @@ fun SettingsScreen(
                 ),
                 modifier = Modifier.fillMaxSize()
             ) {
-                item { BigScreenTitle(category.title) }
                 when (category) {
                     SettingsCategory.Main -> {
                         item {
@@ -1384,7 +1394,7 @@ private fun DataSection(libraryViewModel: LibraryViewModel, snackbarHostState: S
                     LaunchedEffect(Unit) { appeared = true }
                     val scale by animateFloatAsState(
                         targetValue = if (appeared) 1f else 0.6f,
-                        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+                        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                         label = "backup_success_icon_scale",
                     )
                     Icon(
@@ -1408,7 +1418,7 @@ private fun DataSection(libraryViewModel: LibraryViewModel, snackbarHostState: S
                     LaunchedEffect(Unit) { appeared = true }
                     val scale by animateFloatAsState(
                         targetValue = if (appeared) 1f else 0.6f,
-                        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+                        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                         label = "backup_error_icon_scale",
                     )
                     Icon(
@@ -1604,7 +1614,7 @@ private fun LastFmSection(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
+                        shape = MaterialTheme.shapes.small,
                         color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm,
                         modifier = Modifier.padding(end = 12.dp),
                     ) {
@@ -1749,7 +1759,7 @@ private fun LastFmLoginDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = RoundedCornerShape(8.dp), color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm) {
+            Surface(shape = MaterialTheme.shapes.small, color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm) {
                 Text("Last.fm", fontWeight = FontWeight.Bold, color = Color.White,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
@@ -1907,7 +1917,7 @@ private fun MalojaSection(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
+                        shape = MaterialTheme.shapes.small,
                         color = dev.yuwixx.resonance.ui.theme.BrandColors.maloja,
                         modifier = Modifier.padding(end = 12.dp),
                     ) {
@@ -2009,7 +2019,7 @@ private fun MalojaSetupDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = RoundedCornerShape(8.dp), color = dev.yuwixx.resonance.ui.theme.BrandColors.maloja) {
+            Surface(shape = MaterialTheme.shapes.small, color = dev.yuwixx.resonance.ui.theme.BrandColors.maloja) {
                 Text("Maloja", fontWeight = FontWeight.Bold, color = Color.White,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
@@ -2228,7 +2238,7 @@ private fun SettingsTextItem(
     ListItem(
         modifier = Modifier
             .padding(horizontal = 8.dp, vertical = 1.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick),
         leadingContent = icon?.let {
             { Icon(it, null, tint = tint, modifier = Modifier.size(24.dp)) }
@@ -2309,12 +2319,13 @@ private fun SettingsToggleRow(
     ListItem(
         modifier = Modifier
             .padding(horizontal = 8.dp, vertical = 1.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onToggle(!checked) },
+            .clip(MaterialTheme.shapes.medium)
+            // The whole row is one switch for touch and for TalkBack ("on/off, switch").
+            .toggleable(value = checked, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onToggle),
         headlineContent = { Text(title, fontWeight = FontWeight.Medium) },
         supportingContent = { Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         trailingContent = {
-            Switch(checked = checked, onCheckedChange = onToggle)
+            Switch(checked = checked, onCheckedChange = null)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
@@ -2461,7 +2472,7 @@ private fun SourceRow(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         modifier = Modifier
@@ -2469,7 +2480,7 @@ private fun SourceRow(
             .border(
                 width = if (selected) 2.dp else 1.dp,
                 color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(12.dp)
+                shape = MaterialTheme.shapes.medium
             )
     ) {
         Row(
@@ -2796,7 +2807,7 @@ fun NavidromeSyncPage(
                 }
                 Spacer(Modifier.height(4.dp))
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
+                    shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
                 ) {
                     Row(

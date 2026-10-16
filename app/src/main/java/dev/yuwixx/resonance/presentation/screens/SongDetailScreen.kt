@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 // Song detail page reached by tapping a track's title in the player: artwork/title/artist
 // header, a metadata info card, a per-song listening-stats card, and a static lyrics section.
 package dev.yuwixx.resonance.presentation.screens
@@ -73,7 +75,7 @@ fun SongDetailScreen(
                     modifier = Modifier.fillMaxSize().padding(padding),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CircularProgressIndicator()
+                    LoadingIndicator()
                 }
             } else {
                 LazyColumn(
@@ -183,7 +185,7 @@ private fun LyricsCard(lyricsResult: LyricsResult) {
             when (result) {
                 is LyricsResult.Loading -> {
                     Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        LoadingIndicator()
                     }
                 }
                 is LyricsResult.Synced -> {

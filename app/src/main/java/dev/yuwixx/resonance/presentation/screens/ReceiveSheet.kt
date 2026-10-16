@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package dev.yuwixx.resonance.presentation.screens
 
 import android.Manifest
@@ -291,7 +293,7 @@ private fun ReceiveTransferContent(
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (s) {
                     is ReceiveState.Connecting -> {
-                        CircularProgressIndicator(modifier = Modifier.size(36.dp), strokeWidth = 3.dp)
+                        LoadingIndicator(modifier = Modifier.size(48.dp))
                         Text(s.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
 
@@ -398,7 +400,7 @@ private fun ReceiveMultiTransferContent(
             label = "multi_receive_state",
         ) { s -> when (s) {
             is MultiReceiveState.Loading -> {
-                CircularProgressIndicator(modifier = Modifier.size(36.dp), strokeWidth = 3.dp)
+                LoadingIndicator(modifier = Modifier.size(48.dp))
                 Text("Loading songs…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 

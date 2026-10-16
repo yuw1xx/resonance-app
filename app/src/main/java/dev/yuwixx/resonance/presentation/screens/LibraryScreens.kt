@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 // All library browsing screens: Songs, Albums, Artists, Playlists, LikedSongs, Search,
 // AlbumDetail, ArtistDetail, PlaylistDetail, Queue, and the TagEditor screen.
 package dev.yuwixx.resonance.presentation.screens
@@ -590,14 +592,14 @@ fun AlbumCard(album: Album, onClick: () -> Unit, modifier: Modifier = Modifier) 
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.94f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
         label = "album_card_press",
     )
     Column(
         modifier = modifier
             .scale(pressScale)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.medium)
             .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
             .padding(8.dp),
     ) {
@@ -815,14 +817,14 @@ fun PlaylistCard(playlist: Playlist, onClick: () -> Unit, modifier: Modifier = M
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.94f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
         label = "playlist_card_press",
     )
     Column(
         modifier = modifier
             .scale(pressScale)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.medium)
             .clickable(interactionSource = interactionSource, indication = LocalIndication.current, onClick = onClick)
             .padding(8.dp),
     ) {
@@ -838,7 +840,7 @@ fun PlaylistCard(playlist: Playlist, onClick: () -> Unit, modifier: Modifier = M
             )
             else -> Surface(
                 modifier = Modifier.fillMaxWidth().aspectRatio(1f),
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -992,7 +994,7 @@ fun AlbumHeader(
             contentDescription = album.title,
             modifier = Modifier
                 .size(240.dp)
-                .shadow(16.dp, RoundedCornerShape(24.dp)),
+                .shadow(16.dp, MaterialTheme.shapes.large),
             cornerRadius = 24.dp,
         )
         Spacer(Modifier.height(24.dp))
@@ -1018,14 +1020,14 @@ fun AlbumHeader(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
                 onClick = onPlayClick,
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.medium,
             ) {
                 Icon(Icons.Rounded.PlayArrow, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Play")
             }
             if (showDownloadAction) {
-                OutlinedButton(onClick = onDownloadClick, shape = RoundedCornerShape(16.dp)) {
+                OutlinedButton(onClick = onDownloadClick, shape = MaterialTheme.shapes.medium) {
                     Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Download")
@@ -1273,7 +1275,7 @@ fun ArtistHeader(
         Button(
             onClick = onPlayClick,
             modifier = Modifier.fillMaxWidth(0.6f),
-            shape = RoundedCornerShape(16.dp),
+            shape = MaterialTheme.shapes.medium,
         ) {
             Icon(Icons.Rounded.PlayArrow, null)
             Spacer(Modifier.width(8.dp))
@@ -1335,6 +1337,7 @@ fun PlaylistDetailScreen(
     // that one row until the spring finishes (dragOffsetY itself resets immediately so the next
     // drag starts clean).
     var settlingSongId by remember { mutableStateOf<Long?>(null) }
+    val settleSpec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
     val settleOffset = remember { Animatable(0f) }
     var rowHeightPx by remember { mutableIntStateOf(0) }
     val playlistListState = rememberLazyListState()
@@ -1543,7 +1546,7 @@ fun PlaylistDetailScreen(
                                                             settleOffset.snapTo(endedOffset)
                                                             settleOffset.animateTo(
                                                                 0f,
-                                                                spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+                                                                settleSpec,
                                                             )
                                                             settlingSongId = null
                                                         }
@@ -1560,7 +1563,7 @@ fun PlaylistDetailScreen(
                                                             settleOffset.snapTo(endedOffset)
                                                             settleOffset.animateTo(
                                                                 0f,
-                                                                spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+                                                                settleSpec,
                                                             )
                                                             settlingSongId = null
                                                         }
@@ -1659,7 +1662,7 @@ fun PlaylistHeader(
         Box(
             modifier = Modifier
                 .size(200.dp)
-                .clip(RoundedCornerShape(24.dp))
+                .clip(MaterialTheme.shapes.large)
                 .clickable(onClick = onChangeCover),
             contentAlignment = Alignment.Center,
         ) {
@@ -1677,7 +1680,7 @@ fun PlaylistHeader(
                 )
                 else -> Surface(
                     modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(24.dp),
+                    shape = MaterialTheme.shapes.large,
                     color = MaterialTheme.colorScheme.surfaceVariant,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -1726,7 +1729,7 @@ fun PlaylistHeader(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
                 onClick = onPlayClick,
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.medium,
                 enabled = songs.isNotEmpty()
             ) {
                 Icon(Icons.Rounded.PlayArrow, null)
@@ -1735,7 +1738,7 @@ fun PlaylistHeader(
             }
             OutlinedButton(
                 onClick = onShuffleClick,
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.medium,
                 enabled = songs.isNotEmpty()
             ) {
                 Icon(Icons.Rounded.Shuffle, null)
@@ -1997,7 +2000,7 @@ fun ArtistInfoBottomSheet(
                 is dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoState.Loading,
                 is dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoState.Idle -> {
                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        LoadingIndicator()
                     }
                 }
                 is dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoState.Error -> {
@@ -2691,7 +2694,7 @@ fun SearchScreen(
                                             contentDescription = album.title,
                                             modifier = Modifier
                                                 .size(48.dp)
-                                                .clip(RoundedCornerShape(12.dp)),
+                                                .clip(MaterialTheme.shapes.medium),
                                         )
                                     },
                                     modifier = Modifier.staggeredEntrance(index).clickable { onAlbumClick(album) },

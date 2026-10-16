@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package dev.yuwixx.resonance.presentation.screens
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -189,7 +191,7 @@ private fun ShareMain(
                 LaunchedEffect(Unit) { appeared = true }
                 val scale by animateFloatAsState(
                     targetValue = if (appeared) 1f else 0.5f,
-                    animationSpec = spring(dampingRatio = 0.6f, stiffness = 200f),
+                    animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                     label = "incoming_file_icon_scale",
                 )
                 Icon(
@@ -670,7 +672,7 @@ private fun DeviceBubble(
 
     val scale by animateFloatAsState(
         targetValue   = if (isConnected) 1.12f else 1f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 200f),
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
         label         = "bubble_scale",
     )
 
@@ -681,7 +683,7 @@ private fun DeviceBubble(
     LaunchedEffect(Unit) { appeared = true }
     val entranceScale by animateFloatAsState(
         targetValue   = if (appeared) 1f else 0.7f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
         label         = "bubble_entrance_scale",
     )
 
@@ -898,7 +900,7 @@ private fun SongPickerSheet(
                     trailingContent   = {
                         AnimatedVisibility(
                             visible = isSelected,
-                            enter = scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) + fadeIn(),
+                            enter = scaleIn(MaterialTheme.motionScheme.defaultSpatialSpec()) + fadeIn(),
                             exit = scaleOut() + fadeOut(),
                         ) {
                             Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary)
@@ -924,7 +926,7 @@ private fun LocationDisabledDialog(onDismiss: () -> Unit) {
             LaunchedEffect(Unit) { appeared = true }
             val scale by animateFloatAsState(
                 targetValue = if (appeared) 1f else 0.5f,
-                animationSpec = spring(dampingRatio = 0.6f, stiffness = 200f),
+                animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                 label = "location_disabled_icon_scale",
             )
             Icon(
@@ -968,7 +970,7 @@ private fun NoWifiDialog(onDismiss: () -> Unit) {
             LaunchedEffect(Unit) { appeared = true }
             val scale by animateFloatAsState(
                 targetValue = if (appeared) 1f else 0.5f,
-                animationSpec = spring(dampingRatio = 0.6f, stiffness = 200f),
+                animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
                 label = "no_wifi_icon_scale",
             )
             Icon(
@@ -1116,7 +1118,7 @@ private fun QrTransferDialog(
                                 modifier         = Modifier.size(240.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                                LoadingIndicator(modifier = Modifier.size(48.dp))
                             }
                         }
                     }
@@ -1362,7 +1364,7 @@ fun MaterialQrCode(
     }
     Box(
         modifier = modifier
-            .background(containerColor, RoundedCornerShape(40.dp))
+            .background(containerColor, MaterialTheme.shapes.extraExtraLarge)
             .padding(32.dp)
             .graphicsLayer { alpha = revealAlpha.value },
         contentAlignment = Alignment.Center

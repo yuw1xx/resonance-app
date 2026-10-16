@@ -258,7 +258,7 @@ private fun FolderRow(
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
         label = "folder_row_scale",
     )
     Surface(
@@ -306,7 +306,7 @@ private fun SongRow(song: Song, onClick: () -> Unit, modifier: Modifier = Modifi
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.97f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
         label = "song_row_scale",
     )
     Surface(

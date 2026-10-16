@@ -252,12 +252,13 @@ fun <T> AnimatedStateSwap(
     contentAlignment: Alignment = Alignment.Center,
     content: @Composable (T) -> Unit,
 ) {
+    val popIn = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
     AnimatedContent(
         targetState = targetState,
         modifier = modifier,
         contentAlignment = contentAlignment,
         transitionSpec = {
-            (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow), initialScale = 0.85f) +
+            (scaleIn(popIn, initialScale = 0.85f) +
                 fadeIn(tween(280, easing = EmphasizedDecelerate))) togetherWith
                 (scaleOut(tween(180, easing = EmphasizedAccelerate), targetScale = 0.85f) +
                     fadeOut(tween(180, easing = EmphasizedAccelerate)))
@@ -647,7 +648,7 @@ fun SongCard(
                 },
             ),
         color = animatedColor,
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.medium,
     ) {
         Row(
             modifier = Modifier.padding(
@@ -664,7 +665,7 @@ fun SongCard(
             Box(
                 modifier = Modifier
                     .size(artworkSizeDp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(MaterialTheme.shapes.medium)
                     .let { base ->
                         if (onLeadingClick != null) {
                             base.clickable {

@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 // Review-before-write UI for the metadata enrichment scan: Idle -> Scanning -> Reviewing ->
 // Done. TagEditor.writeTags is only ever reached from the "Apply Selected" button in Reviewing.
 package dev.yuwixx.resonance.presentation.screens
@@ -78,7 +80,7 @@ fun MetadataEnrichmentScreen(
                     )
                     is EnrichmentUiState.Applying -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+                            LoadingIndicator()
                         }
                     }
                     is EnrichmentUiState.Done -> DoneContent(state, onScanAgain = viewModel::reset)
@@ -243,7 +245,7 @@ private fun DoneContent(state: EnrichmentUiState.Done, onScanAgain: () -> Unit) 
         LaunchedEffect(Unit) { iconVisible = true }
         AnimatedVisibility(
             visible = iconVisible,
-            enter = scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) +
+            enter = scaleIn(MaterialTheme.motionScheme.defaultSpatialSpec()) +
                 fadeIn(tween(280, easing = EmphasizedDecelerate)),
         ) {
             Icon(Icons.Rounded.CheckCircle, null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
