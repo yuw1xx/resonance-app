@@ -726,7 +726,7 @@ private fun LastFmStep(
 
 @Composable
 private fun LastFmBadge() {
-    Surface(shape = RoundedCornerShape(6.dp), color = Color(0xFFD51007), modifier = Modifier.padding(end = 8.dp)) {
+    Surface(shape = RoundedCornerShape(6.dp), color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm, modifier = Modifier.padding(end = 8.dp)) {
         Text("Last.fm", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
@@ -740,7 +740,7 @@ private fun LastFmLoginDialog(onDismiss: () -> Unit, onLogin: (String, String) -
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFD51007)) {
+            Surface(shape = RoundedCornerShape(8.dp), color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm) {
                 Text("Last.fm", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
         },

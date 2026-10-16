@@ -27,6 +27,7 @@ import dev.yuwixx.resonance.data.model.*
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.*
 import dev.yuwixx.resonance.data.service.MusicService
+import dev.yuwixx.resonance.data.service.SessionProtocol
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
@@ -48,9 +49,25 @@ class PlayerViewModel @Inject constructor(
     private val replayGainProcessor: dev.yuwixx.resonance.domain.usecase.ReplayGainProcessor,
     private val navidromeDownloadRepository: NavidromeDownloadRepository,
     private val navidromeSyncRepository: NavidromeSyncRepository,
+    private val playlistRepository: dev.yuwixx.resonance.data.repository.PlaylistRepository,
 ) : ViewModel() {
 
     private var _controller: MediaController? = null
+
+    // id → Song for the whole library, rebuilt only when the library changes. Track changes and
+    // queue syncs used to re-query and re-map every song (allSongs.first()) each time.
+    private val songMap: StateFlow<Map<Long, Song>> = musicRepository.allSongs
+        .map { songs -> songs.associateBy { it.id } }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    // On a cold start the first library emission may still be in flight; wait briefly for it
+    // rather than falling back to the bare MediaItem metadata.
+    private suspend fun lookupSong(id: Long): Song? {
+        songMap.value[id]?.let { return it }
+        if (songMap.value.isNotEmpty()) return null
+        return withTimeoutOrNull(2_000) { songMap.first { it.isNotEmpty() } }?.get(id)
+    }
 
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
@@ -91,12 +108,18 @@ class PlayerViewModel @Inject constructor(
 
     // Artwork-derived accent colors for the player (seekbar, play button, next-song text).
     // Null means "no artwork to sample" — callers fall back to the fixed theme accent.
-    val artworkColors: StateFlow<ArtworkComposeColors?> = _currentSong
-        .flatMapLatest { song ->
-            val uri = song?.artworkUri
-            if (song == null || uri == null) flowOf<ArtworkComposeColors?>(null)
-            else flow { emit(artworkRepository.extractArtworkColors(song.albumId, uri).toComposeColors()) }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val artworkColors: StateFlow<ArtworkComposeColors?> = artworkColorsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private fun artworkColorsFlow(): Flow<ArtworkComposeColors?> = _currentSong
+        .map { it?.albumId to it?.artworkUri }
+        .distinctUntilChanged()
+        .flatMapLatest { (albumId, uri) ->
+            if (albumId == null || uri == null) flowOf<ArtworkComposeColors?>(null)
+            else flow {
+                emit(runCatching { artworkRepository.extractArtworkColors(albumId, uri).toComposeColors() }.getOrNull())
+            }
+        }
 
     suspend fun getSongArtworkUrl(song: Song): String? {
         if (!prefs.fetchAlbumArt.first()) return null
@@ -158,6 +181,17 @@ class PlayerViewModel @Inject constructor(
     // Tracks the last song id for which auto-advance was triggered; prevents
     // the 100ms progress ticker from firing the advance multiple times per track.
     private var castLastAdvancedSongId: Long = -1L
+
+    // Declared before init{}: initializeController() and the queue sync read these synchronously.
+    private val controllerListener = object : MediaController.Listener {
+        override fun onExtrasChanged(controller: MediaController, extras: android.os.Bundle) {
+            applySessionExtras(extras)
+        }
+    }
+
+    private val _previousSong = MutableStateFlow<Song?>(null)
+    /** The song a "previous" swipe would go to (shuffle-aware), for the mini player peek. */
+    val previousSong: StateFlow<Song?> = _previousSong.asStateFlow()
 
     init {
         localAudioServer.safeStart()
@@ -240,7 +274,9 @@ class PlayerViewModel @Inject constructor(
     @OptIn(UnstableApi::class)
     private fun initializeController() {
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
-        val future = MediaController.Builder(context, sessionToken).buildAsync()
+        val future = MediaController.Builder(context, sessionToken)
+            .setListener(controllerListener)
+            .buildAsync()
         controllerFuture = future
         future.addListener(
             {
@@ -253,6 +289,7 @@ class PlayerViewModel @Inject constructor(
                 }
                 _controller = controller
                 controller.addListener(playerListener)
+                applySessionExtras(controller.sessionExtras)
                 syncStateWithController()
             },
             // Main thread: the listener touches the controller, which must be used on its
@@ -523,7 +560,7 @@ class PlayerViewModel @Inject constructor(
 
     // Queue entries in actual upcoming playback order (shuffle-aware), each carrying its real
     // underlying window index so remove/play-at actions keep targeting the right item. Used by
-    // QueueScreen — _queue above stays in raw linear order since updateNextSong() relies on that.
+    // QueueSheet — _queue above stays in raw linear order since updateNextSong() relies on that.
     data class QueueEntry(val index: Int, val song: Song)
     private val _orderedQueue = MutableStateFlow<List<QueueEntry>>(emptyList())
     val orderedQueue: StateFlow<List<QueueEntry>> = _orderedQueue.asStateFlow()
@@ -532,10 +569,12 @@ class PlayerViewModel @Inject constructor(
         val ctrl = _controller
         val nextIndex = ctrl?.nextMediaItemIndex ?: C.INDEX_UNSET
         _nextSong.value = if (nextIndex != C.INDEX_UNSET) _queue.value.getOrNull(nextIndex) else null
+        val prevIndex = ctrl?.previousMediaItemIndex ?: C.INDEX_UNSET
+        _previousSong.value = if (prevIndex != C.INDEX_UNSET) _queue.value.getOrNull(prevIndex) else null
     }
 
     // Walks the timeline from the current item using the same shuffle-aware traversal ExoPlayer
-    // itself uses for next()/previous(), so QueueScreen's order matches real playback order.
+    // itself uses for next()/previous(), so QueueSheet's order matches real playback order.
     // REPEAT_MODE_OFF is passed explicitly regardless of the live repeat mode — that's the
     // traversal-semantics parameter's purpose, and it prevents infinite wraparound under
     // REPEAT_MODE_ALL (INDEX_UNSET is returned once you'd wrap past either end instead of looping).
@@ -629,28 +668,93 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private var sleepTimerJob: Job? = null
-
+    // The timer itself runs in MusicService (so it keeps going after the UI is closed); these
+    // send it commands, and _sleepTimer mirrors the service's state from session extras.
     fun setSleepTimer(timer: SleepTimer) {
-        _sleepTimer.value = timer
-        sleepTimerJob?.cancel()
-        if (timer is SleepTimer.Time) {
-            sleepTimerJob = viewModelScope.launch {
-                val endMs = System.currentTimeMillis() + timer.minutes * 60 * 1000L
-                while (System.currentTimeMillis() < endMs) { delay(1000) }
-                _controller?.pause()
-                _sleepTimer.value = SleepTimer.Off
-            }
+        val ctrl = _controller ?: return
+        when (timer) {
+            SleepTimer.Off -> ctrl.sendCustomCommand(
+                androidx.media3.session.SessionCommand(SessionProtocol.CMD_SLEEP_CANCEL, android.os.Bundle.EMPTY),
+                android.os.Bundle.EMPTY,
+            )
+            is SleepTimer.Time -> sendSleepSet(minutes = timer.minutes, tracks = 0, fade = timer.fadeOut)
+            is SleepTimer.Tracks -> sendSleepSet(minutes = 0, tracks = timer.tracksLeft, fade = timer.fadeOut)
         }
     }
 
-    fun setSleepAfterTracks(tracksLeft: Int) {
-        if (tracksLeft <= 0) {
-            _sleepTimer.value = SleepTimer.Off
-            return
-        }
-        _sleepTimer.value = SleepTimer.Tracks(tracksLeft)
+    fun setSleepAfterTracks(tracksLeft: Int, fadeOut: Boolean = false) {
+        setSleepTimer(if (tracksLeft <= 0) SleepTimer.Off else SleepTimer.Tracks(tracksLeft, fadeOut))
     }
+
+    private fun sendSleepSet(minutes: Int, tracks: Int, fade: Boolean) {
+        val args = android.os.Bundle().apply {
+            putInt(SessionProtocol.ARG_MINUTES, minutes)
+            putInt(SessionProtocol.ARG_TRACKS, tracks)
+            putBoolean(SessionProtocol.ARG_FADE, fade)
+        }
+        _controller?.sendCustomCommand(
+            androidx.media3.session.SessionCommand(SessionProtocol.CMD_SLEEP_SET, android.os.Bundle.EMPTY),
+            args,
+        )
+    }
+
+    private fun applySessionExtras(extras: android.os.Bundle) {
+        val fade = extras.getBoolean(SessionProtocol.EXTRA_SLEEP_FADE, false)
+        _sleepTimer.value = when (extras.getString(SessionProtocol.EXTRA_SLEEP_TYPE)) {
+            "time" -> {
+                val minutes = extras.getInt(SessionProtocol.EXTRA_SLEEP_MINUTES)
+                val endsAt = extras.getLong(SessionProtocol.EXTRA_SLEEP_ENDS_AT)
+                SleepTimer.Time(minutes, endsAt - minutes * 60_000L, fade)
+            }
+            "tracks" -> SleepTimer.Tracks(extras.getInt(SessionProtocol.EXTRA_SLEEP_TRACKS), fade)
+            else -> SleepTimer.Off
+        }
+    }
+
+    // ─── Queue editing ───
+
+
+    /** Moves a queue item between underlying window indices (only offered with shuffle off,
+     *  where display order == window order). */
+    fun moveQueueItem(from: Int, to: Int) {
+        val ctrl = _controller ?: return
+        if (from == to || from !in 0 until ctrl.mediaItemCount || to !in 0 until ctrl.mediaItemCount) return
+        ctrl.moveMediaItem(from, to)
+    }
+
+    /** Removes the item and returns what's needed to undo it. */
+    fun removeFromQueueForUndo(index: Int): Pair<Int, Song>? {
+        val song = _queue.value.getOrNull(index) ?: return null
+        _controller?.removeMediaItem(index)
+        return index to song
+    }
+
+    fun restoreQueueItem(index: Int, song: Song) {
+        val ctrl = _controller ?: return
+        ctrl.addMediaItem(index.coerceIn(0, ctrl.mediaItemCount), song.toMediaItem())
+    }
+
+    /** Undo for "play next" / "add to queue": removes the most recently inserted copy. */
+    fun removeQueuedSong(songId: Long, nearIndex: Int? = null) {
+        val ctrl = _controller ?: return
+        val indices = (0 until ctrl.mediaItemCount).filter { ctrl.getMediaItemAt(it).mediaId == songId.toString() }
+        val target = nearIndex?.let { n -> indices.minByOrNull { kotlin.math.abs(it - n) } } ?: indices.lastOrNull()
+        target?.takeIf { it != ctrl.currentMediaItemIndex }?.let { ctrl.removeMediaItem(it) }
+    }
+
+    /** Saves the queue in playback order as a new playlist; returns its id. */
+    suspend fun saveQueueAsPlaylist(name: String): Long? {
+        val ids = _orderedQueue.value.map { it.song.id }
+        if (ids.isEmpty()) return null
+        return playlistRepository.createPlaylistWithSongs(name, ids)
+    }
+
+    /** Seed color for tinting the player from the current artwork (null = use app theme). */
+    val artworkSeed: StateFlow<androidx.compose.ui.graphics.Color?> = combine(
+        artworkColorsFlow(),
+        prefs.playerArtworkTheme,
+    ) { colors, enabled -> if (enabled) colors?.vibrant ?: colors?.dominant else null }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     // ─── Player Listener ───
 
@@ -661,7 +765,7 @@ class PlayerViewModel @Inject constructor(
             val songId = mediaItem?.mediaId?.toLongOrNull()
             if (songId != null) {
                 viewModelScope.launch {
-                    val song = musicRepository.allSongs.first().find { it.id == songId }
+                    val song = lookupSong(songId)
                         ?: mediaItem?.toSong()
                     if (song != null) {
                         _currentSong.value = song
@@ -707,7 +811,7 @@ class PlayerViewModel @Inject constructor(
                                 val nextId = nextItem.mediaId.toLongOrNull()
                                 if (nextId != null) {
                                     launch(Dispatchers.IO) {
-                                        val nextSong = musicRepository.allSongs.first().find { it.id == nextId }
+                                        val nextSong = lookupSong(nextId)
                                             ?: nextItem.toSong()
                                         if (nextSong != null) {
                                             waveformExtractor.extract(nextSong.id, nextSong.uri)
@@ -728,16 +832,6 @@ class PlayerViewModel @Inject constructor(
                 }
             }
 
-            val currentTimer = _sleepTimer.value
-            if (currentTimer is SleepTimer.Tracks) {
-                val newCount = currentTimer.tracksLeft - 1
-                if (newCount <= 0) {
-                    _controller?.pause()
-                    _sleepTimer.value = SleepTimer.Off
-                } else {
-                    _sleepTimer.value = SleepTimer.Tracks(newCount)
-                }
-            }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -801,12 +895,11 @@ class PlayerViewModel @Inject constructor(
     private fun syncQueueFromController() {
         val ctrl = _controller ?: return
         viewModelScope.launch {
-            val allSongs = musicRepository.allSongs.first()
-            val songMap = allSongs.associateBy { it.id }
+            val map = songMap.value
             val songs = (0 until ctrl.mediaItemCount).mapNotNull { i ->
                 val item = ctrl.getMediaItemAt(i)
                 val songId = item.mediaId.toLongOrNull() ?: return@mapNotNull null
-                songMap[songId] ?: item.toSong()
+                map[songId] ?: item.toSong()
             }
             _queue.value = songs
             _currentQueueIndex.value = ctrl.currentMediaItemIndex

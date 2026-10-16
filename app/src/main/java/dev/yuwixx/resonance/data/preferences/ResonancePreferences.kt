@@ -139,6 +139,11 @@ class ResonancePreferences @Inject constructor(
         val LAST_FM_SESSION_KEY = stringPreferencesKey("last_fm_session_key")
 
         val AMOLED_BLACK_THEME    = booleanPreferencesKey("amoled_black_theme")
+        val PALETTE_STYLE         = stringPreferencesKey("palette_style")
+        val PLAYER_ARTWORK_THEME  = booleanPreferencesKey("player_artwork_theme")
+        val PLAYLIST_SYNC_FOLDER  = stringPreferencesKey("playlist_sync_folder")
+        val PLAYLIST_SYNC_EXPORT  = booleanPreferencesKey("playlist_sync_export")
+        val PLAYLIST_SYNC_RELATIVE = booleanPreferencesKey("playlist_sync_relative_paths")
         val COMPACT_LIST_MODE     = booleanPreferencesKey("compact_list_mode")
         val SHOW_DURATION_IN_LIST = booleanPreferencesKey("show_duration_in_list")
         val PLAYER_ARTWORK_SHAPE  = stringPreferencesKey("player_artwork_shape")
@@ -412,6 +417,26 @@ class ResonancePreferences @Inject constructor(
     val amoledBlackTheme: Flow<Boolean> = data.mapDistinct { it[AMOLED_BLACK_THEME] ?: false }
     suspend fun setAmoledBlackTheme(enabled: Boolean) { ds.edit { it[AMOLED_BLACK_THEME] = enabled } }
 
+    // How seed colors (presets, the default brand color, artwork) expand into a full scheme.
+    val paletteStyle: Flow<String> = data.mapDistinct { it[PALETTE_STYLE] ?: "TONAL_SPOT" }
+    suspend fun setPaletteStyle(style: String) { ds.edit { it[PALETTE_STYLE] = style } }
+
+    // Tints the expanded player with a scheme generated from the current song's artwork.
+    val playerArtworkTheme: Flow<Boolean> = data.mapDistinct { it[PLAYER_ARTWORK_THEME] ?: true }
+    suspend fun setPlayerArtworkTheme(enabled: Boolean) { ds.edit { it[PLAYER_ARTWORK_THEME] = enabled } }
+
+    // ─── M3U folder sync ───
+    // SAF tree URI of the folder whose .m3u/.m3u8 files are kept in sync with app playlists.
+    val playlistSyncFolder: Flow<String?> = data.mapDistinct { it[PLAYLIST_SYNC_FOLDER] }
+    suspend fun setPlaylistSyncFolder(uri: String?) {
+        ds.edit { if (uri == null) it.remove(PLAYLIST_SYNC_FOLDER) else it[PLAYLIST_SYNC_FOLDER] = uri }
+    }
+    // Also write app playlists (that don't come from the folder) out as .m3u8 files.
+    val playlistSyncExport: Flow<Boolean> = data.mapDistinct { it[PLAYLIST_SYNC_EXPORT] ?: false }
+    suspend fun setPlaylistSyncExport(enabled: Boolean) { ds.edit { it[PLAYLIST_SYNC_EXPORT] = enabled } }
+    val playlistSyncRelativePaths: Flow<Boolean> = data.mapDistinct { it[PLAYLIST_SYNC_RELATIVE] ?: true }
+    suspend fun setPlaylistSyncRelativePaths(enabled: Boolean) { ds.edit { it[PLAYLIST_SYNC_RELATIVE] = enabled } }
+
     val compactListMode: Flow<Boolean> = data.mapDistinct { it[COMPACT_LIST_MODE] ?: false }
     suspend fun setCompactListMode(enabled: Boolean) { ds.edit { it[COMPACT_LIST_MODE] = enabled } }
 
@@ -546,6 +571,7 @@ class ResonancePreferences @Inject constructor(
         "device_id",
         "last_fm_username", "last_fm_session_key",
         "music_source",
+        "playlist_sync_folder",
         "is_first_run",
     )
 

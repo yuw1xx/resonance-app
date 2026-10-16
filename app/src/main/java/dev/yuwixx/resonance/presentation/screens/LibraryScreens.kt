@@ -2,6 +2,8 @@
 // AlbumDetail, ArtistDetail, PlaylistDetail, Queue, and the TagEditor screen.
 package dev.yuwixx.resonance.presentation.screens
 
+import dev.yuwixx.resonance.presentation.screens.library.LocalLibrarySections
+import dev.yuwixx.resonance.presentation.screens.library.LibraryTitle
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -116,6 +118,7 @@ fun SongsScreen(
 
     Scaffold(
         topBar = {
+            Column {
             AnimatedContent(
                 targetState = isSelectionMode,
                 transitionSpec = {
@@ -173,7 +176,7 @@ fun SongsScreen(
                     )
                 } else {
                     TopAppBar(
-                        title = {},
+                        title = { LibraryTitle() },
                         actions = {
                             IconButton(onClick = {
                                 playerViewModel.playShuffled(songs)
@@ -202,6 +205,8 @@ fun SongsScreen(
                     )
                 }
             }
+            LocalLibrarySections.current?.invoke()
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
@@ -223,9 +228,9 @@ fun SongsScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 80.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp),
                     ) {
-                    item { BigScreenTitle("Songs") }
+                    item { if (LocalLibrarySections.current == null) BigScreenTitle("Songs") }
                     itemsIndexed(songs, key = { _, s -> s.id }) { index, song ->
                         SongCard(
                             song = song,
@@ -514,8 +519,9 @@ fun AlbumsScreen(
 
     Scaffold(
         topBar = {
+            Column {
             TopAppBar(
-                title = {},
+                title = { LibraryTitle() },
                 actions = {
                     IconButton(onClick = onSearchClick) {
                         Icon(Icons.Rounded.Search, "Search")
@@ -525,6 +531,8 @@ fun AlbumsScreen(
                     containerColor = Color.Transparent,
                 ),
             )
+            LocalLibrarySections.current?.invoke()
+            }
         }
     ) { padding ->
         if (albums.isEmpty()) {
@@ -540,13 +548,13 @@ fun AlbumsScreen(
                 state = gridState,
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(
-                    start = 12.dp, end = 12.dp, top = padding.calculateTopPadding(), bottom = 80.dp
+                    start = 12.dp, end = 12.dp, top = padding.calculateTopPadding(), bottom = 16.dp
                 ),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                item(span = { GridItemSpan(maxLineSpan) }) { BigScreenTitle("Albums") }
+                item(span = { GridItemSpan(maxLineSpan) }) { if (LocalLibrarySections.current == null) BigScreenTitle("Albums") }
                 itemsIndexed(albums, key = { _, a -> a.id }) { index, album ->
                     AlbumCard(
                         album = album,
@@ -614,8 +622,9 @@ fun ArtistsScreen(
 
     Scaffold(
         topBar = {
+            Column {
             TopAppBar(
-                title = {},
+                title = { LibraryTitle() },
                 actions = {
                     IconButton(onClick = onSearchClick) {
                         Icon(Icons.Rounded.Search, "Search")
@@ -625,6 +634,8 @@ fun ArtistsScreen(
                     containerColor = Color.Transparent,
                 ),
             )
+            LocalLibrarySections.current?.invoke()
+            }
         }
     ) { padding ->
         if (artists.isEmpty()) {
@@ -640,10 +651,10 @@ fun ArtistsScreen(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
-                    top = padding.calculateTopPadding(), bottom = 80.dp
+                    top = padding.calculateTopPadding(), bottom = 16.dp
                 ),
             ) {
-                item { BigScreenTitle("Artists") }
+                item { if (LocalLibrarySections.current == null) BigScreenTitle("Artists") }
                 itemsIndexed(artists, key = { _, a -> a.name }) { index, artist ->
                     var imageUrl by remember(artist.name) { mutableStateOf<String?>(null) }
                     LaunchedEffect(artist.name, fetchImages) {
@@ -746,7 +757,7 @@ fun PlaylistsScreen(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(playlistCols),
                 contentPadding = PaddingValues(
-                    start = 12.dp, end = 12.dp, top = padding.calculateTopPadding(), bottom = 80.dp
+                    start = 12.dp, end = 12.dp, top = padding.calculateTopPadding(), bottom = 16.dp
                 ),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -910,7 +921,7 @@ fun AlbumDetailScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = padding.calculateTopPadding(),
-                    bottom = 80.dp
+                    bottom = 16.dp
                 ),
             ) {
                 item {
@@ -1093,7 +1104,7 @@ fun ArtistDetailScreen(
         artist?.let {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = 80.dp),
+                contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = 16.dp),
             ) {
                 item {
                     ArtistHeader(
@@ -1444,7 +1455,7 @@ fun PlaylistDetailScreen(
             LazyColumn(
                 state = playlistListState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = 80.dp),
+                contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = 16.dp),
             ) {
                 item {
                     PlaylistHeader(
@@ -1796,71 +1807,6 @@ fun PlaylistSortDialog(
             TextButton(onClick = onDismiss) { Text("Close") }
         }
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
-@Composable
-fun QueueScreen(
-    playerViewModel: PlayerViewModel,
-    onBack: () -> Unit,
-) {
-    val orderedQueue by playerViewModel.orderedQueue.collectAsState()
-    val currentSongIndex by playerViewModel.currentQueueIndex.collectAsState()
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Playing Queue", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { playerViewModel.clearQueue() }) {
-                        Text("Clear", color = MaterialTheme.colorScheme.error)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                ),
-            )
-        }
-    ) { padding ->
-        if (orderedQueue.isEmpty()) {
-            Box(Modifier.fillMaxSize().staggeredEntrance(0), contentAlignment = Alignment.Center) {
-                Text("Queue is empty", style = MaterialTheme.typography.titleMedium)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = padding,
-            ) {
-                itemsIndexed(orderedQueue, key = { _, e -> "${e.index}_${e.song.id}" }) { index, entry ->
-                    val isCurrent = entry.index == currentSongIndex
-                    SongCard(
-                        song = entry.song,
-                        modifier = Modifier.animateItem().staggeredEntrance(index),
-                        isPlaying = isCurrent,
-                        onClick = { playerViewModel.playAtQueueIndex(entry.index) },
-                        trailingContent = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { playerViewModel.removeFromQueue(entry.index) }) {
-                                    Icon(Icons.Rounded.Close, "Remove")
-                                }
-                                Icon(
-                                    Icons.Rounded.DragHandle,
-                                    "Reorder",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        },
-                        onArtworkMissing = { playerViewModel.getSongArtworkUrl(entry.song) },
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -2245,6 +2191,7 @@ fun LikedSongsScreen(
 
     Scaffold(
         topBar = {
+            Column {
             AnimatedContent(
                 targetState = isSelectionMode,
                 transitionSpec = {
@@ -2297,10 +2244,12 @@ fun LikedSongsScreen(
                     )
                 } else {
                     TopAppBar(
-                        title = {},
+                        title = { LibraryTitle() },
                         navigationIcon = {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                            if (LocalLibrarySections.current == null) {
+                                IconButton(onClick = onBack) {
+                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                                }
                             }
                         },
                         actions = {
@@ -2328,6 +2277,8 @@ fun LikedSongsScreen(
                         ),
                     )
                 }
+            }
+            LocalLibrarySections.current?.invoke()
             }
         },
     ) { padding ->
@@ -2375,7 +2326,7 @@ fun LikedSongsScreen(
             ) {
                 item {
                     Column {
-                        BigScreenTitle("Liked Songs")
+                        if (LocalLibrarySections.current == null) BigScreenTitle("Liked Songs")
                         Text(
                             "${likedSongs.size} songs",
                             style = MaterialTheme.typography.labelMedium,

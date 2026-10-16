@@ -1604,7 +1604,7 @@ private fun LastFmSection(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFFD51007),
+                        color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm,
                         modifier = Modifier.padding(end = 12.dp),
                     ) {
                         Text(
@@ -1748,7 +1748,7 @@ private fun LastFmLoginDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFD51007)) {
+            Surface(shape = RoundedCornerShape(8.dp), color = dev.yuwixx.resonance.ui.theme.BrandColors.lastFm) {
                 Text("Last.fm", fontWeight = FontWeight.Bold, color = Color.White,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
@@ -1907,7 +1907,7 @@ private fun MalojaSection(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF1A8C4E),
+                        color = dev.yuwixx.resonance.ui.theme.BrandColors.maloja,
                         modifier = Modifier.padding(end = 12.dp),
                     ) {
                         Text(
@@ -2008,7 +2008,7 @@ private fun MalojaSetupDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF1A8C4E)) {
+            Surface(shape = RoundedCornerShape(8.dp), color = dev.yuwixx.resonance.ui.theme.BrandColors.maloja) {
                 Text("Maloja", fontWeight = FontWeight.Bold, color = Color.White,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }

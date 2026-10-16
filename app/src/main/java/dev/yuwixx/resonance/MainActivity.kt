@@ -10,6 +10,7 @@ import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.URLSpan
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
@@ -75,15 +76,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Fully transparent system bars; Compose draws behind them and ResonanceTheme picks the
+        // icon colors. No contrast scrim over 3-button navigation — the bottom bar is opaque.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced = false
         castManager.initialize()
         mediaStoreWriteBroker.bind(writeRequestLauncher)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val layoutParams = window.attributes
-            layoutParams.preferredRefreshRate = 120f
-            window.attributes = layoutParams
-        }
 
         receiveUri.value = intent?.data
 
@@ -99,6 +100,7 @@ class MainActivity : ComponentActivity() {
             val systemDynamicEnabled by playerViewModel.prefs.dynamicColorEnabled.collectAsState(initial = true)
             val partyMode by playerViewModel.partyMode.collectAsState(initial = false)
             val cornerRadius by playerViewModel.prefs.cornerRadius.collectAsState(initial = 28)
+            val paletteStyle by playerViewModel.prefs.paletteStyle.collectAsState(initial = "TONAL_SPOT")
 
             val useDark = when (darkThemePref) {
                 "LIGHT" -> false
@@ -119,6 +121,7 @@ class MainActivity : ComponentActivity() {
                 systemDynamicEnabled = systemDynamicEnabled,
                 amoledMode = amoledMode,
                 cornerRadius = cornerRadius,
+                paletteStyle = dev.yuwixx.resonance.ui.theme.PaletteStyle.from(paletteStyle),
             ) {
                 Box {
                     ResonanceNavGraph(

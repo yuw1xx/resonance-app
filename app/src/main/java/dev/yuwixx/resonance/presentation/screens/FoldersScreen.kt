@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import dev.yuwixx.resonance.presentation.screens.library.LocalLibrarySections
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
@@ -61,6 +62,7 @@ fun FoldersScreen(
 
     Scaffold(
         topBar = {
+            Column {
             TopAppBar(
                 title = {
                     AnimatedContent(
@@ -86,8 +88,10 @@ fun FoldersScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { if (currentPath != null) navigateUp() else onBack() }) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                    if (currentPath != null || LocalLibrarySections.current == null) {
+                        IconButton(onClick = { if (currentPath != null) navigateUp() else onBack() }) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                        }
                     }
                 },
                 actions = {
@@ -101,6 +105,8 @@ fun FoldersScreen(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 ),
             )
+            LocalLibrarySections.current?.invoke()
+            }
         }
     ) { padding ->
         // A single AnimatedContent keyed on currentPath covers both concerns at once: the
@@ -146,7 +152,7 @@ fun FoldersScreen(
                 LazyColumn(
                     contentPadding = PaddingValues(
                         top = padding.calculateTopPadding() + 8.dp,
-                        bottom = padding.calculateBottomPadding() + 80.dp,
+                        bottom = padding.calculateBottomPadding() + 16.dp,
                     )
                 ) {
                     itemsIndexed(levelSubfolders, key = { _, it -> it }) { index, folder ->

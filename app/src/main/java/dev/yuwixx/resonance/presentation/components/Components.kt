@@ -241,7 +241,7 @@ val LocalAppearanceConfig = compositionLocalOf { AppearanceConfig() }
 /** Swaps between discrete states (an icon, a status row, a connection-state card — anything
  *  representing "what's happening right now") with a spring pop-in + fade for the incoming
  *  state and a quick fade+scale-out for the outgoing one. This is the exact spec already used
- *  for the mini player's play/pause icon (`Components.kt` — `MiniPlayer`) and `SongCard`'s
+ *  for the mini player's play/pause icon (`player/MiniPlayerBar.kt`) and `SongCard`'s
  *  selection checkmark, promoted here so every other status swap in the app (sync spinner→
  *  check/error, download state, connection state, dialog phase icons) uses the same motion. */
 @Composable
@@ -350,11 +350,6 @@ fun Modifier.staggeredEntrance(
     }
 }
 
-@android.annotation.SuppressLint("NewApi")
-internal fun Modifier.preferredFrameRateSafe(hz: Float): Modifier =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) preferredFrameRate(hz)
-    else this
-
 /** Playback progress (0..1) as an animated State that is only ever *read* inside draw
  *  lambdas — position ticks then invalidate a single draw pass instead of recomposing the whole
  *  seekbar (and its parent) several times a second. */
@@ -450,7 +445,6 @@ fun MaterialYou3Seekbar(
         modifier = modifier
             .fillMaxWidth()
             .height(48.dp)
-            .preferredFrameRateSafe(120f)
             .seekGestures(
                 durationMs = { currentDuration },
                 onDragChange = { dragging, fraction -> isDragging = dragging; dragProgress.floatValue = fraction },
@@ -554,7 +548,6 @@ fun WaveformSeekbar(
         modifier = modifier
             .fillMaxWidth()
             .height(64.dp)
-            .preferredFrameRateSafe(120f)
             .seekGestures(
                 durationMs = { currentDuration },
                 onDragChange = { dragging, fraction -> isDragging = dragging; dragProgress.floatValue = fraction },
@@ -640,7 +633,6 @@ fun SongCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .preferredFrameRateSafe(120f)
             .scale(scale)
             .combinedClickable(
                 onClick = onClick,
@@ -833,148 +825,6 @@ fun PlayingBarsIndicator(
                 size = androidx.compose.ui.geometry.Size(barW, h),
                 cornerRadius = cornerRadius,
             )
-        }
-    }
-}
-
-@OptIn(ExperimentalSharedTransitionApi::class)
-@Composable
-fun MiniPlayer(
-    playerViewModel: PlayerViewModel,
-    style: String = "CARD",
-    onClick: () -> Unit,
-    sharedTransitionScope: SharedTransitionScope? = null,
-    animatedVisibilityScope: AnimatedVisibilityScope? = null,
-) {
-    val currentSong by playerViewModel.currentSong.collectAsState()
-    val isPlaying by playerViewModel.isPlaying.collectAsState()
-    val durationMs by playerViewModel.durationMs.collectAsState()
-
-    val positionProvider = remember { { playerViewModel.positionMs.value } }
-
-    val song = currentSong ?: return
-
-    val (outerPadding, cornerRadius, elevation) = when (style) {
-        "COMPACT"  -> Triple(0.dp, 0.dp, 0.dp)
-        "FLOATING" -> Triple(16.dp, 28.dp, 8.dp)
-        else       -> Triple(8.dp, 12.dp, 2.dp)
-    }
-
-    val miniConfig = LocalAppearanceConfig.current
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(outerPadding)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(cornerRadius),
-        tonalElevation = elevation,
-        shadowElevation = elevation,
-    ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-
-            if (miniConfig.miniPlayerShowProgress) {
-                LinearProgressIndicator(
-                    progress = {
-                        if (durationMs > 0) (positionProvider().toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .align(Alignment.BottomCenter),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Transparent
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val artworkModifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(if (style == "COMPACT") 4.dp else 8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-
-                Box(
-                    modifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-                        with(sharedTransitionScope) {
-                            artworkModifier.sharedElement(
-                                rememberSharedContentState(key = "artwork"),
-                                animatedVisibilityScope = animatedVisibilityScope
-                            )
-                        }
-                    } else artworkModifier
-                ) {
-                    ArtworkImage(
-                        uri = song.artworkUri,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        cornerRadius = 0.dp,
-                        onArtworkMissing = { playerViewModel.getSongArtworkUrl(song) },
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                AnimatedContent(
-                    targetState = song.title to song.displayArtist,
-                    transitionSpec = {
-                        (fadeIn(tween(390, delayMillis = 110, easing = EmphasizedDecelerate)) +
-                            slideInVertically(tween(450, easing = EmphasizedDecelerate)) { (it * 0.12f).toInt() })
-                            .togetherWith(fadeOut(tween(170, easing = EmphasizedAccelerate)))
-                    },
-                    label = "mini_song_info",
-                    modifier = Modifier.weight(1f),
-                ) { (title, artist) ->
-                    Column {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = artist,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                IconButton(onClick = { playerViewModel.playPause() }) {
-                    AnimatedContent(
-                        targetState = isPlaying,
-                        transitionSpec = {
-                            (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) +
-                                fadeIn(tween(200, easing = EmphasizedDecelerate))) togetherWith
-                                (scaleOut(tween(110)) + fadeOut(tween(110)))
-                        },
-                        label = "mini_play_icon",
-                    ) { playing ->
-                        Icon(
-                            imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (playing) "Pause" else "Play",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                }
-
-                if (miniConfig.miniPlayerShowSkipBtn) {
-                    IconButton(onClick = { playerViewModel.skipNext() }) {
-                        Icon(
-                            imageVector = Icons.Rounded.SkipNext,
-                            contentDescription = "Next",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                }
-            }
         }
     }
 }

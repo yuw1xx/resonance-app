@@ -1,5 +1,6 @@
-// Full-screen now-playing view: artwork panel, playback controls, lyrics overlay,
-// sleep timer dialog, song options sheet, and the dynamic blurred background.
+// Expanded Now Playing content shown inside the PlayerSheet: artwork panel, playback controls,
+// lyrics overlay, queue sheet, sleep timer dialog, song options sheet, and the blurred
+// artwork background.
 package dev.yuwixx.resonance.presentation.screens
 
 import android.net.Uri
@@ -27,6 +28,8 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.*
@@ -49,14 +52,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import java.text.DecimalFormat
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
     playerViewModel: PlayerViewModel,
-    sharedTransitionScope: SharedTransitionScope? = null,
-    animatedVisibilityScope: AnimatedVisibilityScope? = null,
     onBack: () -> Unit,
-    onQueueClick: () -> Unit,
     onLyricsEdit: () -> Unit,
     onNavigateToEqualizer: () -> Unit = {},
     playlists: List<Playlist> = emptyList(),
@@ -98,6 +98,7 @@ fun PlayerScreen(
     val shareViewModel: ShareViewModel = hiltViewModel()
 
     var showLyricsOverlay by remember { mutableStateOf(false) }
+    var showQueueSheet by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showOptionsSheet by remember { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
@@ -130,7 +131,7 @@ fun PlayerScreen(
         ) {
             PlayerHeader(
                 onBack = onBack,
-                onQueueClick = onQueueClick,
+                onQueueClick = { showQueueSheet = true },
                 onSleepTimer = { showSleepTimerDialog = true },
                 sleepTimer = sleepTimer,
             )
@@ -147,8 +148,8 @@ fun PlayerScreen(
                 song = song,
                 isPlaying = isPlaying,
                 artworkAnimation = artworkAnimation,
-                sharedTransitionScope = sharedTransitionScope,
-                animatedVisibilityScope = animatedVisibilityScope,
+                onSwipeNext = { playerViewModel.skipNext() },
+                onSwipePrevious = { playerViewModel.skipPrevious() },
                 modifier = Modifier
                     .padding(horizontal = artworkPadding)
                     .aspectRatio(1f),
@@ -192,12 +193,16 @@ fun PlayerScreen(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
+        // Back closes the overlay first instead of collapsing the whole player.
+        androidx.activity.compose.BackHandler(enabled = showLyricsOverlay) { showLyricsOverlay = false }
+
+        val motion = MaterialTheme.motionScheme
         AnimatedVisibility(
             visible = showLyricsOverlay,
-            enter = fadeIn(tween(340, easing = EmphasizedDecelerate)) +
-                scaleIn(tween(530, easing = EmphasizedDecelerate), initialScale = 0.95f),
-            exit = fadeOut(tween(280, easing = EmphasizedAccelerate)) +
-                scaleOut(tween(250, easing = EmphasizedAccelerate), targetScale = 0.98f),
+            enter = fadeIn(motion.defaultEffectsSpec()) +
+                scaleIn(motion.defaultSpatialSpec(), initialScale = 0.95f),
+            exit = fadeOut(motion.fastEffectsSpec()) +
+                scaleOut(motion.fastSpatialSpec(), targetScale = 0.98f),
         ) {
             LyricsOverlay(
                 result = lyricsResult,
@@ -217,10 +222,17 @@ fun PlayerScreen(
                     playerViewModel.setSleepTimer(timer)
                     showSleepTimerDialog = false
                 },
-                onSetAfterTracks = { n ->
-                    playerViewModel.setSleepAfterTracks(n)
+                onSetAfterTracks = { n: Int, fade: Boolean ->
+                    playerViewModel.setSleepAfterTracks(n, fade)
                     showSleepTimerDialog = false
                 },
+            )
+        }
+
+        if (showQueueSheet) {
+            dev.yuwixx.resonance.presentation.player.QueueSheet(
+                playerViewModel = playerViewModel,
+                onDismiss = { showQueueSheet = false },
             )
         }
 
@@ -343,56 +355,90 @@ private fun PlayerHeader(
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun ArtworkPanel(
     song: Song,
     isPlaying: Boolean,
     artworkAnimation: Boolean,
-    sharedTransitionScope: SharedTransitionScope? = null,
-    animatedVisibilityScope: AnimatedVisibilityScope? = null,
+    onSwipeNext: () -> Unit,
+    onSwipePrevious: () -> Unit,
     modifier: Modifier = Modifier,
     onArtworkMissing: (suspend () -> String?)? = null,
 ) {
     val config = LocalAppearanceConfig.current
+    val isCircle = config.playerArtworkShape == "CIRCLE"
     val artworkCorner = when (config.playerArtworkShape) {
         "SQUARE" -> 4.dp
-        "CIRCLE" -> 500.dp
-        else -> 24.dp
+        else -> 28.dp
     }
-    val artworkShape = if (config.playerArtworkShape == "CIRCLE") CircleShape
-    else RoundedCornerShape(artworkCorner)
+    val artworkShape = if (isCircle) CircleShape else RoundedCornerShape(artworkCorner)
+    val motion = MaterialTheme.motionScheme
 
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        val scale by animateFloatAsState(
-            targetValue = if (isPlaying || !artworkAnimation) 1f else 0.94f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessLow,
-            ),
-            label = "artwork_scale",
-        )
-        val elevation by animateDpAsState(
-            targetValue = if (isPlaying) 24.dp else 6.dp,
-            animationSpec = tween(840, easing = Emphasized),
-            label = "artwork_elevation",
-        )
+    val scale = animateFloatAsState(
+        targetValue = if (isPlaying || !artworkAnimation) 1f else 0.9f,
+        animationSpec = motion.slowSpatialSpec(),
+        label = "artwork_scale",
+    )
+    val elevation by animateDpAsState(
+        targetValue = if (isPlaying) 20.dp else 4.dp,
+        animationSpec = motion.slowEffectsSpec(),
+        label = "artwork_elevation",
+    )
 
-        val surfaceModifier = Modifier
-            .fillMaxSize()
-            .scale(scale)
+    // Register with the sheet's artwork morph so the mini-player artwork can fly into place.
+    val morph = dev.yuwixx.resonance.presentation.player.LocalArtworkMorph.current
+    SideEffect {
+        morph?.apply {
+            fullScale = { scale.value }
+            fullCorner = artworkCorner
+            fullIsCircle = isCircle
+        }
+    }
 
+    // Horizontal swipe on the artwork skips tracks; vertical drags still reach the sheet.
+    val swipe = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var widthPx by remember { mutableFloatStateOf(1f) }
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+
+    Box(
+        modifier = modifier
+            .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, delta ->
+                        change.consume()
+                        scope.launch { swipe.snapTo(swipe.value + delta) }
+                    },
+                    onDragEnd = {
+                        scope.launch {
+                            val o = swipe.value
+                            if (kotlin.math.abs(o) > widthPx * 0.25f) {
+                                if (config.hapticEnabled) haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.GestureEnd)
+                                swipe.animateTo(if (o < 0) -widthPx else widthPx, motion.fastSpatialSpec())
+                                if (o < 0) onSwipeNext() else onSwipePrevious()
+                                swipe.snapTo(if (o < 0) widthPx * 0.5f else -widthPx * 0.5f)
+                            }
+                            swipe.animateTo(0f, motion.defaultSpatialSpec())
+                        }
+                    },
+                    onDragCancel = { scope.launch { swipe.animateTo(0f, motion.defaultSpatialSpec()) } },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
         Surface(
-            modifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-                with(sharedTransitionScope) {
-                    surfaceModifier
-                        .preferredFrameRateSafe(120f)
-                        .sharedElement(
-                            rememberSharedContentState(key = "artwork"),
-                            animatedVisibilityScope = animatedVisibilityScope
-                        )
-                }
-            } else surfaceModifier.preferredFrameRateSafe(120f),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(morph?.fullModifier() ?: Modifier)
+                .graphicsLayer {
+                    val s = scale.value
+                    scaleX = s
+                    scaleY = s
+                    translationX = swipe.value
+                    alpha = 1f - (kotlin.math.abs(swipe.value) / widthPx).coerceIn(0f, 0.6f)
+                    rotationZ = swipe.value / widthPx * 6f
+                },
             shape = artworkShape,
             tonalElevation = elevation,
             shadowElevation = elevation,
@@ -519,7 +565,7 @@ private fun PlaybackControls(
                 label = "love_scale",
             )
             val loveColor by animateColorAsState(
-                targetValue = if (isTrackLoved) Color(0xFFE8384D)
+                targetValue = if (isTrackLoved) dev.yuwixx.resonance.ui.theme.BrandColors.loved
                 else MaterialTheme.colorScheme.onSurfaceVariant,
                 animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
                 label = "love_color",
@@ -572,87 +618,141 @@ private fun PlaybackControls(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        val shuffleTint by animateColorAsState(
-            targetValue = if (shuffleEnabled) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            animationSpec = tween(280),
-            label = "shuffle_tint",
+        TransportControls(
+            isPlaying = isPlaying,
+            shuffleEnabled = shuffleEnabled,
+            repeatMode = repeatMode,
+            playButtonColor = playButtonColor,
+            playButtonContentColor = playButtonContentColor,
+            onPlayPause = onPlayPause,
+            onNext = onNext,
+            onPrevious = onPrevious,
+            onShuffleToggle = onShuffleToggle,
+            onRepeatModeChange = onRepeatModeChange,
         )
-        val repeatTint by animateColorAsState(
-            targetValue = if (repeatMode != RepeatMode.NONE) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            animationSpec = tween(280),
-            label = "repeat_tint",
-        )
+    }
+}
 
-        val playInteractionSource = remember { MutableInteractionSource() }
-        val isPlayPressed by playInteractionSource.collectIsPressedAsState()
-        val playScale by animateFloatAsState(
-            targetValue = when {
-                isPlayPressed -> 0.90f
-                isPlaying -> 1f
-                else -> 0.96f
-            },
-            animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
-            label = "play_scale",
-        )
+/** Shuffle · previous · play/pause · next · repeat, in M3 Expressive style: the play button
+ *  morphs between a slowly rotating cookie (playing) and a rounded square (paused), and every
+ *  button squishes on press via the expressive shape-morphing icon buttons. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun TransportControls(
+    isPlaying: Boolean,
+    shuffleEnabled: Boolean,
+    repeatMode: RepeatMode,
+    playButtonColor: Color,
+    playButtonContentColor: Color,
+    onPlayPause: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onShuffleToggle: () -> Unit,
+    onRepeatModeChange: () -> Unit,
+) {
+    val motion = MaterialTheme.motionScheme
+    val morph = remember { androidx.graphics.shapes.Morph(MaterialShapes.Square, MaterialShapes.Cookie9Sided) }
+    val morphProgress by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0f,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "play_morph",
+    )
+    val rotation = remember { Animatable(0f) }
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            // Slow continuous spin while playing; picks up from where it stopped.
+            while (true) {
+                rotation.animateTo(rotation.value + 360f, tween(24_000, easing = LinearEasing))
+            }
+        }
+    }
+    val playInteraction = remember { MutableInteractionSource() }
+    val pressed by playInteraction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.88f else 1f,
+        animationSpec = motion.fastSpatialSpec(),
+        label = "play_press",
+    )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconToggleButton(
+            checked = shuffleEnabled,
+            onCheckedChange = { onShuffleToggle() },
+            shapes = IconButtonDefaults.toggleableShapes(),
+            colors = IconButtonDefaults.iconToggleButtonColors(
+                checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ),
         ) {
-            BouncyIconButton(onClick = onShuffleToggle) {
-                Icon(Icons.Rounded.Shuffle, "Shuffle", tint = shuffleTint)
-            }
+            Icon(Icons.Rounded.Shuffle, "Shuffle")
+        }
 
-            BouncyIconButton(onClick = onPrevious, pressScale = 0.80f, modifier = Modifier.size(52.dp)) {
-                Icon(Icons.Rounded.SkipPrevious, "Previous", modifier = Modifier.size(36.dp))
-            }
+        FilledTonalIconButton(
+            onClick = onPrevious,
+            shapes = IconButtonDefaults.shapes(),
+            modifier = Modifier.size(56.dp),
+        ) {
+            Icon(Icons.Rounded.SkipPrevious, "Previous", modifier = Modifier.size(30.dp))
+        }
 
-            Surface(
-                onClick = onPlayPause,
-                interactionSource = playInteractionSource,
-                modifier = Modifier
-                    .size(72.dp)
-                    .preferredFrameRateSafe(120f)
-                    .scale(playScale),
-                shape = CircleShape,
-                color = playButtonColor,
-                contentColor = playButtonContentColor,
-                shadowElevation = if (isPlaying) 10.dp else 4.dp,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    AnimatedContent(
-                        targetState = isPlaying,
-                        transitionSpec = {
-                            scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow)) +
-                                fadeIn(tween(170, easing = EmphasizedDecelerate)) togetherWith
-                                scaleOut(tween(110)) + fadeOut(tween(110))
-                        },
-                        label = "play_pause_icon",
-                    ) { playing ->
-                        Icon(
-                            if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (playing) "Pause" else "Play",
-                            modifier = Modifier.size(40.dp),
-                        )
-                    }
+        Box(
+            modifier = Modifier
+                .size(84.dp)
+                .graphicsLayer {
+                    scaleX = pressScale
+                    scaleY = pressScale
                 }
-            }
-
-            BouncyIconButton(onClick = onNext, pressScale = 0.80f, modifier = Modifier.size(52.dp)) {
-                Icon(Icons.Rounded.SkipNext, "Next", modifier = Modifier.size(36.dp))
-            }
-
-            BouncyIconButton(onClick = onRepeatModeChange) {
+                .clip(MorphShape(morph, morphProgress, rotation.value % 360f * morphProgress))
+                .background(playButtonColor)
+                .clickable(
+                    interactionSource = playInteraction,
+                    indication = androidx.compose.material3.ripple(),
+                    onClick = onPlayPause,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            AnimatedContent(
+                targetState = isPlaying,
+                transitionSpec = {
+                    (scaleIn(motion.fastSpatialSpec(), initialScale = 0.5f) + fadeIn(motion.fastEffectsSpec())) togetherWith
+                        (scaleOut(motion.fastSpatialSpec(), targetScale = 0.5f) + fadeOut(motion.fastEffectsSpec()))
+                },
+                label = "play_pause_icon",
+            ) { playing ->
                 Icon(
-                    if (repeatMode == RepeatMode.ONE) Icons.Rounded.RepeatOne
-                    else Icons.Rounded.Repeat,
-                    "Repeat",
-                    tint = repeatTint,
+                    if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                    contentDescription = if (playing) "Pause" else "Play",
+                    tint = playButtonContentColor,
+                    modifier = Modifier.size(40.dp),
                 )
             }
+        }
+
+        FilledTonalIconButton(
+            onClick = onNext,
+            shapes = IconButtonDefaults.shapes(),
+            modifier = Modifier.size(56.dp),
+        ) {
+            Icon(Icons.Rounded.SkipNext, "Next", modifier = Modifier.size(30.dp))
+        }
+
+        IconToggleButton(
+            checked = repeatMode != RepeatMode.NONE,
+            onCheckedChange = { onRepeatModeChange() },
+            shapes = IconButtonDefaults.toggleableShapes(),
+            colors = IconButtonDefaults.iconToggleButtonColors(
+                checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ),
+        ) {
+            Icon(
+                if (repeatMode == RepeatMode.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                "Repeat",
+            )
         }
     }
 }
@@ -786,11 +886,8 @@ private fun PlayerFooter(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+                        LoadingIndicator(modifier = Modifier.size(28.dp))
                     } else {
                         Icon(
                             imageVector = if (hasLyrics) Icons.Rounded.MicExternalOn else Icons.Rounded.MicExternalOff,
@@ -1273,36 +1370,47 @@ private fun DynamicBackground(
     blurBackground: Boolean,
     blurStrength: Float,
 ) {
+    val surface = MaterialTheme.colorScheme.surface
     if (!blurBackground) {
-        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
+        Box(modifier = Modifier.fillMaxSize().background(surface))
         return
     }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val motion = MaterialTheme.motionScheme
 
-    val blurRadius = (blurStrength * 200).dp
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
-    ) {
-        // AnimatedContent crossfades the blurred artwork whenever the song changes.
-        AnimatedContent(
+    // The blur runs on a quarter-resolution layer that's then scaled up 4x: visually identical
+    // for a heavy blur, ~16x fewer pixels for RenderEffect to process, and the source image is
+    // decoded tiny. Below API 31 Modifier.blur is a no-op, so a strongly scaled-up thumbnail
+    // gives a soft, blur-like wash instead.
+    BoxWithConstraints(Modifier.fillMaxSize().background(surface)) {
+        val factor = 4
+        val layerW = maxWidth / factor
+        val layerH = maxHeight / factor
+        val blurRadius = (blurStrength * 200).dp / factor
+        Crossfade(
             targetState = artworkUri,
-            transitionSpec = {
-                fadeIn(tween(1120, easing = EmphasizedDecelerate)) togetherWith
-                    fadeOut(tween(630, easing = EmphasizedAccelerate))
-            },
+            animationSpec = motion.slowEffectsSpec(),
             label = "bg_artwork",
         ) { uri ->
-            AsyncImage(
-                model = uri,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(blurRadius)
-                    .alpha(0.32f),
-                contentScale = ContentScale.Crop,
-            )
+            Box(
+                Modifier
+                    .size(layerW, layerH)
+                    .graphicsLayer {
+                        transformOrigin = TransformOrigin(0f, 0f)
+                        scaleX = factor.toFloat()
+                        scaleY = factor.toFloat()
+                        alpha = 0.38f
+                    }
+            ) {
+                AsyncImage(
+                    model = remember(uri) {
+                        coil.request.ImageRequest.Builder(context).data(uri).size(96).build()
+                    },
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().blur(blurRadius, BlurredEdgeTreatment.Rectangle),
+                    contentScale = ContentScale.Crop,
+                )
+            }
         }
     }
 }
@@ -1321,16 +1429,24 @@ fun LyricsOverlay(
     val config = LocalAppearanceConfig.current
     val textAlign = if (config.lyricAlignment == "CENTER") TextAlign.Center else TextAlign.Start
     val listState = rememberLazyListState()
+    val clipboard = androidx.compose.ui.platform.LocalClipboard.current
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
 
-    val lyrics: List<LyricLine> = when (result) {
-        is LyricsResult.Synced -> result.lines
-        is LyricsResult.Plain -> result.lines.mapIndexed { _, l -> LyricLine(timeMs = 0L, text = l) }
-        else -> emptyList()
+    val lyrics: List<LyricLine> = remember(result) {
+        when (result) {
+            is LyricsResult.Synced -> result.lines
+            is LyricsResult.Plain -> result.lines.map { l -> LyricLine(timeMs = 0L, text = l) }
+            else -> emptyList()
+        }
     }
 
+    // Keep the active line about a third of the way down the viewport, whatever its height.
     LaunchedEffect(activeLineIndex) {
         if (activeLineIndex >= 0) {
-            listState.animateScrollToItem(activeLineIndex, scrollOffset = -200)
+            val viewport = listState.layoutInfo.viewportSize.height
+            listState.animateScrollToItem(activeLineIndex, scrollOffset = -(viewport / 3))
         }
     }
 
@@ -1338,131 +1454,157 @@ fun LyricsOverlay(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Rounded.Close, "Close lyrics")
-                }
-            }
-
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                when {
-                    result is LyricsResult.Loading -> {
-                        CircularProgressIndicator()
+        Box(Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Rounded.Close, "Close lyrics")
                     }
-                    result is LyricsResult.Error -> {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Icon(
-                                Icons.Rounded.ErrorOutline,
-                                contentDescription = null,
-                                modifier = Modifier.size(40.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                "Couldn't load lyrics",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            FilledTonalButton(onClick = onRetry) {
-                                Text("Retry")
+                }
+    
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    when {
+                        result is LyricsResult.Loading -> {
+                            @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+                            ContainedLoadingIndicator()
+                        }
+                        result is LyricsResult.Error -> {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.ErrorOutline,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(40.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    "Couldn't load lyrics",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                FilledTonalButton(onClick = onRetry) {
+                                    Text("Retry")
+                                }
                             }
                         }
-                    }
-                    lyrics.isEmpty() -> {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Icon(
-                                Icons.Rounded.MicExternalOff,
-                                contentDescription = null,
-                                modifier = Modifier.size(40.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                "No lyrics found for this track",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
-                    else -> {
-                        val lyricsSpacing = when (config.lyricsLineSpacing) {
-                            "COMPACT" -> 16.dp
-                            "SPACIOUS" -> 44.dp
-                            else -> 28.dp
-                        }
-                        val lyricsFontFamily = when (config.lyricsFontFamily) {
-                            "ROUNDED" -> DmSans
-                            "SERIF" -> FontFamily.Serif
-                            "MONOSPACE" -> FontFamily.Monospace
-                            else -> null
-                        }
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(horizontal = 32.dp, vertical = 100.dp),
-                            verticalArrangement = Arrangement.spacedBy(lyricsSpacing),
-                        ) {
-                            itemsIndexed(lyrics) { index, line ->
-                                val isActive = index == activeLineIndex
-                                val lineScale by animateFloatAsState(
-                                    targetValue = if (isActive) 1.05f else 1f,
-                                    animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioNoBouncy,
-                                        stiffness = Spring.StiffnessLow,
-                                    ),
-                                    label = "lyric_scale_$index",
+                        lyrics.isEmpty() -> {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.MicExternalOff,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(40.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                val lineAlpha by animateFloatAsState(
-                                    targetValue = when {
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    "No lyrics found for this track",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                        }
+                        else -> {
+                            val lyricsSpacing = when (config.lyricsLineSpacing) {
+                                "COMPACT" -> 16.dp
+                                "SPACIOUS" -> 44.dp
+                                else -> 28.dp
+                            }
+                            val lyricsFontFamily = when (config.lyricsFontFamily) {
+                                "ROUNDED" -> DmSans
+                                "SERIF" -> FontFamily.Serif
+                                "MONOSPACE" -> FontFamily.Monospace
+                                else -> null
+                            }
+                            // One style for every line: the active line is emphasised with a
+                            // graphicsLayer scale + color, so a line change never re-measures
+                            // or re-flows the list (switching text styles used to do both).
+                            val baseStyle = MaterialTheme.typography.headlineSmall
+                            val lineStyle = remember(baseStyle, fontScale, lyricsFontFamily) {
+                            baseStyle.copy(
+                            fontSize = baseStyle.fontSize * fontScale,
+                            lineHeight = baseStyle.lineHeight * fontScale,
+                            fontFamily = lyricsFontFamily ?: baseStyle.fontFamily,
+                            fontWeight = FontWeight.Bold,
+                            )
+                            }
+                            val activeColor = MaterialTheme.colorScheme.primary
+                            val idleColor = MaterialTheme.colorScheme.onSurface
+                            val motion = MaterialTheme.motionScheme
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(horizontal = 32.dp, vertical = 100.dp),
+                                verticalArrangement = Arrangement.spacedBy(lyricsSpacing),
+                            ) {
+                                itemsIndexed(lyrics, key = { index, line -> "$index-${line.timeMs}" }, contentType = { _, _ -> "line" }) { index, line ->
+                                    val isActive = index == activeLineIndex
+                                    val emphasis by animateFloatAsState(
+                                        targetValue = if (isActive) 1f else 0f,
+                                        animationSpec = motion.defaultSpatialSpec(),
+                                        label = "lyric_emphasis",
+                                    )
+                                    val lineAlpha = when {
                                         isActive -> 1f
                                         index < activeLineIndex -> 0.35f
                                         else -> 0.55f
-                                    },
-                                    animationSpec = tween(490, easing = Emphasized),
-                                    label = "lyric_alpha_$index",
-                                )
-
-                                val baseStyle = if (isActive) MaterialTheme.typography.headlineMedium
-                                else MaterialTheme.typography.titleLarge
-                                val scaledStyle = baseStyle.copy(
-                                    fontSize = baseStyle.fontSize * fontScale,
-                                    fontFamily = lyricsFontFamily ?: baseStyle.fontFamily,
-                                )
-
-                                Text(
-                                    text = line.text,
-                                    style = scaledStyle,
-                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isActive) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = lineAlpha),
-                                    textAlign = textAlign,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .preferredFrameRateSafe(120f)
-                                        .scale(lineScale)
-                                        .clickable(enabled = line.timeMs > 0L) { onSeek(line.timeMs) },
-                                )
+                                    }
+                                    val color by animateColorAsState(
+                                        targetValue = if (isActive) activeColor else idleColor.copy(alpha = lineAlpha),
+                                        animationSpec = motion.defaultEffectsSpec(),
+                                        label = "lyric_color",
+                                    )
+    
+                                    Text(
+                                        text = line.text,
+                                        style = lineStyle,
+                                        color = color,
+                                        textAlign = textAlign,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .graphicsLayer {
+                                                val s = 1f + 0.06f * emphasis
+                                                scaleX = s
+                                                scaleY = s
+                                                transformOrigin = if (textAlign == TextAlign.Center) TransformOrigin.Center else TransformOrigin(0f, 0.5f)
+                                            }
+                                            .combinedClickable(
+                                                enabled = line.text.isNotBlank(),
+                                                onClick = { if (line.timeMs > 0L) onSeek(line.timeMs) },
+                                                onLongClick = {
+                                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                    scope.launch {
+                                                        clipboard.setClipEntry(
+                                                            androidx.compose.ui.platform.ClipEntry(
+                                                                android.content.ClipData.newPlainText("Lyrics", line.text)
+                                                            )
+                                                        )
+                                                        snackbar.showSnackbar("Line copied")
+                                                    }
+                                                },
+                                            ),
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
         }
     }
 }

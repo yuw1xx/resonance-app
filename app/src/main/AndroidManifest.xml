@@ -43,13 +43,15 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Resonance"
+        android:enableOnBackInvokedCallback="true"
         android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:theme="@style/Theme.Resonance">
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Resonance.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

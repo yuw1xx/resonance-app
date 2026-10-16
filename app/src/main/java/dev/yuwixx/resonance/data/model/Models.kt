@@ -124,8 +124,11 @@ enum class MixType { TOP_ARTIST, TOP_GENRE, ERA, FAVORITES, RECENTLY_LOVED }
 
 sealed class SleepTimer {
     data object Off : SleepTimer()
-    data class Tracks(val tracksLeft: Int) : SleepTimer()
-    data class Time(val minutes: Int, val startedAt: Long) : SleepTimer()
+    /** Pauses when [tracksLeft] more tracks have finished playing (1 = end of the current track). */
+    data class Tracks(val tracksLeft: Int, val fadeOut: Boolean = false) : SleepTimer()
+    data class Time(val minutes: Int, val startedAt: Long, val fadeOut: Boolean = false) : SleepTimer() {
+        val endsAt: Long get() = startedAt + minutes * 60_000L
+    }
 }
 
 data class WaveformData(

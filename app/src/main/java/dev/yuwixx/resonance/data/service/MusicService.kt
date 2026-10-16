@@ -84,6 +84,15 @@ class MusicService : MediaLibraryService() {
     private var showSkipButtons = true
     private var lockscreenArtworkEnabled = true
 
+    // ─── Sleep timer (owned here so it survives the UI being closed) ───
+    private var sleepJob: Job? = null
+    private var sleepEndsAt = 0L
+    private var sleepMinutes = 0
+    private var sleepTracksLeft = 0
+    private var sleepFade = false
+    // Multiplies the normal target volume while a sleep fade-out is running.
+    private var sleepFadeFactor = 1f
+
     // Cached for widget pushes so the periodic progress refresh doesn't hit the DB/DataStore.
     private var widgetIsLiked = false
     private var widgetCornerRadius = 28
@@ -137,6 +146,18 @@ class MusicService : MediaLibraryService() {
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // Only tracks that finished on their own count toward a track-based sleep
+                // timer — manual skips used to count too.
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && sleepTracksLeft > 0) {
+                    sleepTracksLeft--
+                    if (sleepTracksLeft == 0) {
+                        player.pause()
+                        clearSleepTimer()
+                    } else {
+                        publishSleepState()
+                        if (sleepTracksLeft == 1 && sleepFade) startTrackEndFadeWatcher()
+                    }
+                }
                 persistQueue()
                 applyVolumeForCurrentItem()
                 scheduleCrossfade()
@@ -481,21 +502,97 @@ class MusicService : MediaLibraryService() {
                         else    -> ReplayGainProcessor.Mode.TRACK
                     }
                     val multiplier = replayGainProcessor.computeMultiplier(info, mode, replayGainPreampDb)
-                    return multiplier
+                    return multiplier * sleepFadeFactor
                 }
             }
         }
 
         if (volumeNormalizationEnabled) {
-            return 0.707f
+            return 0.707f * sleepFadeFactor
         }
 
-        return 1f
+        return sleepFadeFactor
     }
 
     private fun applyVolumeForCurrentItem() {
         if (crossfadeJob?.isActive == true) return
         player.volume = computeTargetVolume()
+    }
+
+    // ─── Sleep timer ───
+
+    private fun setSleepTimer(minutes: Int, tracks: Int, fade: Boolean) {
+        clearSleepTimer(publish = false)
+        sleepFade = fade
+        if (minutes > 0) {
+            sleepMinutes = minutes
+            sleepEndsAt = System.currentTimeMillis() + minutes * 60_000L
+            sleepJob = scope.launch {
+                val fadeStart = sleepEndsAt - if (fade) SessionProtocol.SLEEP_FADE_MS else 0L
+                delay((fadeStart - System.currentTimeMillis()).coerceAtLeast(0L))
+                if (fade) {
+                    while (isActive) {
+                        val remaining = sleepEndsAt - System.currentTimeMillis()
+                        if (remaining <= 0) break
+                        setSleepFade(remaining.toFloat() / SessionProtocol.SLEEP_FADE_MS)
+                        delay(100)
+                    }
+                }
+                player.pause()
+                clearSleepTimer()
+            }
+        } else if (tracks > 0) {
+            sleepTracksLeft = tracks
+            if (tracks == 1 && fade) startTrackEndFadeWatcher()
+        }
+        publishSleepState()
+    }
+
+    // Fades out across the final seconds of the last track of a track-based timer.
+    private fun startTrackEndFadeWatcher() {
+        sleepJob?.cancel()
+        sleepJob = scope.launch {
+            while (isActive && sleepTracksLeft == 1) {
+                val duration = player.duration
+                val remaining = if (duration > 0) duration - player.currentPosition else Long.MAX_VALUE
+                setSleepFade((remaining.toFloat() / SessionProtocol.SLEEP_FADE_MS).coerceIn(0f, 1f))
+                delay(if (remaining < SessionProtocol.SLEEP_FADE_MS) 100 else 1_000)
+            }
+        }
+    }
+
+    private fun setSleepFade(factor: Float) {
+        sleepFadeFactor = factor.coerceIn(0f, 1f)
+        if (crossfadeJob?.isActive != true) player.volume = computeTargetVolume()
+    }
+
+    private fun clearSleepTimer(publish: Boolean = true) {
+        sleepJob?.cancel()
+        sleepJob = null
+        sleepEndsAt = 0L
+        sleepMinutes = 0
+        sleepTracksLeft = 0
+        if (sleepFadeFactor != 1f) setSleepFade(1f)
+        if (publish) publishSleepState()
+    }
+
+    private fun publishSleepState() {
+        val extras = Bundle().apply {
+            when {
+                sleepEndsAt > 0 -> {
+                    putString(SessionProtocol.EXTRA_SLEEP_TYPE, "time")
+                    putLong(SessionProtocol.EXTRA_SLEEP_ENDS_AT, sleepEndsAt)
+                    putInt(SessionProtocol.EXTRA_SLEEP_MINUTES, sleepMinutes)
+                }
+                sleepTracksLeft > 0 -> {
+                    putString(SessionProtocol.EXTRA_SLEEP_TYPE, "tracks")
+                    putInt(SessionProtocol.EXTRA_SLEEP_TRACKS, sleepTracksLeft)
+                }
+                else -> putString(SessionProtocol.EXTRA_SLEEP_TYPE, "off")
+            }
+            putBoolean(SessionProtocol.EXTRA_SLEEP_FADE, sleepFade)
+        }
+        mediaSession.setSessionExtras(extras)
     }
 
     // ─── Notification / Lockscreen ───
@@ -947,6 +1044,46 @@ class MusicService : MediaLibraryService() {
 
     // Exposes a two-level browse tree (Songs, Playlists) to Android Auto and other Media3 browsers.
     private inner class LibraryCallback : MediaLibrarySession.Callback {
+
+        private val sleepSetCommand = SessionCommand(SessionProtocol.CMD_SLEEP_SET, Bundle.EMPTY)
+        private val sleepCancelCommand = SessionCommand(SessionProtocol.CMD_SLEEP_CANCEL, Bundle.EMPTY)
+
+        // Only the app's own controller gets the custom commands; Android Auto, the system
+        // media controls and other apps keep the default command set.
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): MediaSession.ConnectionResult {
+            val result = super.onConnect(session, controller)
+            if (controller.packageName != packageName) return result
+            val commands = result.availableSessionCommands.buildUpon()
+                .add(sleepSetCommand)
+                .add(sleepCancelCommand)
+                .build()
+            // Player commands are left at the builder's default: copying them from `result`
+            // granted none at all, so the app's controller couldn't even play.
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(commands)
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            when (customCommand.customAction) {
+                SessionProtocol.CMD_SLEEP_SET -> setSleepTimer(
+                    minutes = args.getInt(SessionProtocol.ARG_MINUTES, 0),
+                    tracks = args.getInt(SessionProtocol.ARG_TRACKS, 0),
+                    fade = args.getBoolean(SessionProtocol.ARG_FADE, false),
+                )
+                SessionProtocol.CMD_SLEEP_CANCEL -> clearSleepTimer()
+                else -> return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
+            }
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+        }
 
         private val ROOT_ID      = "resonance_root"
         private val SONGS_ID     = "songs"

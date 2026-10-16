@@ -35,8 +35,8 @@ import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.*
 import dev.yuwixx.resonance.MainActivity
 import dev.yuwixx.resonance.R
-import dev.yuwixx.resonance.ui.theme.DarkColorScheme
-import dev.yuwixx.resonance.ui.theme.LightColorScheme
+import dev.yuwixx.resonance.ui.theme.ResonanceSeed
+import dev.yuwixx.resonance.ui.theme.seedColorScheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -104,7 +104,10 @@ class ResonanceWidget : GlanceAppWidget() {
                 dark = dynamicDarkColorScheme(context),
             )
         else
-            ColorProviders(light = LightColorScheme, dark = DarkColorScheme)
+            ColorProviders(
+                light = seedColorScheme(ResonanceSeed, dark = false),
+                dark = seedColorScheme(ResonanceSeed, dark = true),
+            )
 
         provideContent {
             GlanceTheme(colors = glanceColors) {

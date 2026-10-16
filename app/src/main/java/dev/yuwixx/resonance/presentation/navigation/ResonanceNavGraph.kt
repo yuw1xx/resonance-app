@@ -5,14 +5,21 @@ package dev.yuwixx.resonance.presentation.navigation
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.*
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -27,25 +34,25 @@ import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.SettingsViewModel
 import dev.yuwixx.resonance.presentation.components.AppearanceConfig
 import dev.yuwixx.resonance.presentation.components.LocalAppearanceConfig
-import dev.yuwixx.resonance.presentation.components.MiniPlayer
+import dev.yuwixx.resonance.presentation.player.MiniPlayerBar
+import dev.yuwixx.resonance.presentation.player.MiniPlayerMetrics
+import dev.yuwixx.resonance.presentation.player.PlayerSheet
+import dev.yuwixx.resonance.presentation.player.PlayerSheetValue
+import dev.yuwixx.resonance.presentation.player.rememberPlayerSheetState
 import dev.yuwixx.resonance.presentation.components.PermissionWrapper
+import dev.yuwixx.resonance.presentation.screens.library.LibraryScreen
+import dev.yuwixx.resonance.presentation.screens.library.LibrarySection
 import dev.yuwixx.resonance.data.model.MusicSource
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
     data object Setup         : Screen("setup")
     data object Home          : Screen("home")
-    data object Songs         : Screen("songs")
-    data object Albums        : Screen("albums")
-    data object Artists       : Screen("artists")
-    data object Folders       : Screen("folders")
+    data object Library       : Screen("library")
     data object Playlists     : Screen("playlists")
-    data object LikedSongs    : Screen("liked_songs")
-    data object Player        : Screen("player")
     data object Search        : Screen("search")
     data object Settings      : Screen("settings")
     data object Licenses      : Screen("licenses")
-    data object NowPlayingQueue : Screen("now_playing_queue")
     data object LyricsEditor  : Screen("lyrics_editor")
     data object Statistics    : Screen("statistics")
     data object Equalizer     : Screen("equalizer")
@@ -77,20 +84,15 @@ data class NavItem(
 )
 
 val navItems = listOf(
-    NavItem(Screen.Home,       "Home",     Icons.Rounded.Home,                         Icons.Rounded.Home),
-    NavItem(Screen.Songs,      "Songs",    Icons.Rounded.MusicNote,                    Icons.Rounded.MusicNote),
-    NavItem(Screen.Albums,     "Albums",   Icons.Rounded.Album,                        Icons.Rounded.Album),
-    NavItem(Screen.Artists,    "Artists",  Icons.Rounded.Person,                       Icons.Rounded.Person),
-    NavItem(Screen.LikedSongs, "Liked",    Icons.Rounded.FavoriteBorder,               Icons.Rounded.Favorite),
-    NavItem(Screen.Playlists,  "Playlists", Icons.AutoMirrored.Rounded.QueueMusic,     Icons.AutoMirrored.Rounded.QueueMusic),
+    NavItem(Screen.Home,      "Home",      Icons.Outlined.Home,                  Icons.Rounded.Home),
+    NavItem(Screen.Library,   "Library",   Icons.Outlined.LibraryMusic,          Icons.Rounded.LibraryMusic),
+    NavItem(Screen.Playlists, "Playlists", Icons.AutoMirrored.Outlined.QueueMusic, Icons.AutoMirrored.Rounded.QueueMusic),
+    NavItem(Screen.Search,    "Search",    Icons.Outlined.Search,                Icons.Rounded.Search),
 )
 
-// Material Motion easing curves used throughout nav transitions.
-private val Emphasized = CubicBezierEasing(0.2f, 0.0f, 0f, 1.0f)
-private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
-private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
+private fun isTab(route: String?) = navItems.any { it.screen.route == route }
 
-@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalAnimationApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ResonanceNavGraph(
     playerViewModel: PlayerViewModel,
@@ -164,17 +166,36 @@ fun ResonanceNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val currentRoute = currentDestination?.route
-    // Hide the bottom bar and mini-player entirely when the full player or setup is open.
-    val isPlayerRoute = currentRoute == Screen.Player.route
+    // Hide the bottom bar and player sheet entirely while setup is open, and while the
+    // keyboard is up (they'd otherwise sit on top of it).
     val isSetupRoute = currentRoute == Screen.Setup.route
+    val imeVisible = WindowInsets.isImeVisible
 
-    val navigateToPlayer = { navController.navigate(Screen.Player.route) }
+    // The Now Playing sheet replaces the old `player` route: "open the player" expands it.
+    val sheetState = rememberPlayerSheetState()
+    val miniMetrics = remember(miniPlayerStyle) { MiniPlayerMetrics.forStyle(miniPlayerStyle) }
+    val showSheet = currentSong != null && !isSetupRoute && isFirstRun == false && !imeVisible
+    val navigateToPlayer: () -> Unit = { scope.launch { sheetState.expand() } }
+    // Screens reached from inside the player open beneath it, so collapse first.
+    val navigateFromPlayer: (String) -> Unit = { route ->
+        scope.launch { sheetState.collapse() }
+        navController.navigate(route)
+    }
+    LaunchedEffect(showSheet) {
+        if (!showSheet && sheetState.currentValue == PlayerSheetValue.Expanded) sheetState.collapse()
+    }
+    val miniPlayerPadding by animateDpAsState(
+        targetValue = if (showSheet) miniMetrics.totalHeight else 0.dp,
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+        label = "mini_player_padding",
+    )
 
-    LaunchedEffect(isFirstRun) {
-        if (isFirstRun == true && currentRoute != Screen.Setup.route) {
-            navController.navigate(Screen.Setup.route) {
-                popUpTo(0) { inclusive = true }
-            }
+    // Top-level destinations keep their own back stacks, like M3 navigation bars expect.
+    val navigateToTab: (String) -> Unit = { route ->
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
         }
     }
 
@@ -182,161 +203,70 @@ fun ResonanceNavGraph(
         val onHiddenTab = currentRoute != null
             && navItems.any { it.screen.route == currentRoute }
             && visibleNavItems.none { it.screen.route == currentRoute }
-        if (onHiddenTab) {
-            navController.navigate(Screen.Home.route) {
-                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                launchSingleTop = true
-                restoreState    = true
-            }
-        }
+        if (onHiddenTab) navigateToTab(Screen.Home.route)
     }
 
-    CompositionLocalProvider(LocalAppearanceConfig provides appearanceConfig) {
-    SharedTransitionLayout {
-        Scaffold(
-            bottomBar = {
-                if (!isSetupRoute) {
-                    Column {
-                        AnimatedVisibility(
-                            visible = currentSong != null && !isPlayerRoute,
-                            enter = slideInVertically(tween(530, easing = EmphasizedDecelerate)) { it } +
-                                fadeIn(tween(420, easing = EmphasizedDecelerate)),
-                            exit = slideOutVertically(tween(420, easing = EmphasizedAccelerate)) { it } +
-                                fadeOut(tween(310, easing = EmphasizedAccelerate)),
-                        ) {
-                            MiniPlayer(
-                                playerViewModel = playerViewModel,
-                                style = miniPlayerStyle,
-                                onClick = navigateToPlayer,
-                                sharedTransitionScope = this@SharedTransitionLayout,
-                                animatedVisibilityScope = this@AnimatedVisibility,
-                            )
-                        }
+    val motion = MaterialTheme.motionScheme
+    val density = LocalDensity.current
+    val showBottomBar = !isSetupRoute && isFirstRun == false && !imeVisible
+    // Height of the bottom bar including the system navigation inset, known up front so the
+    // collapsed sheet and the content padding are right from the first frame.
+    val navInsetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomBarHeight = if (!showBottomBar) 0.dp
+        else if (floatingNav) FloatingNavHeight + FloatingNavVerticalMargin * 2 + navInsetBottom
+        else ShortNavHeight + navInsetBottom
+    val bottomBarHeightPx = with(density) { bottomBarHeight.roundToPx() }
+    val contentBottomPadding by animateDpAsState(
+        targetValue = bottomBarHeight + miniPlayerPadding,
+        animationSpec = motion.defaultSpatialSpec(),
+        label = "content_bottom_padding",
+    )
 
-                        if (!isPlayerRoute) {
-                            val navBarItems: @Composable RowScope.() -> Unit = {
-                                visibleNavItems.forEach { item ->
-                                    val selected = currentDestination?.hierarchy
-                                        ?.any { it.route == item.screen.route } == true
-                                    NavigationBarItem(
-                                        icon = {
-                                            val iconScale by animateFloatAsState(
-                                                targetValue = if (selected) 1.14f else 1f,
-                                                animationSpec = spring(
-                                                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                    stiffness = Spring.StiffnessMediumLow,
-                                                ),
-                                                label = "${item.screen.route}_icon_scale",
-                                            )
-                                            Icon(
-                                                if (selected) item.selectedIcon else item.icon,
-                                                contentDescription = item.label,
-                                                modifier = Modifier.scale(iconScale),
-                                            )
-                                        },
-                                        label = when (navLabelVis) {
-                                            "NEVER" -> null
-                                            else -> { { Text(item.label) } }
-                                        },
-                                        alwaysShowLabel = navLabelVis == "ALWAYS",
-                                        selected = selected,
-                                        onClick = {
-                                            navController.navigate(item.screen.route) {
-                                                popUpTo(navController.graph.findStartDestination().id) {
-                                                    saveState = true
-                                                }
-                                                launchSingleTop = true
-                                                restoreState = true
-                                            }
-                                        },
-                                    )
-                                }
-                            }
-
-                            if (floatingNav) {
-                                Column(
-                                    modifier = Modifier
-                                        .navigationBarsPadding()
-                                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(28.dp),
-                                        shadowElevation = 8.dp,
-                                        tonalElevation = 4.dp,
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        NavigationBar(
-                                            windowInsets = WindowInsets(0),
-                                            containerColor = Color.Transparent,
-                                            tonalElevation = 0.dp,
-                                            content = navBarItems,
-                                        )
-                                    }
-                                }
-                            } else {
-                                NavigationBar(
-                                    tonalElevation = if (tintedNav) 3.dp else 0.dp,
-                                    windowInsets = WindowInsets.navigationBars,
-                                    containerColor = if (tintedNav) MaterialTheme.colorScheme.surfaceContainer else NavigationBarDefaults.containerColor,
-                                    content = navBarItems,
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        ) { innerPadding ->
+    // Root content color: text/icons not inside a Surface would otherwise default to black.
+    CompositionLocalProvider(
+        LocalAppearanceConfig provides appearanceConfig,
+        LocalContentColor provides MaterialTheme.colorScheme.onSurface,
+    ) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+        if (isFirstRun != null) {
+            val padding = PaddingValues(bottom = contentBottomPadding)
             NavHost(
                 navController = navController,
-                startDestination = Screen.Home.route,
-                modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
-                // Tabs use M3 Fade Through (unrelated content).
-                // Push/pop uses M3 Shared Axis X (subtle slide + fade, related content).
+                startDestination = if (isFirstRun == true) Screen.Setup.route else Screen.Home.route,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    // Screens below must not add the navigation-bar inset again.
+                    .consumeWindowInsets(padding),
+                // Tab ↔ tab: M3 fade-through. Drill-in/out: M3 shared axis X. Both use the
+                // theme's motion scheme so they match the rest of the app.
                 enterTransition = {
-                    val fromRoute = initialState.destination.route
-                    val toRoute   = targetState.destination.route
-                    val fromIndex = navItems.indexOfFirst { it.screen.route == fromRoute }
-                    val toIndex   = navItems.indexOfFirst { it.screen.route == toRoute }
-
-                    if (fromIndex != -1 && toIndex != -1) {
-                        // Fade Through: crossfade with a subtle scale-up so the swap
-                        // reads as motion even between screens sharing the same background.
-                        fadeIn(tween(310, easing = EmphasizedDecelerate)) +
-                            scaleIn(tween(310, easing = EmphasizedDecelerate), initialScale = 0.94f)
+                    if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
+                        fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.defaultSpatialSpec(), initialScale = 0.96f)
                     } else {
-                        // Shared Axis X: slide from right + fade in
-                        slideInHorizontally(tween(670, easing = EmphasizedDecelerate)) { (it * 0.2f).toInt() } +
-                            fadeIn(tween(670, delayMillis = 60, easing = EmphasizedDecelerate))
+                        slideInHorizontally(motion.defaultSpatialSpec()) { (it * 0.15f).toInt() } + fadeIn(motion.defaultEffectsSpec())
                     }
                 },
                 exitTransition = {
-                    val fromRoute = initialState.destination.route
-                    val toRoute   = targetState.destination.route
-                    val fromIndex = navItems.indexOfFirst { it.screen.route == fromRoute }
-                    val toIndex   = navItems.indexOfFirst { it.screen.route == toRoute }
-
-                    if (fromIndex != -1 && toIndex != -1) {
-                        // Fade Through: fade out slightly before new screen fades in,
-                        // scaling down a touch to sell the "through" depth motion.
-                        fadeOut(tween(220, easing = EmphasizedAccelerate)) +
-                            scaleOut(tween(220, easing = EmphasizedAccelerate), targetScale = 1.04f)
+                    if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
+                        fadeOut(motion.fastEffectsSpec())
                     } else {
-                        // Shared Axis X: slide to left + fade out
-                        slideOutHorizontally(tween(500, easing = EmphasizedAccelerate)) { -(it * 0.2f).toInt() } +
-                            fadeOut(tween(250, easing = EmphasizedAccelerate))
+                        slideOutHorizontally(motion.defaultSpatialSpec()) { -(it * 0.15f).toInt() } + fadeOut(motion.fastEffectsSpec())
                     }
                 },
                 popEnterTransition = {
-                    // Shared Axis X reversed: slide in from left + fade in
-                    slideInHorizontally(tween(670, easing = EmphasizedDecelerate)) { -(it * 0.2f).toInt() } +
-                        fadeIn(tween(670, delayMillis = 60, easing = EmphasizedDecelerate))
+                    if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
+                        fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.defaultSpatialSpec(), initialScale = 0.96f)
+                    } else {
+                        slideInHorizontally(motion.defaultSpatialSpec()) { -(it * 0.15f).toInt() } + fadeIn(motion.defaultEffectsSpec())
+                    }
                 },
                 popExitTransition = {
-                    // Shared Axis X reversed: slide out to right + fade out
-                    slideOutHorizontally(tween(500, easing = EmphasizedAccelerate)) { (it * 0.2f).toInt() } +
-                        fadeOut(tween(250, easing = EmphasizedAccelerate))
+                    if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
+                        fadeOut(motion.fastEffectsSpec())
+                    } else {
+                        slideOutHorizontally(motion.defaultSpatialSpec()) { (it * 0.15f).toInt() } + fadeOut(motion.fastEffectsSpec())
+                    }
                 },
             ) {
                 composable(Screen.Setup.route) {
@@ -356,140 +286,53 @@ fun ResonanceNavGraph(
                         playerViewModel = playerViewModel,
                         libraryViewModel = libraryViewModel,
                         onNavigateTo = { navController.navigate(it.route) },
+                        onOpenPlayer = navigateToPlayer,
                     )
                 }
 
-                composable(Screen.Songs.route) {
-                    if (musicSource == MusicSource.LOCAL) {
-                        PermissionWrapper {
-                            SongsScreen(
-                                libraryViewModel = libraryViewModel,
-                                playerViewModel = playerViewModel,
-                                onSearchClick = { navController.navigate(Screen.Search.route) },
-                                onNavigateToPlayer = navigateToPlayer,
-                                onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
-                            )
+                composable(Screen.Library.route) {
+                    val goToSearch: () -> Unit = { navigateToTab(Screen.Search.route) }
+                    val libraryContent: @Composable () -> Unit = {
+                        LibraryScreen(showFolders = musicSource == MusicSource.LOCAL) { section ->
+                            when (section) {
+                                LibrarySection.Songs -> SongsScreen(
+                                    libraryViewModel = libraryViewModel,
+                                    playerViewModel = playerViewModel,
+                                    onSearchClick = goToSearch,
+                                    onNavigateToPlayer = navigateToPlayer,
+                                    onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
+                                )
+                                LibrarySection.Albums -> AlbumsScreen(
+                                    libraryViewModel = libraryViewModel,
+                                    onAlbumClick = { album -> navController.navigate(Screen.AlbumDetail.createRoute(album.id)) },
+                                    onSearchClick = goToSearch,
+                                )
+                                LibrarySection.Artists -> ArtistsScreen(
+                                    libraryViewModel = libraryViewModel,
+                                    onArtistClick = { artist -> navController.navigate(Screen.ArtistDetail.createRoute(artist.name)) },
+                                    onSearchClick = goToSearch,
+                                )
+                                LibrarySection.Liked -> LikedSongsScreen(
+                                    playerViewModel = playerViewModel,
+                                    libraryViewModel = libraryViewModel,
+                                    onBack = {},
+                                    onNavigateToPlayer = navigateToPlayer,
+                                )
+                                LibrarySection.Folders -> FoldersScreen(
+                                    libraryViewModel = libraryViewModel,
+                                    playerViewModel = playerViewModel,
+                                    onBack = {},
+                                )
+                            }
                         }
-                    } else {
-                        SongsScreen(
-                            libraryViewModel = libraryViewModel,
-                            playerViewModel = playerViewModel,
-                            onSearchClick = { navController.navigate(Screen.Search.route) },
-                            onNavigateToPlayer = navigateToPlayer,
-                            onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
-                        )
                     }
-                }
-
-                composable(Screen.Albums.route) {
-                    if (musicSource == MusicSource.LOCAL) {
-                        PermissionWrapper {
-                            AlbumsScreen(
-                                libraryViewModel = libraryViewModel,
-                                onAlbumClick = { album -> navController.navigate(Screen.AlbumDetail.createRoute(album.id)) },
-                                onSearchClick = { navController.navigate(Screen.Search.route) }
-                            )
-                        }
-                    } else {
-                        AlbumsScreen(
-                            libraryViewModel = libraryViewModel,
-                            onAlbumClick = { album -> navController.navigate(Screen.AlbumDetail.createRoute(album.id)) },
-                            onSearchClick = { navController.navigate(Screen.Search.route) }
-                        )
-                    }
-                }
-
-                composable(Screen.Artists.route) {
-                    if (musicSource == MusicSource.LOCAL) {
-                        PermissionWrapper {
-                            ArtistsScreen(
-                                libraryViewModel = libraryViewModel,
-                                onArtistClick = { artist -> navController.navigate(Screen.ArtistDetail.createRoute(artist.name)) },
-                                onSearchClick = { navController.navigate(Screen.Search.route) }
-                            )
-                        }
-                    } else {
-                        ArtistsScreen(
-                            libraryViewModel = libraryViewModel,
-                            onArtistClick = { artist -> navController.navigate(Screen.ArtistDetail.createRoute(artist.name)) },
-                            onSearchClick = { navController.navigate(Screen.Search.route) }
-                        )
-                    }
-                }
-
-                composable(Screen.Folders.route) {
-                    if (musicSource == MusicSource.LOCAL) {
-                        PermissionWrapper {
-                            FoldersScreen(
-                                libraryViewModel = libraryViewModel,
-                                playerViewModel = playerViewModel,
-                                onBack = { navController.popBackStack() },
-                            )
-                        }
-                    } else {
-                        FoldersScreen(
-                            libraryViewModel = libraryViewModel,
-                            playerViewModel = playerViewModel,
-                            onBack = { navController.popBackStack() },
-                        )
-                    }
+                    if (musicSource == MusicSource.LOCAL) PermissionWrapper(libraryContent) else libraryContent()
                 }
 
                 composable(Screen.Playlists.route) {
                     PlaylistsScreen(
                         libraryViewModel = libraryViewModel,
                         onPlaylistClick = { playlist -> navController.navigate(Screen.PlaylistDetail.createRoute(playlist.id)) }
-                    )
-                }
-
-                composable(Screen.LikedSongs.route) {
-                    LikedSongsScreen(
-                        playerViewModel = playerViewModel,
-                        libraryViewModel = libraryViewModel,
-                        onBack = { navController.popBackStack() },
-                        onNavigateToPlayer = navigateToPlayer,
-                    )
-                }
-
-                composable(
-                    route = Screen.Player.route,
-                    // Shared Axis Y: player rises up from below
-                    enterTransition = {
-                        slideInVertically(tween(670, easing = EmphasizedDecelerate)) { (it * 0.38f).toInt() } +
-                            fadeIn(tween(500, easing = EmphasizedDecelerate))
-                    },
-                    exitTransition = {
-                        fadeOut(tween(250, easing = EmphasizedAccelerate))
-                    },
-                    popEnterTransition = {
-                        fadeIn(tween(340, easing = EmphasizedDecelerate)) +
-                            scaleIn(tween(340, easing = EmphasizedDecelerate), initialScale = 0.98f)
-                    },
-                    popExitTransition = {
-                        slideOutVertically(tween(590, easing = EmphasizedAccelerate)) { (it * 0.32f).toInt() } +
-                            fadeOut(tween(360, easing = EmphasizedAccelerate))
-                    },
-                ) {
-                    PlayerScreen(
-                        playerViewModel = playerViewModel,
-                        sharedTransitionScope = this@SharedTransitionLayout,
-                        animatedVisibilityScope = this@composable,
-                        onBack = { navController.popBackStack() },
-                        onQueueClick = { navController.navigate(Screen.NowPlayingQueue.route) },
-                        onLyricsEdit = { navController.navigate(Screen.LyricsEditor.route) },
-                        onNavigateToEqualizer = { navController.navigate(Screen.Equalizer.route) },
-                        playlists = allPlaylists,
-                        onAddToPlaylist = { playlist ->
-                            playerViewModel.currentSong.value?.let { song ->
-                                libraryViewModel.addSongsToPlaylist(playlist.id, listOf(song.id))
-                            }
-                        },
-                        onCreatePlaylist = { name ->
-                            val songIds = listOfNotNull(playerViewModel.currentSong.value?.id)
-                            libraryViewModel.createPlaylistWithSongs(name, songIds)
-                        },
-                        onArtistClick = { name -> navController.navigate(Screen.ArtistDetail.createRoute(name)) },
-                        onSongClick = { songId -> navController.navigate(Screen.SongDetail.createRoute(songId)) },
                     )
                 }
 
@@ -576,13 +419,6 @@ fun ResonanceNavGraph(
                     )
                 }
 
-                composable(Screen.NowPlayingQueue.route) {
-                    QueueScreen(
-                        playerViewModel = playerViewModel,
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-
                 composable(Screen.Settings.route) {
                     val settingsViewModel: SettingsViewModel = hiltViewModel()
                     SettingsScreen(
@@ -619,18 +455,144 @@ fun ResonanceNavGraph(
                     )
                 }
             }
+        }
 
-            receiveUri?.let { uri ->
-                ReceiveSheet(
-                    uri       = uri,
-                    onDismiss = onReceiveDismiss,
-                    onPlayNow = { songs ->
-                        playerViewModel.play(songs, 0)
-                        navController.navigate(Screen.Player.route)
+        AnimatedVisibility(
+            visible = showSheet,
+            enter = slideInVertically(motion.defaultSpatialSpec()) { it / 4 } + fadeIn(motion.defaultEffectsSpec()),
+            exit = slideOutVertically(motion.fastSpatialSpec()) { it / 4 } + fadeOut(motion.fastEffectsSpec()),
+        ) {
+
+                PlayerSheet(
+                    state = sheetState,
+                    metrics = miniMetrics,
+                    bottomBarHeightPx = { bottomBarHeightPx },
+                    collapsedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    expandedContainerColor = MaterialTheme.colorScheme.surface,
+                    artworkUri = currentSong?.artworkUri,
+                    mini = { onExpand ->
+                        MiniPlayerBar(
+                            playerViewModel = playerViewModel,
+                            metrics = miniMetrics,
+                            onExpand = onExpand,
+                        )
                     },
+                    full = { onCollapse ->
+                        PlayerScreen(
+                            playerViewModel = playerViewModel,
+                            onBack = onCollapse,
+                            onLyricsEdit = { navigateFromPlayer(Screen.LyricsEditor.route) },
+                            onNavigateToEqualizer = { navigateFromPlayer(Screen.Equalizer.route) },
+                            playlists = allPlaylists,
+                            onAddToPlaylist = { playlist ->
+                                playerViewModel.currentSong.value?.let { song ->
+                                    libraryViewModel.addSongsToPlaylist(playlist.id, listOf(song.id))
+                                }
+                            },
+                            onCreatePlaylist = { name ->
+                                val songIds = listOfNotNull(playerViewModel.currentSong.value?.id)
+                                libraryViewModel.createPlaylistWithSongs(name, songIds)
+                            },
+                            onArtistClick = { name -> navigateFromPlayer(Screen.ArtistDetail.createRoute(name)) },
+                            onSongClick = { songId -> navigateFromPlayer(Screen.SongDetail.createRoute(songId)) },
+                        )
+                    },
+                )
+        }
+
+        // Drawn after the sheet so it stays on top of the collapsed mini player's container;
+        // slides away as the sheet expands.
+        AnimatedVisibility(
+            visible = showBottomBar,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically(motion.defaultSpatialSpec()) { it },
+            exit = slideOutVertically(motion.fastSpatialSpec()) { it },
+        ) {
+            ResonanceBottomBar(
+                items = visibleNavItems,
+                currentDestination = currentDestination,
+                floating = floatingNav,
+                tinted = tintedNav,
+                labelVisibility = navLabelVis,
+                onSelect = { navigateToTab(it.screen.route) },
+                modifier = Modifier.graphicsLayer { translationY = size.height * sheetState.progress },
+            )
+        }
+
+        receiveUri?.let { uri ->
+            ReceiveSheet(
+                uri       = uri,
+                onDismiss = onReceiveDismiss,
+                onPlayNow = { songs ->
+                    playerViewModel.play(songs, 0)
+                    navigateToPlayer()
+                },
+            )
+        }
+    }
+    }
+}
+
+private val ShortNavHeight = 64.dp
+private val FloatingNavHeight = 64.dp
+private val FloatingNavVerticalMargin = 12.dp
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun ResonanceBottomBar(
+    items: List<NavItem>,
+    currentDestination: androidx.navigation.NavDestination?,
+    floating: Boolean,
+    tinted: Boolean,
+    labelVisibility: String,
+    onSelect: (NavItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val content: @Composable () -> Unit = {
+        items.forEach { item ->
+            val selected = currentDestination?.hierarchy?.any { it.route == item.screen.route } == true
+            ShortNavigationBarItem(
+                selected = selected,
+                onClick = { onSelect(item) },
+                icon = {
+                    Icon(if (selected) item.selectedIcon else item.icon, contentDescription = item.label)
+                },
+                label = when {
+                    labelVisibility == "NEVER" -> null
+                    labelVisibility == "SELECTED" && !selected -> null
+                    else -> { { Text(item.label, maxLines = 1) } }
+                },
+            )
+        }
+    }
+    if (floating) {
+        Box(
+            modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = FloatingNavVerticalMargin),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                shadowElevation = 6.dp,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                ShortNavigationBar(
+                    modifier = Modifier.height(FloatingNavHeight),
+                    containerColor = Color.Transparent,
+                    windowInsets = WindowInsets(0),
+                    content = content,
                 )
             }
         }
-    }
+    } else {
+        ShortNavigationBar(
+            modifier = modifier,
+            containerColor = if (tinted) MaterialTheme.colorScheme.surfaceContainer
+                else MaterialTheme.colorScheme.surfaceContainerLow,
+            windowInsets = WindowInsets.navigationBars,
+            content = content,
+        )
     }
 }

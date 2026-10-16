@@ -33,6 +33,7 @@ fun HomeScreen(
     playerViewModel: PlayerViewModel,
     libraryViewModel: LibraryViewModel,
     onNavigateTo: (Screen) -> Unit,
+    onOpenPlayer: () -> Unit,
 ) {
     val currentSong by playerViewModel.currentSong.collectAsState()
     val isPlaying by playerViewModel.isPlaying.collectAsState()
@@ -93,7 +94,7 @@ fun HomeScreen(
                         ResumeCard(
                             song = song,
                             isPlaying = isPlaying,
-                            onClick = { onNavigateTo(Screen.Player) },
+                            onClick = onOpenPlayer,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             onArtworkMissing = { libraryViewModel.getSongArtworkUrl(song) },
                         )
@@ -209,8 +210,7 @@ private fun ResumeCard(
         interactionSource = interactionSource,
         modifier = modifier
             .fillMaxWidth()
-            .scale(pressScale)
-            .preferredFrameRateSafe(120f),
+            .scale(pressScale),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
