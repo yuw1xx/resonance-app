@@ -59,6 +59,10 @@ fun MetadataEnrichmentScreen(
             // tick instead of just on genuine Idle/Scanning/Reviewing/Applying/Done transitions.
             // The content lambda still reads the live `uiState` (not a stale snapshot), so it
             // recomposes normally in between.
+            // Latest state of each kind, so the outgoing pane keeps showing its own content
+            // while it animates out instead of the incoming state.
+            val latestByKind = remember { mutableMapOf<kotlin.reflect.KClass<*>, EnrichmentUiState>() }
+            latestByKind[uiState::class] = uiState
             AnimatedContent(
                 targetState = uiState::class,
                 transitionSpec = {
@@ -67,8 +71,8 @@ fun MetadataEnrichmentScreen(
                         .togetherWith(fadeOut(tween(220, easing = EmphasizedAccelerate)))
                 },
                 label = "enrichment_state",
-            ) {
-                when (val state = uiState) {
+            ) { kind ->
+                when (val state = latestByKind[kind] ?: uiState) {
                     is EnrichmentUiState.Idle -> IdleContent(onScan = viewModel::startScan)
                     is EnrichmentUiState.Scanning -> ScanningContent(state, onCancel = viewModel::cancelScan)
                     is EnrichmentUiState.Reviewing -> ReviewingContent(
