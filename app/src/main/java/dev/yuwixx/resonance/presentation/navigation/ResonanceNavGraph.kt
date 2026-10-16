@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -186,10 +187,15 @@ fun ResonanceNavGraph(
 
     // "Open the player" expands the Now Playing sheet.
     val sheetState = rememberPlayerSheetState()
+    // While the full player covers the screen, what's behind it must not be reachable with TalkBack.
+    val playerCoversScreen by remember(sheetState) {
+        derivedStateOf { sheetState.currentValue == PlayerSheetValue.Expanded }
+    }
     val miniMetrics = remember(miniPlayerStyle, miniPlayerShowProgress) {
         MiniPlayerMetrics.forStyle(miniPlayerStyle, showProgress = miniPlayerShowProgress)
     }
     val showSheet = currentSong != null && !isSetupRoute && isFirstRun == false && !imeVisible
+    val behindPlayer = if (playerCoversScreen && showSheet) Modifier.clearAndSetSemantics {} else Modifier
     val navigateToPlayer: () -> Unit = { scope.launch { sheetState.expand() } }
     // Screens reached from inside the player open beneath it, so collapse first.
     val navigateFromPlayer: (String) -> Unit = { route ->
@@ -250,7 +256,7 @@ fun ResonanceNavGraph(
                 NavHost(
                     navController = navController,
                     startDestination = if (isFirstRun == true) Screen.Setup.route else Screen.Home.route,
-                    modifier = Modifier
+                    modifier = behindPlayer
                         .fillMaxSize()
                         .padding(padding)
                         // Screens below must not add the navigation-bar inset again.
@@ -532,7 +538,7 @@ fun ResonanceNavGraph(
                     tinted = tintedNav,
                     labelVisibility = navLabelVis,
                     onSelect = { navigateToTab(it.screen.route) },
-                    modifier = Modifier.graphicsLayer { translationY = size.height * sheetState.progress },
+                    modifier = behindPlayer.graphicsLayer { translationY = size.height * sheetState.progress },
                 )
             }
 
