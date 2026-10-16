@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.room.withTransaction
+import com.squareup.moshi.JsonDataException
+import com.squareup.moshi.JsonEncodingException
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,11 +20,17 @@ import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.util.md5Hex
 import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import dev.yuwixx.resonance.data.util.sha256Hex
+import retrofit2.HttpException
 import java.io.File
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.time.Instant
 import java.time.OffsetDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
+import javax.net.ssl.SSLException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -112,9 +120,27 @@ class NavidromeRepository @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            NavidromeConnectionState.Error(e.message ?: "Connection failed")
+            NavidromeConnectionState.Error(connectionErrorMessage(e))
                 .also { _connectionState.value = it }
         }
+    }
+
+    // Plain wording for the usual reasons a connection test fails, instead of exception text.
+    private fun connectionErrorMessage(e: Exception): String = when (e) {
+        is UnknownHostException -> "Server not found. Check the address."
+        is ConnectException, is SocketTimeoutException, is NoRouteToHostException ->
+            "Couldn't reach the server. Check the address and port, and that this device can " +
+                "reach it (a VPN can block local addresses)."
+        is SSLException -> "Secure connection failed. On a local network, try http:// instead."
+        is IllegalArgumentException -> "Not a valid server address."
+        is HttpException -> if (e.code() == 404) {
+            "No Navidrome server at this address."
+        } else {
+            "The server answered with an error (HTTP ${e.code()})."
+        }
+        is JsonDataException, is JsonEncodingException ->
+            "That address didn't answer like a Navidrome server."
+        else -> e.message ?: "Connection failed"
     }
 
     fun resetConnectionState() { _connectionState.value = NavidromeConnectionState.Idle }
