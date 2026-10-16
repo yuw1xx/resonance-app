@@ -548,7 +548,7 @@ private fun AppearanceSection(prefs: ResonancePreferences) {
 
     SectionCard(icon = Icons.Rounded.Palette, title = "Appearance", modifier = Modifier.padding(horizontal = 8.dp)) {
         SectionSubHeader("Color & Theme")
-        SettingsToggleRow("System Dynamic Color", "Use Android 12+ wallpaper colours", dynamicColor) {
+        SettingsToggleRow("System Dynamic Color", "Use Android 12+ wallpaper colors", dynamicColor) {
             scope.launch { prefs.setDynamicColorEnabled(it) }
         }
         AnimatedVisibility(
@@ -648,7 +648,7 @@ private fun AppearanceSection(prefs: ResonancePreferences) {
             onSelect = { scope.launch { prefs.setPlayerArtworkShape(it) } },
         )
         SegmentedSettingsItem(
-            title = "Seekbar Colour",
+            title = "Seekbar Color",
             options = listOf("Primary" to "PRIMARY", "Secondary" to "SECONDARY", "Tertiary" to "TERTIARY"),
             selected = seekbarColor,
             onSelect = { scope.launch { prefs.setSeekbarColor(it) } },
@@ -936,7 +936,7 @@ private fun AudioSection(prefs: ResonancePreferences, onNavigateToEqualizer: () 
             steps = 29,
             onValueChange = { scope.launch { prefs.setReplayGainPreamp(it) } },
         )
-        SettingsToggleRow("Volume Normalisation", "Equalise loudness across all tracks", volumeNorm) {
+        SettingsToggleRow("Volume Normalization", "Equalise loudness across all tracks", volumeNorm) {
             scope.launch { prefs.setVolumeNormalization(it) }
         }
         SettingsTextItem(
@@ -2074,12 +2074,17 @@ private fun MalojaSetupDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                val urlInvalid = url.isNotBlank() && MalojaRepository.normalizeUrl(url) == null
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
                     label = { Text("Server URL") },
                     placeholder = { Text("http://192.168.1.100:42010") },
                     singleLine = true,
+                    isError = urlInvalid,
+                    supportingText = if (urlInvalid) {
+                        { Text("Enter an address like http://192.168.1.100:42010") }
+                    } else null,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 )
@@ -2144,7 +2149,7 @@ private fun ThemeColorPicker(
     val colors = PresetColors
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
-            "Accent Colour",
+            "Accent Color",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(bottom = 12.dp),

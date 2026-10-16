@@ -494,7 +494,7 @@ private fun PlaybackControls(
 ) {
     // Doesn't read position.value; only SeekBarAndTimeLabels does.
     val config = LocalAppearanceConfig.current
-    // The Seekbar Colour setting picks the artwork palette channel; without artwork the
+    // The Seekbar Color setting picks the artwork palette channel; without artwork the
     // matching theme color is used.
     val seekbarPlayedColor by animateColorAsState(
         targetValue = when (config.seekbarColor) {
