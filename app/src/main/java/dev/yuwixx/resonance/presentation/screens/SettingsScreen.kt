@@ -934,6 +934,9 @@ private fun LibrarySection(libraryViewModel: LibraryViewModel, prefs: ResonanceP
     var showIncludedDialog by remember { mutableStateOf(false) }
     var showExcludedDialog by remember { mutableStateOf(false) }
 
+    PlaylistFolderSyncCard(libraryViewModel, prefs)
+    Spacer(Modifier.height(12.dp))
+
     SectionCard(icon = Icons.Rounded.LibraryMusic, title = "Library", modifier = Modifier.padding(horizontal = 8.dp)) {
         ScanLibraryItem(isSyncing) {
             libraryViewModel.syncLibrary(force = true)
@@ -3086,4 +3089,71 @@ private fun NavTabsDialog(
             TextButton(onClick = onDismiss) { Text("Done") }
         },
     )
+}
+
+@Composable
+private fun PlaylistFolderSyncCard(libraryViewModel: LibraryViewModel, prefs: ResonancePreferences) {
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val folder by prefs.playlistSyncFolder.collectAsStateWithLifecycle(initialValue = null)
+    val writeBack by prefs.playlistSyncExport.collectAsStateWithLifecycle(initialValue = false)
+    val relative by prefs.playlistSyncRelativePaths.collectAsStateWithLifecycle(initialValue = true)
+    var status by remember { mutableStateOf<String?>(null) }
+    val pickFolder = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> if (uri != null) libraryViewModel.setPlaylistSyncFolder(uri) }
+
+    val folderName = remember(folder) {
+        folder?.let { runCatching { androidx.documentfile.provider.DocumentFile.fromTreeUri(context, android.net.Uri.parse(it))?.name }.getOrNull() }
+    }
+
+    SectionCard(icon = Icons.Rounded.FolderOpen, title = "Playlist Folder Sync", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SettingsTextItem(
+            title = "Sync folder",
+            subtitle = folderName?.let { "Keeps playlists in step with the .m3u files in \"$it\"" }
+                ?: "Pick a folder with .m3u / .m3u8 playlists to import and keep in sync",
+            icon = Icons.Rounded.Folder,
+            onClick = { pickFolder.launch(null) },
+        )
+        if (folder != null) {
+            SettingsToggleRow("Write changes back", "Save playlists edited here to their files", writeBack) {
+                scope.launch { prefs.setPlaylistSyncExport(it) }
+            }
+            SettingsToggleRow("Relative paths", "Write song paths relative to the folder (portable to a PC)", relative) {
+                scope.launch { prefs.setPlaylistSyncRelativePaths(it) }
+            }
+            SettingsTextItem(
+                title = "Sync now",
+                subtitle = status ?: "Import new and changed playlist files",
+                icon = Icons.Rounded.Sync,
+                onClick = {
+                    status = "Syncing…"
+                    libraryViewModel.syncPlaylistFolderNow { r ->
+                        status = buildList {
+                            if (r.imported > 0) add("${r.imported} imported")
+                            if (r.updated > 0) add("${r.updated} updated")
+                            if (r.written > 0) add("${r.written} written back")
+                            if (r.failed > 0) add("${r.failed} failed")
+                        }.joinToString(" · ").ifEmpty { "Everything is up to date" }
+                    }
+                },
+            )
+            SettingsTextItem(
+                title = "Export all playlists",
+                subtitle = "Write playlists that aren't in the folder yet as .m3u8 files",
+                icon = Icons.Rounded.FileDownload,
+                onClick = {
+                    libraryViewModel.exportAllPlaylistsToFolder { n ->
+                        status = if (n == 0) "Nothing new to export" else "$n playlist${if (n == 1) "" else "s"} exported"
+                    }
+                },
+            )
+            SettingsTextItem(
+                title = "Stop syncing",
+                subtitle = "Playlists stay; their files are no longer watched",
+                icon = Icons.Rounded.LinkOff,
+                onClick = { libraryViewModel.setPlaylistSyncFolder(null) },
+            )
+        }
+    }
 }

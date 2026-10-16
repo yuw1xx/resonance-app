@@ -35,6 +35,7 @@ class LibraryViewModel @Inject constructor(
     private val artworkRepository: ArtworkRepository,
     private val navidromeRepository: NavidromeRepository,
     private val navidromeSyncRepository: dev.yuwixx.resonance.data.repository.NavidromeSyncRepository,
+    private val playlistFolderSync: dev.yuwixx.resonance.data.playlist.PlaylistFolderSync,
     private val navidromeDownloadRepository: NavidromeDownloadRepository,
     private val mixGeneratorManager: MixGeneratorManager,
     private val mixRepository: MixRepository,
@@ -231,6 +232,20 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch { playlistRepository.createPlaylist(name) }
     }
 
+    // ─── M3U folder sync ───
+
+    fun setPlaylistSyncFolder(uri: android.net.Uri?) {
+        viewModelScope.launch { playlistFolderSync.setFolder(uri) }
+    }
+
+    fun syncPlaylistFolderNow(onDone: (dev.yuwixx.resonance.data.playlist.PlaylistFolderSync.Report) -> Unit) {
+        viewModelScope.launch { onDone(playlistFolderSync.syncNow()) }
+    }
+
+    fun exportAllPlaylistsToFolder(onDone: (Int) -> Unit) {
+        viewModelScope.launch { onDone(playlistFolderSync.exportAll()) }
+    }
+
     fun saveSmartPlaylist(playlistId: Long?, name: String, rules: dev.yuwixx.resonance.data.playlist.SmartRules) {
         viewModelScope.launch { playlistRepository.saveSmartPlaylist(playlistId, name, rules) }
     }
@@ -393,6 +408,8 @@ class LibraryViewModel @Inject constructor(
                 if (artists.isNotEmpty()) _navidromeArtists.value = artists
             }
             syncLibrary()
+            // Pick up playlist files changed elsewhere (PC, Syncthing…) since the last run.
+            if (prefs.playlistSyncFolder.first() != null) runCatching { playlistFolderSync.syncNow() }
         }
         loadMostPlayed()
         allSongs.onEach { loadMostPlayed() }.launchIn(viewModelScope)
