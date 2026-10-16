@@ -1,0 +1,26 @@
+services:
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      UPLOAD_TOKEN: ${UPLOAD_TOKEN}
+      TTL_HOURS: "24"
+      MAX_UPLOAD_MB: "500"
+      RATE_LIMIT_MB_PER_HOUR: "3072"
+      RATE_LIMIT_REQUESTS_PER_HOUR: "300"
+      MAX_STORAGE_GB: "20"
+    volumes:
+      - share_data:/data
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    volumes:
+      - ./cloudflared:/home/nonroot/.cloudflared:ro
+    depends_on:
+      - app
+
+volumes:
+  share_data:

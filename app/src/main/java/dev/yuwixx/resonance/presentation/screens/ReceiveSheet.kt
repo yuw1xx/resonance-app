@@ -589,24 +589,51 @@ private suspend fun downloadToStorage(
     onProgress: (Float) -> Unit,
 ): File = withContext(Dispatchers.IO) {
     val url = URL(downloadUrl)
-    val connection = (network?.openConnection(url) ?: url.openConnection()).apply {
-        connectTimeout = 15_000
-        readTimeout    = 300_000
-        connect()
-    }
-
-    val totalBytes = connection.contentLengthLong
     val tempFile = File.createTempFile("resonance_recv", ".tmp", context.cacheDir)
-    connection.getInputStream().use { input ->
-        tempFile.outputStream().use { output ->
-            val buf  = ByteArray(64 * 1024)
-            var read = 0L
-            var n: Int
-            while (input.read(buf).also { n = it } != -1) {
-                output.write(buf, 0, n)
-                read += n
-                if (totalBytes > 0) onProgress((read.toFloat() / totalBytes).coerceIn(0f, 1f))
+    var received = 0L
+    var totalBytes = -1L
+    var attempt = 0
+    // Resumable: if the connection drops, reconnect and ask for the rest with a Range header
+    // (the relay supports it). A server that ignores Range answers 200 and we start over.
+    while (true) {
+        val connection = ((network?.openConnection(url) ?: url.openConnection()) as java.net.HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout    = 300_000
+            if (received > 0) setRequestProperty("Range", "bytes=$received-")
+            connect()
+        }
+        try {
+            when (val code = connection.responseCode) {
+                200 -> {
+                    received = 0
+                    totalBytes = connection.contentLengthLong
+                }
+                206 -> if (totalBytes <= 0) totalBytes = received + connection.contentLengthLong
+                404, 410 -> throw java.io.IOException("This link has expired or was already used")
+                else -> throw java.io.IOException("Download failed (HTTP $code)")
             }
+            java.io.FileOutputStream(tempFile, received > 0).use { output ->
+                connection.inputStream.use { input ->
+                    val buf = ByteArray(64 * 1024)
+                    var n: Int
+                    while (input.read(buf).also { n = it } != -1) {
+                        output.write(buf, 0, n)
+                        received += n
+                        if (totalBytes > 0) onProgress((received.toFloat() / totalBytes).coerceIn(0f, 1f))
+                    }
+                }
+            }
+            if (totalBytes <= 0 || received >= totalBytes) break
+            throw java.io.IOException("Connection ended early")
+        } catch (e: java.io.IOException) {
+            val retryable = e.message?.startsWith("This link") != true && e.message?.startsWith("Download failed") != true
+            if (!retryable || ++attempt > 5) {
+                tempFile.delete()
+                throw e
+            }
+            kotlinx.coroutines.delay(1_000L * attempt)
+        } finally {
+            connection.disconnect()
         }
     }
     val destFile = tempFile.inputStream().use { input ->

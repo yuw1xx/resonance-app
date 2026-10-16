@@ -218,7 +218,8 @@ class ShareTransferManager @Inject constructor(
     private fun uploadOneFile(song: Song, file: File, ttlHours: Int, config: RelayConfig, onProgress: (Float) -> Unit = {}): String {
         val mediaType = song.mimeType.ifBlank { "application/octet-stream" }.toMediaTypeOrNull()
         val request = Request.Builder()
-            .url("${config.serverUrl}/upload?ttlHours=$ttlHours")
+            // ext lets the server name the download properly (song.mp3 instead of "song").
+            .url("${config.serverUrl}/upload?ttlHours=$ttlHours&ext=${Uri.encode(file.extension.lowercase())}")
             .header("Authorization", "Bearer ${config.uploadToken}")
             .header("X-Device-Id", config.deviceId)
             .post(ProgressRequestBody(file.asRequestBody(mediaType), onProgress))
@@ -229,6 +230,7 @@ class ShareTransferManager @Inject constructor(
             val message = when (response.code) {
                 429 -> "The share server is rate-limiting you right now — try again in a bit."
                 413 -> "That file is too large for the share server."
+                507 -> "The share server is out of space right now — try again later."
                 else -> "Upload failed for '${song.title}': HTTP ${response.code}"
             }
             throw Exception(message)
