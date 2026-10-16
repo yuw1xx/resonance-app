@@ -231,6 +231,15 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch { playlistRepository.createPlaylist(name) }
     }
 
+    fun saveSmartPlaylist(playlistId: Long?, name: String, rules: dev.yuwixx.resonance.data.playlist.SmartRules) {
+        viewModelScope.launch { playlistRepository.saveSmartPlaylist(playlistId, name, rules) }
+    }
+
+    /** Freezes a smart playlist's current songs into a normal, editable playlist. */
+    fun convertSmartToStatic(playlist: Playlist) {
+        viewModelScope.launch { playlistRepository.convertSmartToStatic(playlist.id, playlist.songs.map { it.id }) }
+    }
+
     fun createPlaylistWithSongs(name: String, songIds: List<Long>) {
         viewModelScope.launch { playlistRepository.createPlaylistWithSongs(name, songIds) }
     }

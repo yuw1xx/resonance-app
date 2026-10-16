@@ -15,6 +15,8 @@ data class BackupSongEntry(
 data class BackupPlaylistEntry(
     val name: String,
     val songs: List<BackupSongEntry>,
+    /** Set for smart playlists: their rules travel instead of a song list. */
+    val smartRules: dev.yuwixx.resonance.data.playlist.SmartRules? = null,
 )
 
 // A generic DataStore preference snapshot — key/type/value rather than one field per setting —

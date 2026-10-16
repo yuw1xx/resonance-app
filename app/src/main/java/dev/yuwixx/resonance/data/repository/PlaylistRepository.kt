@@ -14,6 +14,9 @@ import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.model.Playlist
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.data.database.entity.SmartPlaylistEntity
+import dev.yuwixx.resonance.data.playlist.SmartPlaylistMatcher
+import dev.yuwixx.resonance.data.playlist.SmartRules
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
@@ -29,19 +32,30 @@ class PlaylistRepository @Inject constructor(
     private val mixNavidromeSongDao: MixNavidromeSongDao,
     private val prefs: ResonancePreferences,
     private val navidromeSyncRepository: NavidromeSyncRepository,
+    private val smartPlaylistDao: dev.yuwixx.resonance.data.database.dao.SmartPlaylistDao,
+    private val likedSongsDao: dev.yuwixx.resonance.data.database.dao.LikedSongsDao,
+    private val moshi: com.squareup.moshi.Moshi,
 ) {
+    private data class Library(
+        val entities: List<PlaylistEntity>,
+        val refs: Map<Long, List<PlaylistSongCrossRef>>,
+        val localById: Map<Long, Song>,
+        val navidromeByNumericId: Map<Long, Song>,
+        val navidromeById: Map<String, Song>,
+    )
+
+    private val rulesAdapter by lazy { moshi.adapter(SmartRules::class.java) }
+
     // Built from whole-table flows joined in memory: one emission whenever playlists, their
     // song refs, or the songs themselves change (a rescan, a tag edit), instead of the old
     // query-per-song-per-playlist fan-out that also missed ref/song changes entirely.
-    val allPlaylists: Flow<List<Playlist>> = combine(
+    private val library: Flow<Library> = combine(
         playlistDao.getAllPlaylists(),
         playlistDao.observeAllSongRefs(),
         songDao.getAllSongs(),
         navidromeSongDao.getAllSongs(),
         prefs.artistDelimiter,
     ) { entities, refs, localSongs, navidromeSongs, delimiter ->
-        if (entities.isEmpty()) return@combine emptyList()
-        val refsByPlaylist = refs.groupBy { it.playlistId }
         val localById = HashMap<Long, Song>(localSongs.size * 2)
         localSongs.forEach { localById[it.id] = it.toDomain(delimiter) }
         val navidromeByNumericId = HashMap<Long, Song>(navidromeSongs.size * 2)
@@ -51,22 +65,66 @@ class PlaylistRepository @Inject constructor(
             navidromeByNumericId[it.numericId] = song
             navidromeById[it.navidromeId] = song
         }
-        entities.map { entity ->
-            val songs = if (entity.isMix && entity.mixSource == "NAVIDROME") {
-                mixNavidromeSongDao.getSongRefs(entity.id).mapNotNull { navidromeById[it.navidromeSongId] }
-            } else {
-                // Songs added while Navidrome is the active source are stored by their numeric
-                // Navidrome id. Linked playlists resolve against Navidrome first so a numeric id
-                // that happens to collide with a MediaStore id doesn't show the wrong local song.
-                val preferNavidrome = entity.navidromePlaylistId != null
-                refsByPlaylist[entity.id].orEmpty().mapNotNull { ref ->
-                    if (preferNavidrome) navidromeByNumericId[ref.songId] ?: localById[ref.songId]
-                    else localById[ref.songId] ?: navidromeByNumericId[ref.songId]
+        Library(entities, refs.groupBy { it.playlistId }, localById, navidromeByNumericId, navidromeById)
+    }
+
+    // Smart playlists are evaluated here against the active library, so they update live with
+    // rescans, play counts and likes.
+    val allPlaylists: Flow<List<Playlist>> = combine(
+        library,
+        smartPlaylistDao.observeAll(),
+        likedSongsDao.getLikedSongIds(),
+        prefs.musicSource,
+    ) { lib, smartEntities, likedIds, source ->
+        if (lib.entities.isEmpty()) return@combine emptyList()
+        val rulesById = smartEntities.mapNotNull { e ->
+            runCatching { rulesAdapter.fromJson(e.rulesJson) }.getOrNull()?.let { e.playlistId to it }
+        }.toMap()
+        val liked = likedIds.toHashSet()
+        val activeLibrary by lazy {
+            if (source == MusicSource.NAVIDROME) lib.navidromeByNumericId.values.toList() else lib.localById.values.toList()
+        }
+        lib.entities.map { entity ->
+            val rules = rulesById[entity.id]
+            val songs = when {
+                rules != null -> SmartPlaylistMatcher.apply(rules, activeLibrary, liked, seed = entity.id)
+                entity.isMix && entity.mixSource == "NAVIDROME" ->
+                    mixNavidromeSongDao.getSongRefs(entity.id).mapNotNull { lib.navidromeById[it.navidromeSongId] }
+                else -> {
+                    // Songs added while Navidrome is the active source are stored by their numeric
+                    // Navidrome id. Linked playlists resolve against Navidrome first so a numeric id
+                    // that happens to collide with a MediaStore id doesn't show the wrong local song.
+                    val preferNavidrome = entity.navidromePlaylistId != null
+                    lib.refs[entity.id].orEmpty().mapNotNull { ref ->
+                        if (preferNavidrome) lib.navidromeByNumericId[ref.songId] ?: lib.localById[ref.songId]
+                        else lib.localById[ref.songId] ?: lib.navidromeByNumericId[ref.songId]
+                    }
                 }
             }
-            entity.toDomain(songs)
+            entity.toDomain(songs).let { if (rules != null) it.copy(smartRules = rules, isReadOnly = true) else it }
         }
     }.flowOn(Dispatchers.Default)
+
+    /** Creates a smart playlist, or updates the name and rules of an existing one. */
+    suspend fun saveSmartPlaylist(playlistId: Long?, name: String, rules: SmartRules): Long {
+        val id = if (playlistId == null) {
+            playlistDao.insertPlaylist(PlaylistEntity(name = name, artworkUri = null))
+        } else {
+            playlistDao.getPlaylistById(playlistId)?.let {
+                playlistDao.updatePlaylist(it.copy(name = name, dateModified = System.currentTimeMillis()))
+            }
+            playlistId
+        }
+        smartPlaylistDao.upsert(SmartPlaylistEntity(playlistId = id, rulesJson = rulesAdapter.toJson(rules)))
+        return id
+    }
+
+    /** Turns a smart playlist into a normal one with its current songs. */
+    suspend fun convertSmartToStatic(playlistId: Long, songIds: List<Long>) {
+        smartPlaylistDao.delete(playlistId)
+        playlistDao.replaceSongs(playlistId, songIds)
+        updateModifiedTime(playlistId)
+    }
 
     private fun PlaylistEntity.toDomain(songs: List<Song>): Playlist = Playlist(
         id = id,
@@ -94,6 +152,7 @@ class PlaylistRepository @Inject constructor(
     suspend fun deletePlaylist(playlistId: Long) {
         val entity = playlistDao.getPlaylistById(playlistId) ?: return
         playlistDao.deletePlaylistAndSongs(entity)
+        smartPlaylistDao.delete(playlistId)
         entity.navidromePlaylistId?.let { navidromeSyncRepository.pushPlaylistDelete(it) }
     }
 

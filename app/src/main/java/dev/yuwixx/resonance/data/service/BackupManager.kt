@@ -49,8 +49,10 @@ class BackupManager @Inject constructor(
     private val songDao: SongDao,
     private val historyDao: HistoryDao,
     private val prefs: ResonancePreferences,
+    private val smartPlaylistDao: dev.yuwixx.resonance.data.database.dao.SmartPlaylistDao,
 ) {
     private val adapter = moshi.adapter(BackupFile::class.java).indent("  ")
+    private val rulesAdapter = moshi.adapter(dev.yuwixx.resonance.data.playlist.SmartRules::class.java)
 
     suspend fun createBackup(uri: Uri): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -58,9 +60,14 @@ class BackupManager @Inject constructor(
                 .mapNotNull { songDao.getSongById(it) }
                 .map { it.toBackupEntry() }
 
+            val smartRules = smartPlaylistDao.getAll().associate { it.playlistId to it.rulesJson }
             val playlists = playlistDao.getAllPlaylistsList()
                 .filter { !it.isReadOnly } // excludes auto-generated Smart Mixes (isMix implies isReadOnly)
                 .map { playlist ->
+                    smartRules[playlist.id]?.let { json ->
+                        val rules = runCatching { rulesAdapter.fromJson(json) }.getOrNull()
+                        if (rules != null) return@map BackupPlaylistEntry(name = playlist.name, songs = emptyList(), smartRules = rules)
+                    }
                     val songs = playlistDao.getPlaylistSongRefs(playlist.id)
                         .mapNotNull { ref -> songDao.getSongById(ref.songId) }
                         .map { it.toBackupEntry() }
@@ -140,6 +147,13 @@ class BackupManager @Inject constructor(
                 // the existing row and replacing its song list makes a repeat import a no-op
                 // instead of piling up duplicates.
                 if (existing != null) playlistDao.clearPlaylist(playlistId)
+                pb.smartRules?.let { rules ->
+                    smartPlaylistDao.upsert(
+                        dev.yuwixx.resonance.data.database.entity.SmartPlaylistEntity(playlistId, rulesAdapter.toJson(rules))
+                    )
+                    playlistsRestored++
+                    continue
+                }
                 var position = 0
                 for (entry in pb.songs) {
                     val song = findSong(entry, contentIndex)

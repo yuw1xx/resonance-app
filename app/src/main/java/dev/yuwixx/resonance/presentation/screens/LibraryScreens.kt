@@ -731,6 +731,7 @@ fun PlaylistsScreen(
     val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
     val importState by libraryViewModel.m3uImportState.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showSmartEditor by remember { mutableStateOf(false) }
     val launchImport = rememberM3uImportLauncher { uris -> libraryViewModel.startM3uImport(uris) }
 
     Scaffold(
@@ -740,6 +741,9 @@ fun PlaylistsScreen(
                 actions = {
                     IconButton(onClick = launchImport) {
                         Icon(Icons.Rounded.FileOpen, "Import M3U playlist")
+                    }
+                    IconButton(onClick = { showSmartEditor = true }) {
+                        Icon(Icons.Rounded.AutoAwesome, "New smart playlist")
                     }
                     IconButton(onClick = { showCreateDialog = true }) {
                         Icon(Icons.Rounded.Add, "New Playlist")
@@ -791,6 +795,16 @@ fun PlaylistsScreen(
                 }
             }
         }
+    }
+
+    if (showSmartEditor) {
+        dev.yuwixx.resonance.presentation.components.SmartPlaylistEditor(
+            onDismiss = { showSmartEditor = false },
+            onSave = { name, rules ->
+                libraryViewModel.saveSmartPlaylist(null, name, rules)
+                showSmartEditor = false
+            },
+        )
     }
 
     if (showCreateDialog) {
@@ -845,10 +859,11 @@ fun PlaylistCard(playlist: Playlist, onClick: () -> Unit, modifier: Modifier = M
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        Icons.AutoMirrored.Rounded.QueueMusic,
+                        if (playlist.isSmart) Icons.Rounded.AutoAwesome else Icons.AutoMirrored.Rounded.QueueMusic,
                         null,
                         modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        tint = if (playlist.isSmart) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     )
                 }
             }
@@ -862,7 +877,7 @@ fun PlaylistCard(playlist: Playlist, onClick: () -> Unit, modifier: Modifier = M
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "${playlist.songCount} songs",
+            text = if (playlist.isSmart) "Smart · ${playlist.songCount} songs" else "${playlist.songCount} songs",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1325,6 +1340,7 @@ fun PlaylistDetailScreen(
     var showRenameDialog  by remember { mutableStateOf(false) }
     var showSortDialog    by remember { mutableStateOf(false) }
     var showOverflowMenu  by remember { mutableStateOf(false) }
+    var showSmartEditor   by remember { mutableStateOf(false) }
 
     // Manual drag-to-reorder only makes sense under Natural order — any other sort re-derives
     // playlistSongs from a comparator (above) that would immediately override a manual drag.
@@ -1408,22 +1424,39 @@ fun PlaylistDetailScreen(
                             expanded = showOverflowMenu,
                             onDismissRequest = { showOverflowMenu = false }
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("Rename") },
-                                leadingIcon = { Icon(Icons.Rounded.Edit, null) },
-                                onClick = { showOverflowMenu = false; showRenameDialog = true }
-                            )
+                            val smart = playlist?.isSmart == true
+                            if (smart) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit rules") },
+                                    leadingIcon = { Icon(Icons.Rounded.AutoAwesome, null) },
+                                    onClick = { showOverflowMenu = false; showSmartEditor = true }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Convert to normal playlist") },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Rounded.QueueMusic, null) },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        playlist?.let { libraryViewModel.convertSmartToStatic(it) }
+                                    }
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text = { Text("Rename") },
+                                    leadingIcon = { Icon(Icons.Rounded.Edit, null) },
+                                    onClick = { showOverflowMenu = false; showRenameDialog = true }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Change Cover") },
                                 leadingIcon = { Icon(Icons.Rounded.Image, null) },
                                 onClick = { showOverflowMenu = false; imagePicker.launch("image/*") }
                             )
-                            DropdownMenuItem(
+                            if (!smart) DropdownMenuItem(
                                 text = { Text("Sort by…") },
                                 leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Sort, null) },
                                 onClick = { showOverflowMenu = false; showSortDialog = true }
                             )
-                            DropdownMenuItem(
+                            if (!smart) DropdownMenuItem(
                                 text = { Text("Remove Duplicates") },
                                 leadingIcon = { Icon(Icons.Rounded.FilterList, null) },
                                 onClick = {
@@ -1600,6 +1633,20 @@ fun PlaylistDetailScreen(
                     )
                 }
             }
+        }
+    }
+
+    if (showSmartEditor) {
+        playlist?.smartRules?.let { rules ->
+            dev.yuwixx.resonance.presentation.components.SmartPlaylistEditor(
+                initialName = playlist.name,
+                initialRules = rules,
+                onDismiss = { showSmartEditor = false },
+                onSave = { name, newRules ->
+                    libraryViewModel.saveSmartPlaylist(playlistId, name, newRules)
+                    showSmartEditor = false
+                },
+            )
         }
     }
 
