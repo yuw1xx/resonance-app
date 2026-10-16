@@ -60,8 +60,9 @@ class TagEditor @Inject constructor(
     }
 
     suspend fun readEmbeddedLyrics(uri: Uri): String? = withContext(Dispatchers.IO) {
+        // Downloaded copies (file://) are read directly; MediaStore items need their path.
         @Suppress("DEPRECATION")
-        val path = context.contentResolver.query(
+        val path = if (uri.scheme == "file") uri.path else context.contentResolver.query(
             uri,
             arrayOf(MediaStore.Audio.Media.DATA),
             null, null, null,

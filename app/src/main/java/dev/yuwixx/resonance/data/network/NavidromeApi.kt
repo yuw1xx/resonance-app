@@ -83,6 +83,14 @@ interface NavidromeApi {
 
     @GET("rest/deletePlaylist.view")
     suspend fun deletePlaylist(@Query("id") id: String): SubsonicResponse
+
+    /** OpenSubsonic: structured (possibly synced) lyrics for a song. */
+    @GET("rest/getLyricsBySongId.view")
+    suspend fun getLyricsBySongId(@Query("id") id: String): SubsonicResponse
+
+    /** Classic Subsonic: plain lyrics by artist + title. */
+    @GET("rest/getLyrics.view")
+    suspend fun getLyrics(@Query("artist") artist: String, @Query("title") title: String): SubsonicResponse
 }
 
 @JsonClass(generateAdapter = true)
@@ -106,7 +114,26 @@ data class SubsonicResponseBody(
     val searchResult3: SubsonicSearchResult? = null,
     val starred2: SubsonicStarred2? = null,
     val scanStatus: SubsonicScanStatus? = null,
+    val lyricsList: SubsonicLyricsList? = null,
+    val lyrics: SubsonicPlainLyrics? = null,
 )
+
+@JsonClass(generateAdapter = true)
+data class SubsonicLyricsList(val structuredLyrics: List<SubsonicStructuredLyrics> = emptyList())
+
+@JsonClass(generateAdapter = true)
+data class SubsonicStructuredLyrics(
+    val lang: String? = null,
+    val synced: Boolean = false,
+    val offset: Long? = null,
+    val line: List<SubsonicLyricLine> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class SubsonicLyricLine(val start: Long? = null, val value: String = "")
+
+@JsonClass(generateAdapter = true)
+data class SubsonicPlainLyrics(val value: String? = null)
 
 @JsonClass(generateAdapter = true)
 data class SubsonicScanStatus(

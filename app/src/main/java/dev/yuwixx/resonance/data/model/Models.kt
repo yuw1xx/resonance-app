@@ -94,9 +94,14 @@ enum class RepeatMode { NONE, ONE, ALL }
 @Immutable
 data class LyricLine(
     val timeMs: Long,
+    /** Empty for an instrumental gap (a timestamp with no words). */
     val text: String,
     val wordTimings: List<WordTiming> = emptyList(),
-)
+    /** A second line sharing the same timestamp (usually a translation or romanization). */
+    val translation: String? = null,
+) {
+    val isGap: Boolean get() = text.isBlank()
+}
 
 @Immutable
 data class WordTiming(

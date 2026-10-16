@@ -84,7 +84,6 @@ fun PlayerScreen(
     val artworkAnimation by playerViewModel.artworkAnimation.collectAsStateWithLifecycle()
     val sleepTimer by playerViewModel.sleepTimer.collectAsStateWithLifecycle()
     val lyricsResult by playerViewModel.lyricsResult.collectAsStateWithLifecycle()
-    val activeLyricIndex by playerViewModel.activeLyricIndex.collectAsStateWithLifecycle()
     val isTrackLoved by playerViewModel.isCurrentSongLiked.collectAsStateWithLifecycle()
     val artworkColors by playerViewModel.artworkColors.collectAsStateWithLifecycle()
     val nextSong by playerViewModel.nextSong.collectAsStateWithLifecycle()
@@ -104,11 +103,6 @@ fun PlayerScreen(
     var showOptionsSheet by remember { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-
-    // Close the lyrics overlay whenever the song changes so stale lyrics never show.
-    LaunchedEffect(song.id) {
-        showLyricsOverlay = false
-    }
 
     LaunchedEffect(smartQueueError) {
         smartQueueError?.let {
@@ -207,11 +201,13 @@ fun PlayerScreen(
         ) {
             LyricsOverlay(
                 result = lyricsResult,
-                activeLineIndex = activeLyricIndex,
+                activeLine = playerViewModel.activeLyricIndex,
+                position = playerViewModel.positionMs,
                 fontScale = lyricsFontScale,
                 onSeek = { playerViewModel.seekTo(it) },
                 onClose = { showLyricsOverlay = false },
                 onRetry = { playerViewModel.reloadLyrics() },
+                onSearch = onLyricsEdit,
             )
         }
 
@@ -866,7 +862,7 @@ private fun PlayerFooter(
         }
 
         if (showLyricsButton) {
-            val hasLyrics = lyricsResult !is LyricsResult.NotFound
+            val hasLyrics = lyricsResult is LyricsResult.Synced || lyricsResult is LyricsResult.Plain
             val isLoading = lyricsResult is LyricsResult.Loading
             val lyricsInteraction = remember { MutableInteractionSource() }
             val isLyricsPressed by lyricsInteraction.collectIsPressedAsState()
@@ -1423,14 +1419,17 @@ private fun DynamicBackground(
 
 // ─── Lyrics Overlay ───
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun LyricsOverlay(
     result: LyricsResult,
-    activeLineIndex: Int,
+    activeLine: kotlinx.coroutines.flow.StateFlow<Int>,
+    position: kotlinx.coroutines.flow.StateFlow<Long>,
     fontScale: Float,
     onSeek: (Long) -> Unit,
     onClose: () -> Unit,
     onRetry: () -> Unit,
+    onSearch: () -> Unit,
 ) {
     val config = LocalAppearanceConfig.current
     val textAlign = if (config.lyricAlignment == "CENTER") TextAlign.Center else TextAlign.Start
@@ -1439,20 +1438,49 @@ fun LyricsOverlay(
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    // Collected here, not in PlayerScreen, so a line change only recomposes the overlay.
+    val activeLineIndex by activeLine.collectAsStateWithLifecycle()
 
     val lyrics: List<LyricLine> = remember(result) {
         when (result) {
             is LyricsResult.Synced -> result.lines
-            is LyricsResult.Plain -> result.lines.map { l -> LyricLine(timeMs = 0L, text = l) }
+            is LyricsResult.Plain -> result.lines.map { l -> LyricLine(timeMs = -1L, text = l) }
             else -> emptyList()
         }
     }
+    val synced = result is LyricsResult.Synced
 
-    // Keep the active line about a third of the way down the viewport, whatever its height.
-    LaunchedEffect(activeLineIndex) {
-        if (activeLineIndex >= 0) {
-            val viewport = listState.layoutInfo.viewportSize.height
-            listState.animateScrollToItem(activeLineIndex, scrollOffset = -(viewport / 3))
+    // Auto-scroll follows the song, but steps aside while the user scrolls the lyrics; it
+    // resumes 3 s after they stop, or right away from the "Sync" button.
+    var programmaticScroll by remember { mutableStateOf(false) }
+    var userScrolledAt by remember { mutableLongStateOf(0L) }
+    var followSong by remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (scrolling && !programmaticScroll) {
+                followSong = false
+                userScrolledAt = System.currentTimeMillis()
+            }
+        }
+    }
+    LaunchedEffect(followSong, userScrolledAt) {
+        if (!followSong) {
+            kotlinx.coroutines.delay(3_000)
+            if (!listState.isScrollInProgress) followSong = true
+        }
+    }
+    // First positioning after the lyrics (re)load jumps; later line changes glide.
+    var positioned by remember(result) { mutableStateOf(false) }
+    LaunchedEffect(activeLineIndex, followSong, result) {
+        if (!synced || !followSong || activeLineIndex < 0) return@LaunchedEffect
+        val viewport = listState.layoutInfo.viewportSize.height
+        programmaticScroll = true
+        try {
+            if (positioned) listState.animateScrollToItem(activeLineIndex, scrollOffset = -(viewport / 3))
+            else listState.scrollToItem(activeLineIndex, scrollOffset = -(viewport / 3))
+            positioned = true
+        } finally {
+            programmaticScroll = false
         }
     }
 
@@ -1473,57 +1501,26 @@ fun LyricsOverlay(
                         Icon(Icons.Rounded.Close, "Close lyrics")
                     }
                 }
-    
+
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     when {
-                        result is LyricsResult.Loading -> {
-                            @OptIn(ExperimentalMaterial3ExpressiveApi::class)
-                            ContainedLoadingIndicator()
-                        }
-                        result is LyricsResult.Error -> {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Icon(
-                                    Icons.Rounded.ErrorOutline,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(40.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text(
-                                    "Couldn't load lyrics",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                )
-                                Spacer(Modifier.height(16.dp))
-                                FilledTonalButton(onClick = onRetry) {
-                                    Text("Retry")
-                                }
-                            }
-                        }
-                        lyrics.isEmpty() -> {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Icon(
-                                    Icons.Rounded.MicExternalOff,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(40.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text(
-                                    "No lyrics found for this track",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                )
-                            }
-                        }
+                        result is LyricsResult.Loading -> ContainedLoadingIndicator()
+                        result is LyricsResult.Error -> LyricsMessage(
+                            icon = Icons.Rounded.ErrorOutline,
+                            title = "Couldn't load lyrics",
+                            action = "Retry",
+                            onAction = onRetry,
+                        )
+                        result is LyricsResult.Instrumental -> LyricsMessage(
+                            icon = Icons.Rounded.MusicNote,
+                            title = "Instrumental",
+                        )
+                        lyrics.isEmpty() -> LyricsMessage(
+                            icon = Icons.Rounded.MicExternalOff,
+                            title = "No lyrics found for this track",
+                            action = "Search or add lyrics",
+                            onAction = onSearch,
+                        )
                         else -> {
                             val lyricsSpacing = when (config.lyricsLineSpacing) {
                                 "COMPACT" -> 16.dp
@@ -1541,13 +1538,17 @@ fun LyricsOverlay(
                             // or re-flows the list (switching text styles used to do both).
                             val baseStyle = MaterialTheme.typography.headlineSmall
                             val lineStyle = remember(baseStyle, fontScale, lyricsFontFamily) {
-                            baseStyle.copy(
-                            fontSize = baseStyle.fontSize * fontScale,
-                            lineHeight = baseStyle.lineHeight * fontScale,
-                            fontFamily = lyricsFontFamily ?: baseStyle.fontFamily,
-                            fontWeight = FontWeight.Bold,
-                            )
+                                baseStyle.copy(
+                                    fontSize = baseStyle.fontSize * fontScale,
+                                    lineHeight = baseStyle.lineHeight * fontScale,
+                                    fontFamily = lyricsFontFamily ?: baseStyle.fontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                )
                             }
+                            val translationStyle = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = MaterialTheme.typography.titleMedium.fontSize * fontScale,
+                                fontFamily = lyricsFontFamily ?: MaterialTheme.typography.titleMedium.fontFamily,
+                            )
                             val activeColor = MaterialTheme.colorScheme.primary
                             val idleColor = MaterialTheme.colorScheme.onSurface
                             val motion = MaterialTheme.motionScheme
@@ -1557,15 +1558,19 @@ fun LyricsOverlay(
                                 contentPadding = PaddingValues(horizontal = 32.dp, vertical = 100.dp),
                                 verticalArrangement = Arrangement.spacedBy(lyricsSpacing),
                             ) {
-                                itemsIndexed(lyrics, key = { index, line -> "$index-${line.timeMs}" }, contentType = { _, _ -> "line" }) { index, line ->
-                                    val isActive = index == activeLineIndex
+                                itemsIndexed(
+                                    lyrics,
+                                    key = { index, line -> "$index-${line.timeMs}" },
+                                    contentType = { _, line -> if (line.isGap) "gap" else "line" },
+                                ) { index, line ->
+                                    val isActive = synced && index == activeLineIndex
                                     val emphasis by animateFloatAsState(
                                         targetValue = if (isActive) 1f else 0f,
                                         animationSpec = motion.defaultSpatialSpec(),
                                         label = "lyric_emphasis",
                                     )
                                     val lineAlpha = when {
-                                        isActive -> 1f
+                                        !synced || isActive -> 1f
                                         index < activeLineIndex -> 0.35f
                                         else -> 0.55f
                                     }
@@ -1574,43 +1579,145 @@ fun LyricsOverlay(
                                         animationSpec = motion.defaultEffectsSpec(),
                                         label = "lyric_color",
                                     )
-    
-                                    Text(
-                                        text = line.text,
-                                        style = lineStyle,
-                                        color = color,
-                                        textAlign = textAlign,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .graphicsLayer {
-                                                val s = 1f + 0.06f * emphasis
-                                                scaleX = s
-                                                scaleY = s
-                                                transformOrigin = if (textAlign == TextAlign.Center) TransformOrigin.Center else TransformOrigin(0f, 0.5f)
-                                            }
-                                            .combinedClickable(
-                                                enabled = line.text.isNotBlank(),
-                                                onClick = { if (line.timeMs > 0L) onSeek(line.timeMs) },
-                                                onLongClick = {
-                                                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                                    scope.launch {
-                                                        clipboard.setClipEntry(
-                                                            androidx.compose.ui.platform.ClipEntry(
-                                                                android.content.ClipData.newPlainText("Lyrics", line.text)
-                                                            )
+                                    val itemModifier = Modifier
+                                        .fillMaxWidth()
+                                        .graphicsLayer {
+                                            val s = 1f + 0.06f * emphasis
+                                            scaleX = s
+                                            scaleY = s
+                                            transformOrigin = if (textAlign == TextAlign.Center) TransformOrigin.Center else TransformOrigin(0f, 0.5f)
+                                        }
+                                        .combinedClickable(
+                                            enabled = !line.isGap,
+                                            onClick = { if (line.timeMs >= 0L) onSeek(line.timeMs) },
+                                            onLongClick = {
+                                                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                scope.launch {
+                                                    clipboard.setClipEntry(
+                                                        androidx.compose.ui.platform.ClipEntry(
+                                                            android.content.ClipData.newPlainText("Lyrics", line.text)
                                                         )
-                                                        snackbar.showSnackbar("Line copied")
-                                                    }
-                                                },
-                                            ),
-                                    )
+                                                    )
+                                                    snackbar.showSnackbar("Line copied")
+                                                }
+                                            },
+                                        )
+
+                                    if (line.isGap) {
+                                        // Instrumental break: a quiet marker instead of an empty line.
+                                        Text(
+                                            "♪",
+                                            style = lineStyle,
+                                            color = color,
+                                            textAlign = textAlign,
+                                            modifier = itemModifier,
+                                        )
+                                    } else {
+                                        Column(itemModifier) {
+                                            if (isActive && line.wordTimings.isNotEmpty()) {
+                                                KaraokeLine(
+                                                    line = line,
+                                                    position = position,
+                                                    style = lineStyle,
+                                                    sungColor = activeColor,
+                                                    unsungColor = idleColor.copy(alpha = 0.55f),
+                                                    textAlign = textAlign,
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = line.text,
+                                                    style = lineStyle,
+                                                    color = color,
+                                                    textAlign = textAlign,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                            }
+                                            line.translation?.let { translation ->
+                                                Text(
+                                                    text = translation,
+                                                    style = translationStyle,
+                                                    color = color.copy(alpha = color.alpha * 0.75f),
+                                                    textAlign = textAlign,
+                                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+
+            // Shown while auto-scroll is paused because the user scrolled away.
+            AnimatedVisibility(
+                visible = synced && !followSong && lyrics.isNotEmpty(),
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 24.dp),
+                enter = fadeIn() + scaleIn(initialScale = 0.9f),
+                exit = fadeOut() + scaleOut(targetScale = 0.9f),
+            ) {
+                FilledTonalButton(onClick = { followSong = true }) {
+                    Icon(Icons.Rounded.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Sync")
+                }
+            }
             SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+        }
+    }
+}
+
+/** The active line with word-level timing: sung words take the accent color as they're sung. */
+@Composable
+private fun KaraokeLine(
+    line: LyricLine,
+    position: kotlinx.coroutines.flow.StateFlow<Long>,
+    style: androidx.compose.ui.text.TextStyle,
+    sungColor: Color,
+    unsungColor: Color,
+    textAlign: TextAlign,
+) {
+    val positionMs by position.collectAsStateWithLifecycle()
+    // Only the number of words sung so far drives recomposition, not every position tick.
+    val sung by remember(line) {
+        derivedStateOf { line.wordTimings.count { it.startMs <= positionMs } }
+    }
+    val text = remember(line, sung) {
+        androidx.compose.ui.text.buildAnnotatedString {
+            line.wordTimings.forEachIndexed { i, word ->
+                if (i > 0) append(" ")
+                val start = length
+                append(word.word)
+                addStyle(androidx.compose.ui.text.SpanStyle(color = if (i < sung) sungColor else unsungColor), start, length)
+            }
+        }
+    }
+    Text(text = text, style = style, textAlign = textAlign, modifier = Modifier.fillMaxWidth())
+}
+
+@Composable
+private fun LyricsMessage(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    action: String? = null,
+    onAction: () -> Unit = {},
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        if (action != null) {
+            Spacer(Modifier.height(16.dp))
+            FilledTonalButton(onClick = onAction) { Text(action) }
         }
     }
 }

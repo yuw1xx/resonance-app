@@ -57,6 +57,8 @@ class SongDetailViewModel @Inject constructor(
                 album = s.album,
                 durationMs = s.duration,
                 songUri = s.uri,
+                songPath = s.path,
+                navidromeId = s.navidromeId,
             )
         }
     }

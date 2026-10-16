@@ -396,8 +396,15 @@ class PlayerViewModel @Inject constructor(
     private fun updateActiveLyricIndex(positionMs: Long) {
         val result = _lyricsResult.value
         if (result is LyricsResult.Synced) {
+            // Last line starting at or before the position (lines are sorted by time).
             val lines = result.lines
-            val activeIndex = lines.indexOfLast { it.timeMs <= positionMs }
+            var lo = 0
+            var hi = lines.lastIndex
+            var activeIndex = -1
+            while (lo <= hi) {
+                val mid = (lo + hi) ushr 1
+                if (lines[mid].timeMs <= positionMs) { activeIndex = mid; lo = mid + 1 } else hi = mid - 1
+            }
             if (activeIndex != _activeLyricIndex.value) {
                 _activeLyricIndex.value = activeIndex
             }
@@ -539,10 +546,12 @@ class PlayerViewModel @Inject constructor(
             _lyricsResult.value = lyricsRepository.getLyrics(
                 songId = song.id,
                 title = song.title,
-                artist = song.artist,
+                artist = song.displayArtist,
                 album = song.album,
                 durationMs = song.duration,
                 songUri = song.uri,
+                songPath = song.path,
+                navidromeId = song.navidromeId,
                 forceRefresh = true,
             )
         }
@@ -806,10 +815,12 @@ class PlayerViewModel @Inject constructor(
                             val lyrics = lyricsRepository.getLyrics(
                                 songId = song.id,
                                 title = song.title,
-                                artist = song.artist,
+                                artist = song.displayArtist,
                                 album = song.album,
                                 durationMs = song.duration,
                                 songUri = song.uri,
+                                songPath = song.path,
+                                navidromeId = song.navidromeId,
                             )
                             if (_currentSong.value?.id == song.id) _lyricsResult.value = lyrics
                         }
@@ -828,10 +839,12 @@ class PlayerViewModel @Inject constructor(
                                             lyricsRepository.getLyrics(
                                                 songId = nextSong.id,
                                                 title = nextSong.title,
-                                                artist = nextSong.artist,
+                                                artist = nextSong.displayArtist,
                                                 album = nextSong.album,
                                                 durationMs = nextSong.duration,
                                                 songUri = nextSong.uri,
+                                                songPath = nextSong.path,
+                                                navidromeId = nextSong.navidromeId,
                                             )
                                         }
                                     }
@@ -925,10 +938,12 @@ class PlayerViewModel @Inject constructor(
                 val lyrics = lyricsRepository.getLyrics(
                     songId = song.id,
                     title = song.title,
-                    artist = song.artist,
+                    artist = song.displayArtist,
                     album = song.album,
                     durationMs = song.duration,
                     songUri = song.uri,
+                    songPath = song.path,
+                    navidromeId = song.navidromeId,
                 )
                 if (_currentSong.value?.id == song.id) _lyricsResult.value = lyrics
             }

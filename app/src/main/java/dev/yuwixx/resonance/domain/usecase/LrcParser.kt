@@ -2,52 +2,114 @@
 // into LyricLine models. Pulled out as a standalone, dependency-free object (rather than a
 // LyricsRepository method) so it's directly unit-testable without needing to construct
 // LyricsRepository's full DI graph.
+//
+// Handles what real-world LRC files contain: several timestamps on one line (repeated
+// choruses), [m:ss] / [mm:ss.x] / [mm:ss.xxx] / 3-digit minutes, the [offset:] tag, empty
+// timestamp lines (instrumental breaks), two lines with the same timestamp (the second is
+// treated as a translation), and enhanced word timings with the original spacing kept.
 package dev.yuwixx.resonance.domain.usecase
 
 import dev.yuwixx.resonance.data.model.LyricLine
 import dev.yuwixx.resonance.data.model.WordTiming
 
 object LrcParser {
-    private val timePattern = Regex("""^\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)$""")
-    private val wordPattern = Regex("""<(\d{2}):(\d{2})\.(\d{2,3})>([^<]*)""")
+    private val timeTag = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
+    private val wordTag = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
+    private val offsetTag = Regex("""^\[offset:\s*([+-]?\d+)\s*]""", RegexOption.IGNORE_CASE)
+    private val leadingTimeTag = Regex("""^\s*\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?]""", RegexOption.MULTILINE)
+
+    /** True when the text contains at least one line starting with an LRC timestamp. */
+    fun isSynced(text: String): Boolean = leadingTimeTag.containsMatchIn(text)
+
+    private fun toMs(min: String, sec: String, frac: String): Long {
+        val fracMs = when (frac.length) {
+            0 -> 0L
+            1 -> frac.toLong() * 100
+            2 -> frac.toLong() * 10
+            else -> frac.take(3).toLong()
+        }
+        return min.toLong() * 60_000 + sec.toLong() * 1_000 + fracMs
+    }
+
+    private data class Entry(val timeMs: Long, val body: String, val order: Int)
 
     fun parse(lrc: String): List<LyricLine> {
-        val lines = mutableListOf<LyricLine>()
+        var offsetMs = 0L
+        val entries = mutableListOf<Entry>()
+        var order = 0
 
         for (raw in lrc.lines()) {
-            val match = timePattern.matchEntire(raw.trim()) ?: continue
-            val (min, sec, centis, rest) = match.destructured
-            val timeMs = min.toLong() * 60_000 +
-                         sec.toLong() * 1_000 +
-                         centis.toLong() * if (centis.length == 2) 10L else 1L
+            val line = raw.trim()
+            offsetTag.find(line)?.let { offsetMs = it.groupValues[1].toLongOrNull() ?: 0L; continue }
 
-            val wordMatches = wordPattern.findAll(rest).toList()
-            val wordTimings = if (wordMatches.isNotEmpty()) {
-                wordMatches.mapIndexed { i, wm ->
-                    val (wMin, wSec, wCs, word) = wm.destructured
-                    val startMs = wMin.toLong() * 60_000 +
-                                  wSec.toLong() * 1_000 +
-                                  wCs.toLong() * if (wCs.length == 2) 10L else 1L
-                    val endMs = wordMatches.getOrNull(i + 1)?.let { next ->
-                        val (nm, ns, nc, _) = next.destructured
-                        nm.toLong() * 60_000 + ns.toLong() * 1_000 +
-                                nc.toLong() * if (nc.length == 2) 10L else 1L
-                    } ?: (startMs + 500L)
-                    WordTiming(startMs = startMs, endMs = endMs, word = word.trim())
-                }
-            } else emptyList()
-
-            val text = if (wordTimings.isEmpty()) {
-                rest.trim()
-            } else {
-                wordTimings.joinToString(" ") { it.word }
+            // All timestamps at the start of the line apply to the same text.
+            val times = mutableListOf<Long>()
+            var pos = 0
+            while (true) {
+                val m = timeTag.matchAt(line, pos) ?: break
+                val (min, sec, frac) = m.destructured
+                times += toMs(min, sec, frac)
+                pos = m.range.last + 1
             }
-
-            if (text.isNotBlank() || wordTimings.isNotEmpty()) {
-                lines.add(LyricLine(timeMs = timeMs, text = text, wordTimings = wordTimings))
-            }
+            if (times.isEmpty()) continue
+            val body = line.substring(pos)
+            // A positive [offset:] shifts lyrics earlier.
+            times.forEach { t -> entries += Entry((t - offsetMs).coerceAtLeast(0L), body, order++) }
         }
 
-        return lines.sortedBy { it.timeMs }
+        val sorted = entries.sortedWith(compareBy({ it.timeMs }, { it.order }))
+        val grouped = sorted.groupBy { it.timeMs }.toSortedMap()
+        val times = grouped.keys.toList()
+
+        val result = mutableListOf<LyricLine>()
+        times.forEachIndexed { index, time ->
+            val bodies = grouped.getValue(time).map { it.body }
+            val texts = bodies.filter { stripWordTags(it).isNotBlank() }
+            val nextTime = times.getOrNull(index + 1)
+            if (texts.isEmpty()) {
+                // Instrumental gap: only meaningful between sung lines, and only once.
+                if (result.isNotEmpty() && result.last().isGap.not()) result += LyricLine(time, "")
+                return@forEachIndexed
+            }
+            val main = texts[0]
+            val translation = texts.getOrNull(1)?.let { stripWordTags(it).trim() }
+            val words = parseWords(main, time, nextTime)
+            val text = if (words.isEmpty()) main.trim() else stripWordTags(main).trim().replace(Regex("\\s+"), " ")
+            result += LyricLine(timeMs = time, text = text, wordTimings = words, translation = translation)
+        }
+        // A trailing gap is just the end marker.
+        if (result.lastOrNull()?.isGap == true) result.removeAt(result.lastIndex)
+        return result
+    }
+
+    private fun stripWordTags(s: String): String = wordTag.replace(s, "")
+
+    private fun parseWords(body: String, lineTime: Long, nextLineTime: Long?): List<WordTiming> {
+        val tags = wordTag.findAll(body).toList()
+        if (tags.isEmpty()) return emptyList()
+        val words = mutableListOf<WordTiming>()
+
+        val prefix = body.substring(0, tags.first().range.first)
+        val firstStart = tags.first().destructured.let { (m, s, f) -> toMs(m, s, f) }
+        if (prefix.isNotBlank()) words += WordTiming(lineTime, firstStart, prefix.trim())
+
+        tags.forEachIndexed { i, tag ->
+            val (m, s, f) = tag.destructured
+            val start = toMs(m, s, f)
+            val textEnd = tags.getOrNull(i + 1)?.range?.first ?: body.length
+            val word = body.substring(tag.range.last + 1, textEnd)
+            val end = tags.getOrNull(i + 1)?.destructured?.let { (nm, ns, nf) -> toMs(nm, ns, nf) }
+                ?: nextLineTime?.let { minOf(it, start + 5_000L) }
+                ?: (start + 500L)
+            // A trailing <time> with no text is the end time of the previous word.
+            if (word.isBlank()) {
+                if (words.isNotEmpty() && i == tags.lastIndex) {
+                    words[words.lastIndex] = words.last().copy(endMs = start)
+                }
+                return@forEachIndexed
+            }
+            words += WordTiming(startMs = start, endMs = end, word = word.trim())
+        }
+        return words
     }
 }

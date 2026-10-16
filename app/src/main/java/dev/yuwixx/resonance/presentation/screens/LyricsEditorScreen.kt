@@ -30,8 +30,15 @@ fun LyricsEditorScreen(
     lyricsRepository: LyricsRepository,
     onBack: () -> Unit,
 ) {
+    // Pinned to the song the editor was opened for: if playback moves on while editing, Save
+    // must still write to this song, not to whatever is playing now.
+    val song = remember { playerViewModel.currentSong.value }
+    if (song == null) {
+        LaunchedEffect(Unit) { onBack() }
+        return
+    }
     val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
-    val song = currentSong ?: run { onBack(); return }
+    val isCurrent = currentSong?.id == song.id
 
     var lrcText by remember { mutableStateOf("") }
     var isSaving by remember { mutableStateOf(false) }
@@ -71,6 +78,15 @@ fun LyricsEditorScreen(
                     }
                 },
                 actions = {
+                    // Tap-to-sync: while this song plays, each tap stamps the current time on
+                    // the next line that doesn't have a timestamp yet.
+                    if (isCurrent && lrcText.isNotBlank()) {
+                        IconButton(onClick = {
+                            lrcText = stampNextLine(lrcText, playerViewModel.positionMs.value)
+                        }) {
+                            Icon(Icons.Rounded.Timer, "Stamp next line with the current time")
+                        }
+                    }
                     IconButton(onClick = { showSearchSheet = true }) {
                         Icon(Icons.Rounded.Search, "Find lyrics on LRCLIB")
                     }
@@ -187,7 +203,7 @@ fun LyricsEditorScreen(
     LaunchedEffect(isSaving) {
         if (isSaving && lrcText.isNotBlank()) {
             lyricsRepository.saveManualLyrics(song.id, lrcText)
-            playerViewModel.reloadLyrics()
+            if (playerViewModel.currentSong.value?.id == song.id) playerViewModel.reloadLyrics()
             isSaving = false
             savedSnackbar = true
         }
@@ -380,4 +396,18 @@ private fun LyricsMetaBadge(text: String) {
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
         )
     }
+}
+
+private val leadingStamp = Regex("""^\s*\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?]""")
+
+/** Prefixes the first non-blank, unstamped, non-tag line with [mm:ss.xx] for [positionMs]. */
+internal fun stampNextLine(text: String, positionMs: Long): String {
+    val lines = text.lines().toMutableList()
+    val index = lines.indexOfFirst { line ->
+        line.isNotBlank() && !leadingStamp.containsMatchIn(line) && !line.trimStart().startsWith("[")
+    }
+    if (index < 0) return text
+    val stamp = "[%02d:%02d.%02d]".format(positionMs / 60_000, (positionMs / 1000) % 60, (positionMs / 10) % 100)
+    lines[index] = stamp + lines[index].trimStart()
+    return lines.joinToString("\n")
 }

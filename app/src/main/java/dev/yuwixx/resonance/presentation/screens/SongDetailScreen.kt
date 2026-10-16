@@ -212,6 +212,14 @@ private fun LyricsCard(lyricsResult: LyricsResult) {
                         }
                     }
                 }
+                is LyricsResult.Instrumental -> {
+                    Text(
+                        "Instrumental",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                }
                 is LyricsResult.NotFound -> {
                     Text(
                         "No lyrics found for this song.",
