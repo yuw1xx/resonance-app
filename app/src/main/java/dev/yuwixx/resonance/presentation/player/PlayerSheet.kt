@@ -4,12 +4,13 @@ import android.net.Uri
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
-import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
 import androidx.compose.foundation.gestures.AnchoredDraggableState
 import androidx.compose.foundation.gestures.DraggableAnchors
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +19,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -30,9 +32,13 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -45,6 +51,7 @@ import androidx.compose.ui.util.lerp
 import dev.yuwixx.resonance.presentation.components.ArtworkImage
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 enum class PlayerSheetValue { Collapsed, Expanded }
@@ -70,6 +77,7 @@ class PlayerSheetState(initialValue: PlayerSheetValue) {
 
     suspend fun expand() = animateTo(PlayerSheetValue.Expanded)
     suspend fun collapse() = animateTo(PlayerSheetValue.Collapsed)
+    internal suspend fun settle(value: PlayerSheetValue) = animateTo(value)
 
     private suspend fun animateTo(value: PlayerSheetValue) {
         val spec = animationSpec
@@ -246,11 +254,7 @@ fun PlayerSheet(
                     drawRect(lerp(collapsedContainerColor, expandedContainerColor, state.progress))
                 }
                 .onPlaced { morph.sheet = it }
-                .anchoredDraggable(
-                    state = state.draggable,
-                    orientation = Orientation.Vertical,
-                    flingBehavior = AnchoredDraggableDefaults.flingBehavior(state.draggable),
-                )
+                .sheetDrag(state)
         ) {
             CompositionLocalProvider(LocalArtworkMorph provides morph) {
                 if (showFull) {
@@ -282,6 +286,53 @@ fun PlayerSheet(
         }
     }
 }
+
+/**
+ * Vertical drag and fling for the sheet. The sheet moves under the finger while it is dragged, so
+ * pointer positions relative to the sheet understate the movement and read a flick as no velocity
+ * at all. Positions are converted to screen coordinates using where the sheet is actually placed.
+ */
+private fun Modifier.sheetDrag(state: PlayerSheetState): Modifier = composed {
+    val scope = rememberCoroutineScope()
+    val minFlingVelocity = with(LocalDensity.current) { SheetMinFlingVelocity.toPx() }
+    // Not state: only the gesture reads these.
+    val settleJob = remember { arrayOfNulls<Job>(1) }
+    val placedTop = remember { floatArrayOf(0f) }
+    onPlaced { placedTop[0] = it.positionInRoot().y }.pointerInput(state) {
+        val tracker = VelocityTracker()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val slop = awaitVerticalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                ?: return@awaitEachGesture
+            settleJob[0]?.cancel()
+            tracker.resetTracking()
+            var lastScreenY = slop.position.y + placedTop[0]
+            tracker.addPosition(slop.uptimeMillis, Offset(0f, lastScreenY))
+            state.draggable.dispatchRawDelta(slop.positionChange().y)
+            val completed = verticalDrag(slop.id) { change ->
+                // Batched samples since the last frame matter for the velocity of a quick flick.
+                change.historical.forEach {
+                    tracker.addPosition(it.uptimeMillis, Offset(0f, it.position.y + placedTop[0]))
+                }
+                val screenY = change.position.y + placedTop[0]
+                tracker.addPosition(change.uptimeMillis, Offset(0f, screenY))
+                state.draggable.dispatchRawDelta(screenY - lastScreenY)
+                lastScreenY = screenY
+                change.consume()
+            }
+            val velocity = if (completed) tracker.calculateVelocity().y else 0f
+            val target = when {
+                velocity > minFlingVelocity -> PlayerSheetValue.Collapsed
+                velocity < -minFlingVelocity -> PlayerSheetValue.Expanded
+                state.progress > 0.5f -> PlayerSheetValue.Expanded
+                else -> PlayerSheetValue.Collapsed
+            }
+            settleJob[0] = scope.launch { state.settle(target) }
+        }
+    }
+}
+
+private val SheetMinFlingVelocity = 125.dp
 
 /** The floating artwork copy that flies between the mini and full player artwork positions. */
 @Composable
