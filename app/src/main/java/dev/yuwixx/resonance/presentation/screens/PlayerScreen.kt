@@ -298,8 +298,10 @@ private fun BouncyIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     pressScale: Float = 0.84f,
+    hapticType: HapticFeedbackType = HapticFeedbackType.ContextClick,
     content: @Composable () -> Unit,
 ) {
+    val haptic = rememberHaptics()
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -308,7 +310,10 @@ private fun BouncyIconButton(
         label = "bouncy_press",
     )
     IconButton(
-        onClick = onClick,
+        onClick = {
+            haptic(hapticType)
+            onClick()
+        },
         interactionSource = interactionSource,
         modifier = modifier.scale(scale),
         content = content,
@@ -577,7 +582,11 @@ private fun PlaybackControls(
                 animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
                 label = "love_color",
             )
-            BouncyIconButton(onClick = onLoveTrack, modifier = Modifier.scale(loveScale)) {
+            BouncyIconButton(
+                onClick = onLoveTrack,
+                modifier = Modifier.scale(loveScale),
+                hapticType = if (isTrackLoved) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn,
+            ) {
                 Icon(
                     imageVector = if (isTrackLoved) Icons.Rounded.Favorite
                     else Icons.Rounded.FavoriteBorder,
@@ -674,6 +683,7 @@ private fun TransportControls(
             }
         }
     }
+    val haptic = rememberHaptics()
     val playInteraction = remember { MutableInteractionSource() }
     val pressed by playInteraction.collectIsPressedAsState()
     val pressScale = animateFloatAsState(
@@ -689,7 +699,10 @@ private fun TransportControls(
     ) {
         IconToggleButton(
             checked = shuffleEnabled,
-            onCheckedChange = { onShuffleToggle() },
+            onCheckedChange = {
+                haptic(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                onShuffleToggle()
+            },
             shapes = IconButtonDefaults.toggleableShapes(),
             colors = IconButtonDefaults.iconToggleButtonColors(
                 checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -700,7 +713,10 @@ private fun TransportControls(
         }
 
         FilledTonalIconButton(
-            onClick = onPrevious,
+            onClick = {
+                haptic(HapticFeedbackType.ContextClick)
+                onPrevious()
+            },
             shapes = IconButtonDefaults.shapes(),
             modifier = Modifier.size(56.dp),
         ) {
@@ -721,7 +737,10 @@ private fun TransportControls(
                 .clickable(
                     interactionSource = playInteraction,
                     indication = ripple(),
-                    onClick = onPlayPause,
+                    onClick = {
+                        haptic(HapticFeedbackType.Confirm)
+                        onPlayPause()
+                    },
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -743,7 +762,10 @@ private fun TransportControls(
         }
 
         FilledTonalIconButton(
-            onClick = onNext,
+            onClick = {
+                haptic(HapticFeedbackType.ContextClick)
+                onNext()
+            },
             shapes = IconButtonDefaults.shapes(),
             modifier = Modifier.size(56.dp),
         ) {
@@ -752,7 +774,10 @@ private fun TransportControls(
 
         IconToggleButton(
             checked = repeatMode != RepeatMode.NONE,
-            onCheckedChange = { onRepeatModeChange() },
+            onCheckedChange = {
+                haptic(HapticFeedbackType.SegmentTick)
+                onRepeatModeChange()
+            },
             shapes = IconButtonDefaults.toggleableShapes(),
             colors = IconButtonDefaults.iconToggleButtonColors(
                 checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -1440,7 +1465,7 @@ fun LyricsOverlay(
     val textAlign = if (config.lyricAlignment == "CENTER") TextAlign.Center else TextAlign.Start
     val listState = rememberLazyListState()
     val clipboard = LocalClipboard.current
-    val haptics = LocalHapticFeedback.current
+    val haptic = rememberHaptics()
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     // Collected here, not in PlayerScreen, so a line change only recomposes the overlay.
@@ -1595,7 +1620,7 @@ fun LyricsOverlay(
                                             enabled = !line.isGap,
                                             onClick = { if (line.timeMs >= 0L) onSeek(line.timeMs) },
                                             onLongClick = {
-                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                haptic(HapticFeedbackType.LongPress)
                                                 scope.launch {
                                                     clipboard.setClipEntry(
                                                         ClipEntry(

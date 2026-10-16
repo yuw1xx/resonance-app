@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -35,6 +36,7 @@ import dev.yuwixx.resonance.presentation.components.AppearanceConfig
 import dev.yuwixx.resonance.presentation.components.LocalAppearanceConfig
 import dev.yuwixx.resonance.presentation.components.LocalPlaybackActive
 import dev.yuwixx.resonance.presentation.components.PermissionWrapper
+import dev.yuwixx.resonance.presentation.components.rememberHaptics
 import dev.yuwixx.resonance.presentation.player.MiniPlayerBar
 import dev.yuwixx.resonance.presentation.player.MiniPlayerMetrics
 import dev.yuwixx.resonance.presentation.player.PlayerSheet
@@ -580,12 +582,16 @@ private fun ResonanceBottomBar(
     onSelect: (NavItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = rememberHaptics()
     val content: @Composable () -> Unit = {
         items.forEach { item ->
             val selected = currentDestination?.hierarchy?.any { it.route == item.screen.route } == true
             ShortNavigationBarItem(
                 selected = selected,
-                onClick = { onSelect(item) },
+                onClick = {
+                    if (!selected) haptic(HapticFeedbackType.SegmentTick)
+                    onSelect(item)
+                },
                 icon = {
                     Icon(if (selected) item.selectedIcon else item.icon, contentDescription = item.label)
                 },

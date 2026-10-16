@@ -32,7 +32,6 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,6 +52,7 @@ import dev.yuwixx.resonance.presentation.components.AnimatedPermissionGate
 import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
 import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
 import dev.yuwixx.resonance.presentation.components.SectionCard
+import dev.yuwixx.resonance.presentation.components.rememberHaptics
 import dev.yuwixx.resonance.presentation.components.staggeredEntrance
 import dev.yuwixx.resonance.presentation.viewmodel.ShareViewModel
 import kotlin.math.*
@@ -167,7 +167,7 @@ private fun ShareMain(
     val incomingFile    by viewModel.incomingFile.collectAsStateWithLifecycle()
     val remoteTtlHours  by viewModel.remoteTtlHours.collectAsStateWithLifecycle()
 
-    val haptics = LocalHapticFeedback.current
+    val haptic = rememberHaptics()
     var showSongPicker by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
@@ -349,7 +349,7 @@ private fun ShareMain(
                     GpsUnavailableBanner(isGrapheneOs = viewModel.isGrapheneOs)
                 } else {
                     RadarAnimation(devices = devices, nearbyState = nearbyState, localName = viewModel.localName, onDeviceTapped = { device ->
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic(HapticFeedbackType.LongPress)
                         viewModel.connectTo(device.endpointId)
                     })
                 }

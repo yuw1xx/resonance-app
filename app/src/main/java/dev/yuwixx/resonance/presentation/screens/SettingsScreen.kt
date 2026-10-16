@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -59,6 +60,7 @@ import dev.yuwixx.resonance.presentation.components.SectionCard
 import dev.yuwixx.resonance.presentation.components.SectionDivider
 import dev.yuwixx.resonance.presentation.components.SectionSubHeader
 import dev.yuwixx.resonance.presentation.components.formatFileSize
+import dev.yuwixx.resonance.presentation.components.rememberHaptics
 import dev.yuwixx.resonance.presentation.navigation.navItems
 import dev.yuwixx.resonance.presentation.viewmodel.BackupUiState
 import dev.yuwixx.resonance.presentation.viewmodel.BackupViewModel
@@ -613,7 +615,7 @@ private fun AppearanceSection(prefs: ResonancePreferences) {
         SettingsToggleRow("Artwork Animation", "Scale artwork on play/pause", artworkAnimation) {
             scope.launch { prefs.setArtworkAnimation(it) }
         }
-        SettingsToggleRow("Haptic Feedback", "Vibrate on seek and long-press", hapticFeedback) {
+        SettingsToggleRow("Haptic Feedback", "Vibrate on button taps, seeking and long-press", hapticFeedback) {
             scope.launch { prefs.setHapticFeedback(it) }
         }
         SettingsToggleRow("Show Bitrate & Format", "Display audio quality badge in player", showBitrateInfo) {
@@ -2178,6 +2180,7 @@ private fun SegmentedSettingsItem(
     selected: String,
     onSelect: (String) -> Unit,
 ) {
+    val haptic = rememberHaptics()
     Column(modifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -2191,7 +2194,10 @@ private fun SegmentedSettingsItem(
             options.forEachIndexed { index, (label, value) ->
                 SegmentedButton(
                     shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                    onClick = { onSelect(value) },
+                    onClick = {
+                        if (selected != value) haptic(HapticFeedbackType.SegmentTick)
+                        onSelect(value)
+                    },
                     selected = selected == value,
                     label = { Text(label, fontSize = 13.sp) },
                 )
@@ -2350,12 +2356,16 @@ private fun SettingsToggleRow(
     checked: Boolean,
     onToggle: (Boolean) -> Unit,
 ) {
+    val haptic = rememberHaptics()
     ListItem(
         modifier = Modifier
             .padding(horizontal = 8.dp, vertical = 1.dp)
             .clip(MaterialTheme.shapes.medium)
             // The whole row is one switch for touch and for TalkBack ("on/off, switch").
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onToggle),
+            .toggleable(value = checked, role = Role.Switch) {
+                haptic(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                onToggle(it)
+            },
         headlineContent = { Text(title, fontWeight = FontWeight.Medium) },
         supportingContent = { Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         trailingContent = {

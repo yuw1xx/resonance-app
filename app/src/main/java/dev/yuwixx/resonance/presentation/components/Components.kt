@@ -313,6 +313,14 @@ private fun rememberAnimatedProgress(position: State<Long>, durationMs: Long): S
     return progress.asState()
 }
 
+/** Haptic feedback that follows the Haptic Feedback setting. */
+@Composable
+fun rememberHaptics(): (HapticFeedbackType) -> Unit {
+    val haptics = LocalHapticFeedback.current
+    val enabled by rememberUpdatedState(LocalAppearanceConfig.current.hapticEnabled)
+    return remember(haptics) { { type -> if (enabled) haptics.performHapticFeedback(type) } }
+}
+
 /** Exposes the seekbar to TalkBack as an adjustable slider, updated once a second. */
 @Composable
 private fun Modifier.seekSemantics(position: State<Long>, durationMs: Long, onSeek: (Long) -> Unit): Modifier {

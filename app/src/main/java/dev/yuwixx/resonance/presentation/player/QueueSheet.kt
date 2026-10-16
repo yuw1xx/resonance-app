@@ -15,10 +15,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.presentation.components.SongCard
+import dev.yuwixx.resonance.presentation.components.rememberHaptics
 import dev.yuwixx.resonance.presentation.components.rememberReorderState
 import dev.yuwixx.resonance.presentation.components.reorderHandle
 import dev.yuwixx.resonance.presentation.components.reorderableItem
@@ -32,6 +34,7 @@ fun QueueSheet(
     playerViewModel: PlayerViewModel,
     onDismiss: () -> Unit,
 ) {
+    val haptic = rememberHaptics()
     val orderedQueue by playerViewModel.orderedQueue.collectAsStateWithLifecycle()
     val currentIndex by playerViewModel.currentQueueIndex.collectAsStateWithLifecycle()
     val shuffle by playerViewModel.shuffleEnabled.collectAsStateWithLifecycle()
@@ -154,6 +157,7 @@ fun QueueSheet(
                     val dismissState = rememberSwipeToDismissBoxState()
                     LaunchedEffect(dismissState.currentValue) {
                         if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+                            haptic(HapticFeedbackType.GestureThresholdActivate)
                             removeWithUndo(entry) { scope.launch { dismissState.reset() } }
                         }
                     }

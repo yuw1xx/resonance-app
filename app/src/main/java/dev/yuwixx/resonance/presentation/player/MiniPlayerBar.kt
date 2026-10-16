@@ -34,9 +34,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.presentation.components.ArtworkImage
 import dev.yuwixx.resonance.presentation.components.LocalAppearanceConfig
+import dev.yuwixx.resonance.presentation.components.rememberHaptics
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
-import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -53,6 +54,7 @@ fun MiniPlayerBar(
     val previousSong by playerViewModel.previousSong.collectAsStateWithLifecycle()
     val config = LocalAppearanceConfig.current
     val haptics = LocalHapticFeedback.current
+    val haptic = rememberHaptics()
     val scope = rememberCoroutineScope()
     val current = song ?: return
 
@@ -119,7 +121,10 @@ fun MiniPlayerBar(
             },
             trailing = {
                 FilledTonalIconButton(
-                    onClick = { playerViewModel.playPause() },
+                    onClick = {
+                        haptic(HapticFeedbackType.Confirm)
+                        playerViewModel.playPause()
+                    },
                     shapes = IconButtonDefaults.shapes(),
                     modifier = Modifier.size(48.dp),
                 ) {
@@ -141,7 +146,10 @@ fun MiniPlayerBar(
                 }
                 if (config.miniPlayerShowSkipBtn) {
                     IconButton(
-                        onClick = { playerViewModel.skipNext() },
+                        onClick = {
+                            haptic(HapticFeedbackType.ContextClick)
+                            playerViewModel.skipNext()
+                        },
                         shapes = IconButtonDefaults.shapes(),
                         enabled = nextSong != null,
                     ) {
