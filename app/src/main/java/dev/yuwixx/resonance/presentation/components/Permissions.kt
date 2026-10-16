@@ -76,7 +76,10 @@ fun PermissionWrapper(
                         Button(
                             onClick = {
                                 context.startActivity(
-                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.fromParts("package", context.packageName, null),
+                                    )
                                 )
                             },
                             shape = MaterialTheme.shapes.medium

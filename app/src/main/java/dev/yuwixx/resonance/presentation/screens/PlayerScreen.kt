@@ -279,10 +279,10 @@ fun PlayerScreen(
 
         if (showShareSheet) {
             ShareSheet(
-                viewModel    = shareViewModel,
+                viewModel = shareViewModel,
                 currentSongs = listOf(song),
-                onDismiss    = { showShareSheet = false },
-                onPlayNow    = { receivedSong ->
+                onDismiss = { showShareSheet = false },
+                onPlayNow = { receivedSong ->
                     playerViewModel.play(listOf(receivedSong), 0)
                     showShareSheet = false
                 },
@@ -1763,15 +1763,15 @@ private fun formatSampleRate(hz: Int): String =
     if (hz >= 1000) "${DecimalFormat("#.#").format(hz / 1000.0)} kHz" else "$hz Hz"
 
 private fun formatMimeType(mime: String): String = when (mime.lowercase()) {
-    "audio/mpeg"               -> "MP3"
+    "audio/mpeg" -> "MP3"
     "audio/flac", "audio/x-flac" -> "FLAC"
-    "audio/ogg"                -> "OGG Vorbis"
-    "audio/opus"               -> "Opus"
-    "audio/aac"                -> "AAC"
-    "audio/mp4", "audio/m4a"  -> "AAC / M4A"
+    "audio/ogg" -> "OGG Vorbis"
+    "audio/opus" -> "Opus"
+    "audio/aac" -> "AAC"
+    "audio/mp4", "audio/m4a" -> "AAC / M4A"
     "audio/x-wav", "audio/wav" -> "WAV"
-    "audio/x-aiff"             -> "AIFF"
-    "audio/alac"               -> "ALAC"
-    "audio/x-ms-wma"           -> "WMA"
-    else                       -> mime.substringAfterLast('/').uppercase()
+    "audio/x-aiff" -> "AIFF"
+    "audio/alac" -> "ALAC"
+    "audio/x-ms-wma" -> "WMA"
+    else -> mime.substringAfterLast('/').uppercase()
 }

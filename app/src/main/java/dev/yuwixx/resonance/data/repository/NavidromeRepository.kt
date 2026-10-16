@@ -69,7 +69,7 @@ class NavidromeRepository @Inject constructor(
 
     fun resetSyncState() { _syncState.value = NavidromeSyncState.Idle }
 
-        val cachedSongs: Flow<List<Song>> = navidromeSongDao.getAllSongs()
+    val cachedSongs: Flow<List<Song>> = navidromeSongDao.getAllSongs()
         .map { entities -> entities.map { it.toDomain() } }
         .flowOn(Dispatchers.Default)
 
@@ -86,7 +86,7 @@ class NavidromeRepository @Inject constructor(
         }
     }.flowOn(Dispatchers.Default)
 
-        suspend fun clearCache() = withContext(Dispatchers.IO) {
+    suspend fun clearCache() = withContext(Dispatchers.IO) {
         navidromeSongDao.deleteAll()
         navidromeAlbumDao.deleteAll()
         artistsFile.delete()
@@ -130,7 +130,7 @@ class NavidromeRepository @Inject constructor(
     }
 
     private suspend fun syncLocked(force: Boolean): Boolean {
-        val api   = navidromeApiProvider.currentApi()   ?: return false
+        val api = navidromeApiProvider.currentApi() ?: return false
         val creds = navidromeApiProvider.currentCredentials() ?: return false
 
         try {
@@ -241,15 +241,15 @@ class NavidromeRepository @Inject constructor(
     }
 
     suspend fun getAllPlaylists(): List<Playlist> = withContext(Dispatchers.IO) {
-        val api   = navidromeApiProvider.currentApi()   ?: return@withContext emptyList()
+        val api = navidromeApiProvider.currentApi() ?: return@withContext emptyList()
         val creds = navidromeApiProvider.currentCredentials() ?: return@withContext emptyList()
         try {
             api.getPlaylists().ok.playlists?.playlist?.map { summary ->
                 val detail = runCatching { api.getPlaylist(summary.id).ok.playlist }.getOrNull()
                 Playlist(
-                    id       = summary.id.toLongOrNull() ?: stableLongId(summary.id),
-                    name     = summary.name,
-                    songs    = detail?.entry?.map { it.toSongDomain(creds) } ?: emptyList(),
+                    id = summary.id.toLongOrNull() ?: stableLongId(summary.id),
+                    name = summary.name,
+                    songs = detail?.entry?.map { it.toSongDomain(creds) } ?: emptyList(),
                     isReadOnly = false,
                     artworkUri = summary.coverArt?.let { Uri.parse(coverArtUrl(creds, it)) },
                 )
@@ -337,30 +337,30 @@ private fun parseIsoMillis(iso: String?): Long? {
 
 private fun SubsonicSong.toEntity(creds: NavidromeApiProvider.Credentials): NavidromeSongEntity {
     val streamUrl = buildStreamUrl(creds.serverUrl, creds.username, creds.password, id)
-    val cover     = coverArt?.let { coverArtUrl(creds, it) }
+    val cover = coverArt?.let { coverArtUrl(creds, it) }
     return NavidromeSongEntity(
-        navidromeId  = id,
-        numericId    = id.toLongOrNull() ?: stableLongId(id),
-        streamUrl    = streamUrl,
-        title        = title,
-        artist       = artist       ?: "Unknown Artist",
-        albumArtist  = albumArtist  ?: artist ?: "Unknown Artist",
-        album        = album        ?: "Unknown Album",
-        albumId      = albumId      ?: "",
-        coverArtUrl  = cover,
-        genre        = genre        ?: "",
-        durationMs   = (duration    ?: 0) * 1000L,
-        trackNumber  = track        ?: 0,
-        discNumber   = discNumber   ?: 1,
-        year         = year         ?: 0,
-        path         = path         ?: streamUrl,
-        mimeType     = contentType  ?: "audio/mpeg",
-        bitrate      = bitRate      ?: 0,
-        size         = size         ?: 0L,
-        playCount    = playCount    ?: 0L,
+        navidromeId = id,
+        numericId = id.toLongOrNull() ?: stableLongId(id),
+        streamUrl = streamUrl,
+        title = title,
+        artist = artist ?: "Unknown Artist",
+        albumArtist = albumArtist ?: artist ?: "Unknown Artist",
+        album = album ?: "Unknown Album",
+        albumId = albumId ?: "",
+        coverArtUrl = cover,
+        genre = genre ?: "",
+        durationMs = (duration ?: 0) * 1000L,
+        trackNumber = track ?: 0,
+        discNumber = discNumber ?: 1,
+        year = year ?: 0,
+        path = path ?: streamUrl,
+        mimeType = contentType ?: "audio/mpeg",
+        bitrate = bitRate ?: 0,
+        size = size ?: 0L,
+        playCount = playCount ?: 0L,
         // cachedAt doubles as "date added" in the UI — use the server's, so "Recently added"
         // reflects the library rather than the last sync.
-        cachedAt     = parseIsoMillis(created) ?: System.currentTimeMillis(),
+        cachedAt = parseIsoMillis(created) ?: System.currentTimeMillis(),
     )
 }
 
@@ -368,96 +368,96 @@ private fun SubsonicAlbum.toEntity(creds: NavidromeApiProvider.Credentials): Nav
     val cover = coverArt?.let { coverArtUrl(creds, it) }
     return NavidromeAlbumEntity(
         navidromeId = id,
-        numericId   = id.toLongOrNull() ?: stableLongId(id),
-        name        = name,
-        artist      = artist     ?: "Unknown Artist",
-        artistId    = artistId,
+        numericId = id.toLongOrNull() ?: stableLongId(id),
+        name = name,
+        artist = artist ?: "Unknown Artist",
+        artistId = artistId,
         coverArtUrl = cover,
-        songCount   = songCount  ?: song.size,
-        durationSec = duration   ?: 0,
-        year        = year       ?: 0,
+        songCount = songCount ?: song.size,
+        durationSec = duration ?: 0,
+        year = year ?: 0,
     )
 }
 
 internal fun NavidromeSongEntity.toDomain(): Song = Song(
-    id            = numericId,
-    uri           = Uri.parse(streamUrl),
-    title         = title,
-    artist        = artist,
-    artists       = listOf(artist),
-    albumArtist   = albumArtist,
-    album         = album,
-    albumId       = albumId.toLongOrNull() ?: stableLongId(albumId),
-    genre         = genre,
-    duration      = durationMs,
-    size          = size,
-    bitrate       = bitrate,
-    sampleRate    = 0,
-    trackNumber   = trackNumber,
-    discNumber    = discNumber,
-    year          = year,
-    dateAdded     = cachedAt,
-    dateModified  = cachedAt,
-    path          = path,
-    folder        = path.substringBeforeLast('/'),
-    mimeType      = mimeType,
+    id = numericId,
+    uri = Uri.parse(streamUrl),
+    title = title,
+    artist = artist,
+    artists = listOf(artist),
+    albumArtist = albumArtist,
+    album = album,
+    albumId = albumId.toLongOrNull() ?: stableLongId(albumId),
+    genre = genre,
+    duration = durationMs,
+    size = size,
+    bitrate = bitrate,
+    sampleRate = 0,
+    trackNumber = trackNumber,
+    discNumber = discNumber,
+    year = year,
+    dateAdded = cachedAt,
+    dateModified = cachedAt,
+    path = path,
+    folder = path.substringBeforeLast('/'),
+    mimeType = mimeType,
     replayGainTrack = null,
     replayGainAlbum = null,
-    artworkUri    = coverArtUrl?.let { Uri.parse(it) },
-    listenCount   = playCount.toInt(),
-    lastListened  = 0L,
-    navidromeId   = navidromeId,
+    artworkUri = coverArtUrl?.let { Uri.parse(it) },
+    listenCount = playCount.toInt(),
+    lastListened = 0L,
+    navidromeId = navidromeId,
 )
 
 internal fun NavidromeAlbumEntity.toDomain(songs: List<Song> = emptyList()): Album = Album(
-    id         = numericId,
-    title      = name,
-    artist     = artist,
-    year       = year,
-    songCount  = songCount,
+    id = numericId,
+    title = name,
+    artist = artist,
+    year = year,
+    songCount = songCount,
     artworkUri = coverArtUrl?.let { Uri.parse(it) },
-    songs      = songs,
+    songs = songs,
 )
 
 internal fun SubsonicSong.toSongDomain(creds: NavidromeApiProvider.Credentials): Song {
     val streamUrl = buildStreamUrl(creds.serverUrl, creds.username, creds.password, id)
-    val cover     = coverArt?.let { coverArtUrl(creds, it) }
+    val cover = coverArt?.let { coverArtUrl(creds, it) }
     return Song(
-        id            = id.toLongOrNull() ?: stableLongId(id),
-        uri           = Uri.parse(streamUrl),
-        title         = title,
-        artist        = artist       ?: "Unknown Artist",
-        artists       = listOf(artist ?: "Unknown Artist"),
-        albumArtist   = albumArtist  ?: artist ?: "Unknown Artist",
-        album         = album        ?: "Unknown Album",
-        albumId       = albumId?.toLongOrNull() ?: albumId?.let { stableLongId(it) } ?: 0L,
-        genre         = genre        ?: "",
-        duration      = (duration    ?: 0) * 1000L,
-        size          = size         ?: 0L,
-        bitrate       = bitRate      ?: 0,
-        sampleRate    = 0,
-        trackNumber   = track        ?: 0,
-        discNumber    = discNumber   ?: 1,
-        year          = year         ?: 0,
-        dateAdded     = 0L,
-        dateModified  = 0L,
-        path          = path         ?: streamUrl,
-        folder        = path?.substringBeforeLast('/') ?: "",
-        mimeType      = contentType  ?: "audio/mpeg",
+        id = id.toLongOrNull() ?: stableLongId(id),
+        uri = Uri.parse(streamUrl),
+        title = title,
+        artist = artist ?: "Unknown Artist",
+        artists = listOf(artist ?: "Unknown Artist"),
+        albumArtist = albumArtist ?: artist ?: "Unknown Artist",
+        album = album ?: "Unknown Album",
+        albumId = albumId?.toLongOrNull() ?: albumId?.let { stableLongId(it) } ?: 0L,
+        genre = genre ?: "",
+        duration = (duration ?: 0) * 1000L,
+        size = size ?: 0L,
+        bitrate = bitRate ?: 0,
+        sampleRate = 0,
+        trackNumber = track ?: 0,
+        discNumber = discNumber ?: 1,
+        year = year ?: 0,
+        dateAdded = 0L,
+        dateModified = 0L,
+        path = path ?: streamUrl,
+        folder = path?.substringBeforeLast('/') ?: "",
+        mimeType = contentType ?: "audio/mpeg",
         replayGainTrack = null,
         replayGainAlbum = null,
-        artworkUri    = cover?.let { Uri.parse(it) },
-        listenCount   = playCount?.toInt() ?: 0,
-        lastListened  = 0L,
-        navidromeId   = id,
+        artworkUri = cover?.let { Uri.parse(it) },
+        listenCount = playCount?.toInt() ?: 0,
+        lastListened = 0L,
+        navidromeId = id,
     )
 }
 
 internal fun SubsonicArtistSummary.toDomain(creds: NavidromeApiProvider.Credentials): Artist {
     val cover = coverArt?.let { coverArtUrl(creds, it) }
     return Artist(
-        name       = name,
-        songCount  = 0,
+        name = name,
+        songCount = 0,
         albumCount = albumCount ?: 0,
         artworkUrl = cover,
     )

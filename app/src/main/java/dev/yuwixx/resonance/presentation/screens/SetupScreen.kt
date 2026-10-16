@@ -692,8 +692,16 @@ private fun LastFmStep(
                         ) {
                             Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
                             Column {
-                                Text("Linked as ${state.username}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                                Text("Tap Continue below to proceed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "Linked as ${state.username}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    "Tap Continue below to proceed.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }
@@ -736,7 +744,13 @@ private fun LastFmStep(
 @Composable
 private fun LastFmBadge() {
     Surface(shape = MaterialTheme.shapes.extraSmall, color = BrandColors.lastFm, modifier = Modifier.padding(end = 8.dp)) {
-        Text("Last.fm", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+        Text(
+            "Last.fm",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
     }
 }
 
@@ -750,13 +764,25 @@ private fun LastFmLoginDialog(onDismiss: () -> Unit, onLogin: (String, String) -
         onDismissRequest = onDismiss,
         icon = {
             Surface(shape = MaterialTheme.shapes.small, color = BrandColors.lastFm) {
-                Text("Last.fm", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                Text(
+                    "Last.fm",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
             }
         },
         title = { Text("Sign in to Last.fm") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("Username") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 OutlinedTextField(
                     value = password, onValueChange = { password = it }, label = { Text("Password") }, singleLine = true,
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -798,6 +824,12 @@ private fun SetupContent(icon: ImageVector, title: String, description: String) 
         Spacer(Modifier.height(32.dp))
         Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(16.dp))
-        Text(description, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
+        Text(
+            description,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
     }
 }

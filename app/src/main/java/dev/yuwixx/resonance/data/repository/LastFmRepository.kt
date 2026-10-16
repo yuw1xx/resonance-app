@@ -35,13 +35,13 @@ private val DEFAULT_API_SECRET = BuildConfig.LASTFM_API_SECRET
 private val Context.lastFmStore: DataStore<Preferences> by preferencesDataStore(name = "lastfm_prefs")
 
 private object LastFmKeys {
-    val SESSION_KEY  = stringPreferencesKey("session_key")
-    val USERNAME     = stringPreferencesKey("username")
-    val ENABLED      = booleanPreferencesKey("enabled")
-    val NOW_PLAYING  = booleanPreferencesKey("now_playing")
-    val ONLY_WIFI    = booleanPreferencesKey("only_wifi")
-    val API_KEY      = stringPreferencesKey("api_key")
-    val API_SECRET   = stringPreferencesKey("api_secret")
+    val SESSION_KEY = stringPreferencesKey("session_key")
+    val USERNAME = stringPreferencesKey("username")
+    val ENABLED = booleanPreferencesKey("enabled")
+    val NOW_PLAYING = booleanPreferencesKey("now_playing")
+    val ONLY_WIFI = booleanPreferencesKey("only_wifi")
+    val API_KEY = stringPreferencesKey("api_key")
+    val API_SECRET = stringPreferencesKey("api_secret")
 }
 
 data class PendingScrobble(
@@ -73,10 +73,10 @@ class LastFmRepository @Inject constructor(
 
     private val pendingScrobbles = CopyOnWriteArrayList<PendingScrobble>()
 
-    val username: Flow<String>    = store.data.map { it[LastFmKeys.USERNAME]    ?: "" }
-    val isEnabled: Flow<Boolean>  = store.data.map { it[LastFmKeys.ENABLED]     ?: false }
+    val username: Flow<String> = store.data.map { it[LastFmKeys.USERNAME]    ?: "" }
+    val isEnabled: Flow<Boolean> = store.data.map { it[LastFmKeys.ENABLED]     ?: false }
     val nowPlaying: Flow<Boolean> = store.data.map { it[LastFmKeys.NOW_PLAYING] ?: true }
-    val onlyWifi: Flow<Boolean>   = store.data.map { it[LastFmKeys.ONLY_WIFI]   ?: false }
+    val onlyWifi: Flow<Boolean> = store.data.map { it[LastFmKeys.ONLY_WIFI]   ?: false }
 
     // Migrated out of plain DataStore into Keystore-backed encrypted storage (see
     // SecureCredentialStore). Was a Flow<String> before, but every use in this file only ever
@@ -101,8 +101,8 @@ class LastFmRepository @Inject constructor(
 
     init {
         scope.launch {
-            val sk  = getSessionKey()
-            val usr = username.firstOrNull()   ?: ""
+            val sk = getSessionKey()
+            val usr = username.firstOrNull() ?: ""
             if (sk.isNotBlank() && usr.isNotBlank()) {
                 fetchUserInfo(usr)
             }
@@ -149,11 +149,11 @@ class LastFmRepository @Inject constructor(
         }
     }
 
-    suspend fun setEnabled(v: Boolean)    { store.edit { it[LastFmKeys.ENABLED]     = v } }
+    suspend fun setEnabled(v: Boolean)    { store.edit { it[LastFmKeys.ENABLED] = v } }
     suspend fun setNowPlaying(v: Boolean) { store.edit { it[LastFmKeys.NOW_PLAYING] = v } }
-    suspend fun setOnlyWifi(v: Boolean)   { store.edit { it[LastFmKeys.ONLY_WIFI]   = v } }
+    suspend fun setOnlyWifi(v: Boolean)   { store.edit { it[LastFmKeys.ONLY_WIFI] = v } }
 
-        suspend fun authenticate(username: String, password: String) {
+    suspend fun authenticate(username: String, password: String) {
         _authState.value = LastFmAuthState.Loading
         try {
             val (apiKey, apiSecret) = getCredentials()
@@ -171,8 +171,8 @@ class LastFmRepository @Inject constructor(
             val response = api.getMobileSession(
                 username = username,
                 password = password,
-                apiKey   = apiKey,
-                apiSig   = sig,
+                apiKey = apiKey,
+                apiSig = sig,
             )
 
             if (response.error != null) {
@@ -190,8 +190,8 @@ class LastFmRepository @Inject constructor(
             sessionKeyMigrated = true
             secureCredentialStore.setLastFmSessionKey(sk)
             store.edit {
-                it[LastFmKeys.USERNAME]    = username
-                it[LastFmKeys.ENABLED]     = true
+                it[LastFmKeys.USERNAME] = username
+                it[LastFmKeys.ENABLED] = true
             }
 
             fetchUserInfo(username)
@@ -218,7 +218,7 @@ class LastFmRepository @Inject constructor(
             val user = resp.user
             if (user != null) {
                 _authState.value = LastFmAuthState.Authenticated(
-                    username  = user.name,
+                    username = user.name,
                     playCount = user.playcount,
                 )
             } else {
@@ -272,11 +272,11 @@ class LastFmRepository @Inject constructor(
             if (!isScrobbleReady()) return@launch
             pendingScrobbles.add(
                 PendingScrobble(
-                    artist      = song.displayArtist,
-                    track       = song.title,
-                    album       = song.album,
-                    timestamp   = startedAt / 1000,
-                    duration    = (song.duration / 1000).toInt(),
+                    artist = song.displayArtist,
+                    track = song.title,
+                    album = song.album,
+                    timestamp = startedAt / 1000,
+                    duration = (song.duration / 1000).toInt(),
                     trackNumber = song.trackNumber,
                 )
             )
@@ -368,9 +368,9 @@ class LastFmRepository @Inject constructor(
         return enabled && sk.isNotBlank()
     }
 
-        private suspend fun getCredentials(): Pair<String, String> {
+    private suspend fun getCredentials(): Pair<String, String> {
         val prefs = store.data.firstOrNull()
-        val apiKey    = prefs?.get(LastFmKeys.API_KEY)?.takeIf    { it.isNotBlank() } ?: DEFAULT_API_KEY
+        val apiKey = prefs?.get(LastFmKeys.API_KEY)?.takeIf    { it.isNotBlank() } ?: DEFAULT_API_KEY
         val apiSecret = prefs?.get(LastFmKeys.API_SECRET)?.takeIf { it.isNotBlank() } ?: DEFAULT_API_SECRET
         return apiKey to apiSecret
     }
@@ -396,8 +396,8 @@ class LastFmRepository @Inject constructor(
         return Triple(apiKey, sk, sign(allParams, apiSecret))
     }
 
-        // Last.fm API signature: sorted key+value pairs concatenated, then MD5-hashed.
-        private fun sign(params: Map<String, String>, secret: String): String {
+    // Last.fm API signature: sorted key+value pairs concatenated, then MD5-hashed.
+    private fun sign(params: Map<String, String>, secret: String): String {
         val payload = params.entries
             .sortedBy { it.key }
             .joinToString("") { (k, v) -> k + v } + secret

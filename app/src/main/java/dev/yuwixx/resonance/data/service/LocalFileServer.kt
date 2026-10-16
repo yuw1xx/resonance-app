@@ -20,16 +20,16 @@ class LocalFileServer @Inject constructor() {
     data class ServeHandle(val token: String, val port: Int)
 
     suspend fun serve(
-        file      : File,
-        mimeType  : String,
+        file: File,
+        mimeType: String,
         onProgress: (Float) -> Unit,
-        onDone    : () -> Unit,
+        onDone: () -> Unit,
         onRejected: () -> Unit,
-        timeoutMs : Long = 5 * 60_000L,
+        timeoutMs: Long = 5 * 60_000L,
     ): ServeHandle = withContext(Dispatchers.IO) {
         stop()
 
-        val token  = UUID.randomUUID().toString().replace("-", "")
+        val token = UUID.randomUUID().toString().replace("-", "")
         val socket = ServerSocket(0).also {
             it.soTimeout = timeoutMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             serverSocket = it
@@ -76,17 +76,17 @@ class LocalFileServer @Inject constructor() {
     private enum class Outcome { Served, Rejected, Ignored }
 
     private fun handleConnection(
-        client    : Socket,
-        expected  : String,
-        file      : File,
-        mimeType  : String,
+        client: Socket,
+        expected: String,
+        file: File,
+        mimeType: String,
         onProgress: (Float) -> Unit,
-        onDone    : () -> Unit,
+        onDone: () -> Unit,
         onRejected: () -> Unit,
     ): Outcome {
         return client.use {
             it.soTimeout = 30_000
-            val input  = it.getInputStream()
+            val input = it.getInputStream()
             val output = it.getOutputStream()
 
             val reader = input.bufferedReader()
@@ -128,7 +128,7 @@ class LocalFileServer @Inject constructor() {
             output.write(headers.toByteArray())
 
             file.inputStream().buffered(64 * 1024).use { fis ->
-                val buf  = ByteArray(64 * 1024)
+                val buf = ByteArray(64 * 1024)
                 var sent = 0L
                 var n: Int
                 while (fis.read(buf).also { n = it } != -1) {

@@ -65,49 +65,49 @@ fun FoldersScreen(
     Scaffold(
         topBar = {
             Column {
-            TopAppBar(
-                title = {
-                    AnimatedContent(
-                        targetState = topBarTitle to currentPath,
-                        transitionSpec = {
-                            fadeIn(tween(280, easing = EmphasizedDecelerate)) togetherWith
-                                fadeOut(tween(180, easing = EmphasizedAccelerate))
-                        },
-                        label = "folder_title",
-                    ) { (title, path) ->
-                        Column {
-                            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (path != null) {
-                                Text(
-                                    path,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                TopAppBar(
+                    title = {
+                        AnimatedContent(
+                            targetState = topBarTitle to currentPath,
+                            transitionSpec = {
+                                fadeIn(tween(280, easing = EmphasizedDecelerate)) togetherWith
+                                    fadeOut(tween(180, easing = EmphasizedAccelerate))
+                            },
+                            label = "folder_title",
+                        ) { (title, path) ->
+                            Column {
+                                Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (path != null) {
+                                    Text(
+                                        path,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
                         }
-                    }
-                },
-                navigationIcon = {
-                    if (currentPath != null) {
-                        IconButton(onClick = { navigateUp() }) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                    },
+                    navigationIcon = {
+                        if (currentPath != null) {
+                            IconButton(onClick = { navigateUp() }) {
+                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                            }
                         }
-                    }
-                },
-                actions = {
-                    if (songsHere.isNotEmpty()) {
-                        IconButton(onClick = { playerViewModel.play(songsHere, 0) }) {
-                            Icon(Icons.Rounded.PlayArrow, "Play all")
+                    },
+                    actions = {
+                        if (songsHere.isNotEmpty()) {
+                            IconButton(onClick = { playerViewModel.play(songsHere, 0) }) {
+                                Icon(Icons.Rounded.PlayArrow, "Play all")
+                            }
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                ),
-            )
-            LocalLibrarySections.current?.invoke()
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    ),
+                )
+                LocalLibrarySections.current?.invoke()
             }
         }
     ) { padding ->

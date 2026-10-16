@@ -103,7 +103,10 @@ private val settingsGroups = listOf(
     SettingsGroup("Audio & Playback",  listOf(SettingsCategory.Playback, SettingsCategory.Audio)),
     SettingsGroup("Library",           listOf(SettingsCategory.Library, SettingsCategory.Navidrome)),
     SettingsGroup("Online Services",   listOf(SettingsCategory.OnlineServices)),
-    SettingsGroup("System",            listOf(SettingsCategory.Notification, SettingsCategory.History, SettingsCategory.Updates, SettingsCategory.Data)),
+    SettingsGroup(
+        "System",
+        listOf(SettingsCategory.Notification, SettingsCategory.History, SettingsCategory.Updates, SettingsCategory.Data),
+    ),
     SettingsGroup("Info",              listOf(SettingsCategory.About)),
 )
 
@@ -1633,8 +1636,8 @@ private fun LastFmSection(
         val lastFmContainerColor by animateColorAsState(
             targetValue = when (authState) {
                 is LastFmAuthState.Authenticated -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                is LastFmAuthState.Error         -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
-                else                             -> MaterialTheme.colorScheme.surfaceContainerHigh
+                is LastFmAuthState.Error -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.surfaceContainerHigh
             },
             animationSpec = tween(340, easing = EmphasizedDecelerate),
             label = "lastfm_card_color",
@@ -1745,8 +1748,18 @@ private fun LastFmSection(
                 Spacer(Modifier.height(12.dp))
 
                 SettingsToggleCompact("Now Playing", "Send 'Now Playing' status when a track starts", nowPlayingEnabled, onNowPlayingChange)
-                SettingsToggleCompact("Scrobble Only on Wi-Fi", "Save mobile data by queuing scrobbles until on Wi-Fi", onlyOnWifi, onOnlyOnWifiChange)
-                SettingsToggleCompact("Offline Scrobble Queue", "Buffer scrobbles when offline and submit later", offlineQueue, onOfflineQueueChange)
+                SettingsToggleCompact(
+                    "Scrobble Only on Wi-Fi",
+                    "Save mobile data by queuing scrobbles until on Wi-Fi",
+                    onlyOnWifi,
+                    onOnlyOnWifiChange,
+                )
+                SettingsToggleCompact(
+                    "Offline Scrobble Queue",
+                    "Buffer scrobbles when offline and submit later",
+                    offlineQueue,
+                    onOfflineQueueChange,
+                )
 
                 Spacer(Modifier.height(4.dp))
 
@@ -2488,9 +2501,9 @@ private fun DownloadsSection(
 
 private fun formatDownloadSize(bytes: Long): String = when {
     bytes >= 1_073_741_824L -> "%.2f GB".format(bytes / 1_073_741_824.0)
-    bytes >= 1_048_576L     -> "%.1f MB".format(bytes / 1_048_576.0)
-    bytes >= 1_024L         -> "%.0f KB".format(bytes / 1_024.0)
-    else                    -> "$bytes B"
+    bytes >= 1_048_576L -> "%.1f MB".format(bytes / 1_048_576.0)
+    bytes >= 1_024L -> "%.0f KB".format(bytes / 1_024.0)
+    else -> "$bytes B"
 }
 
 @Composable
@@ -2746,7 +2759,7 @@ fun NavidromeSyncPage(
         }
     }
 
-    val songsDoneNow  = (syncState as? NavidromeSyncState.Syncing)?.songsDone      ?: 0
+    val songsDoneNow = (syncState as? NavidromeSyncState.Syncing)?.songsDone ?: 0
     val estimatedTotal = (syncState as? NavidromeSyncState.Syncing)?.estimatedTotal ?: 0
 
     val syncProgress = if (estimatedTotal > 0 && songsDoneNow > 0)
@@ -2755,9 +2768,9 @@ fun NavidromeSyncPage(
     val etaText: String? = if (elapsedSeconds > 5 && songsDoneNow > 0 && estimatedTotal > songsDoneNow) {
         val etaSecs = (elapsedSeconds * (estimatedTotal - songsDoneNow).toFloat() / songsDoneNow).toLong()
         when {
-            etaSecs < 60   -> "Less than a minute remaining"
+            etaSecs < 60 -> "Less than a minute remaining"
             etaSecs < 3600 -> "~${etaSecs / 60} min remaining"
-            else           -> "~${etaSecs / 3600}h ${(etaSecs % 3600) / 60}m remaining"
+            else -> "~${etaSecs / 3600}h ${(etaSecs % 3600) / 60}m remaining"
         }
     } else null
 
@@ -2804,7 +2817,7 @@ fun NavidromeSyncPage(
 
         Text(
             text = when (syncState) {
-                is NavidromeSyncState.Done  -> "Library Ready!"
+                is NavidromeSyncState.Done -> "Library Ready!"
                 is NavidromeSyncState.Error -> "Sync Failed"
                 else -> "Syncing Library…"
             },
@@ -2846,7 +2859,12 @@ fun NavidromeSyncPage(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Rounded.Info, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Icon(
+                            Icons.Rounded.Info,
+                            null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
                         Text(
                             "Keep Resonance open while syncing",
                             style = MaterialTheme.typography.bodySmall,
@@ -3063,9 +3081,9 @@ private fun NavTabsDialog(
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
                 navItems.forEach { item ->
-                    val isPinned  = item == navItems.first()
+                    val isPinned = item == navItems.first()
                     val isVisible = item.screen.route !in hiddenNavTabs
-                    val canHide   = !isPinned && isVisible && visibleNonPinnedCount > 1
+                    val canHide = !isPinned && isVisible && visibleNonPinnedCount > 1
 
                     Row(
                         modifier = Modifier
@@ -3077,7 +3095,7 @@ private fun NavTabsDialog(
                                 else Modifier
                             )
                             .padding(vertical = 8.dp, horizontal = 4.dp),
-                        verticalAlignment   = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Icon(
@@ -3089,9 +3107,9 @@ private fun NavTabsDialog(
                         )
                         Text(
                             item.label,
-                            style    = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
-                            color    = if (isPinned || isVisible) Color.Unspecified
+                            color = if (isPinned || isVisible) Color.Unspecified
                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
                         )
                         if (isPinned) {
@@ -3102,7 +3120,7 @@ private fun NavTabsDialog(
                             )
                         } else {
                             Switch(
-                                checked         = isVisible,
+                                checked = isVisible,
                                 onCheckedChange = if (!isVisible || canHide) {
                                     { checked -> onToggle(item.screen.route, !checked) }
                                 } else null,

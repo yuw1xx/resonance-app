@@ -71,15 +71,15 @@ class ResonancePreferences @Inject constructor(
         val ARTIST_DELIMITER = stringPreferencesKey("artist_delimiter")
         val EXCLUDED_FOLDERS = stringSetPreferencesKey("excluded_folders")
         val INCLUDED_FOLDERS = stringSetPreferencesKey("included_folders")
-        val HIDDEN_NAV_TABS  = stringSetPreferencesKey("hidden_nav_tabs")
+        val HIDDEN_NAV_TABS = stringSetPreferencesKey("hidden_nav_tabs")
         val SHOW_ARTWORK_IN_LIST = booleanPreferencesKey("show_artwork_in_list")
         val GROUP_BY_ALBUM_ARTIST = booleanPreferencesKey("group_by_album_artist")
         val SHOW_FILENAME_AS_TITLE = booleanPreferencesKey("show_filename_as_title")
         val IGNORE_ARTICLES = booleanPreferencesKey("ignore_articles")
         val AUTO_SCAN_INTERVAL_HOURS = intPreferencesKey("auto_scan_interval_hours")
         val FETCH_ARTIST_IMAGES = booleanPreferencesKey("fetch_artist_images")
-        val FETCH_LYRICS        = booleanPreferencesKey("fetch_lyrics")
-        val FETCH_ALBUM_ART     = booleanPreferencesKey("fetch_album_art")
+        val FETCH_LYRICS = booleanPreferencesKey("fetch_lyrics")
+        val FETCH_ALBUM_ART = booleanPreferencesKey("fetch_album_art")
 
         val DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
         val PRESET_COLOR = intPreferencesKey("preset_color")
@@ -105,59 +105,59 @@ class ResonancePreferences @Inject constructor(
         val MIN_LISTEN_PERCENTAGE = floatPreferencesKey("min_listen_percentage")
         val MAX_HISTORY_ITEMS = intPreferencesKey("max_history_items")
 
-        val MUSIC_SOURCE            = stringPreferencesKey("music_source")
-        val NAVIDROME_SERVER_URL    = stringPreferencesKey("navidrome_server_url")
-        val NAVIDROME_USERNAME      = stringPreferencesKey("navidrome_username")
-        val NAVIDROME_PASSWORD      = stringPreferencesKey("navidrome_password")
+        val MUSIC_SOURCE = stringPreferencesKey("music_source")
+        val NAVIDROME_SERVER_URL = stringPreferencesKey("navidrome_server_url")
+        val NAVIDROME_USERNAME = stringPreferencesKey("navidrome_username")
+        val NAVIDROME_PASSWORD = stringPreferencesKey("navidrome_password")
 
-        val DOWNLOAD_WIFI_ONLY      = booleanPreferencesKey("download_wifi_only")
+        val DOWNLOAD_WIFI_ONLY = booleanPreferencesKey("download_wifi_only")
 
         val EQ_ENABLED = booleanPreferencesKey("eq_enabled")
         val EQ_BAND_LEVELS = stringPreferencesKey("eq_band_levels")
 
-        val PARTY_MODE        = booleanPreferencesKey("party_mode")
+        val PARTY_MODE = booleanPreferencesKey("party_mode")
 
         val DISCOGS_API_TOKEN = stringPreferencesKey("discogs_api_token")
 
-        val REMOTE_SHARE_SERVER_URL   = stringPreferencesKey("remote_share_server_url")
+        val REMOTE_SHARE_SERVER_URL = stringPreferencesKey("remote_share_server_url")
         val REMOTE_SHARE_UPLOAD_TOKEN = stringPreferencesKey("remote_share_upload_token")
-        val DEVICE_ID                 = stringPreferencesKey("device_id")
+        val DEVICE_ID = stringPreferencesKey("device_id")
 
         val LAST_FM_SCROBBLE_PERCENT = floatPreferencesKey("last_fm_scrobble_percent")
         val LAST_FM_SCROBBLE_MIN_SECS = intPreferencesKey("last_fm_scrobble_min_secs")
         val LAST_FM_SCROBBLE_OFFLINE = booleanPreferencesKey("last_fm_scrobble_offline")
 
-        val AMOLED_BLACK_THEME    = booleanPreferencesKey("amoled_black_theme")
-        val PALETTE_STYLE         = stringPreferencesKey("palette_style")
-        val PLAYLIST_SYNC_FOLDER  = stringPreferencesKey("playlist_sync_folder")
-        val PLAYLIST_SYNC_EXPORT  = booleanPreferencesKey("playlist_sync_export")
+        val AMOLED_BLACK_THEME = booleanPreferencesKey("amoled_black_theme")
+        val PALETTE_STYLE = stringPreferencesKey("palette_style")
+        val PLAYLIST_SYNC_FOLDER = stringPreferencesKey("playlist_sync_folder")
+        val PLAYLIST_SYNC_EXPORT = booleanPreferencesKey("playlist_sync_export")
         val PLAYLIST_SYNC_RELATIVE = booleanPreferencesKey("playlist_sync_relative_paths")
         val PLAYLIST_SYNC_IGNORED = stringSetPreferencesKey("playlist_sync_ignored")
-        val COMPACT_LIST_MODE     = booleanPreferencesKey("compact_list_mode")
+        val COMPACT_LIST_MODE = booleanPreferencesKey("compact_list_mode")
         val SHOW_DURATION_IN_LIST = booleanPreferencesKey("show_duration_in_list")
-        val PLAYER_ARTWORK_SHAPE  = stringPreferencesKey("player_artwork_shape")
-        val LYRIC_ALIGNMENT       = stringPreferencesKey("lyric_alignment")
-        val SEEKBAR_COLOR         = stringPreferencesKey("seekbar_color")
-        val TINTED_NAV_BAR        = booleanPreferencesKey("tinted_nav_bar")
+        val PLAYER_ARTWORK_SHAPE = stringPreferencesKey("player_artwork_shape")
+        val LYRIC_ALIGNMENT = stringPreferencesKey("lyric_alignment")
+        val SEEKBAR_COLOR = stringPreferencesKey("seekbar_color")
+        val TINTED_NAV_BAR = booleanPreferencesKey("tinted_nav_bar")
 
-        val FLOATING_NAV_BAR       = booleanPreferencesKey("floating_nav_bar")
-        val NAV_LABEL_VISIBILITY   = stringPreferencesKey("nav_label_visibility")
-        val PLAYLIST_GRID_COLUMNS  = intPreferencesKey("playlist_grid_columns")
-        val HOME_SHOW_MOST_PLAYED  = booleanPreferencesKey("home_show_most_played")
-        val MIXES_LOCATION         = stringPreferencesKey("mixes_location")
+        val FLOATING_NAV_BAR = booleanPreferencesKey("floating_nav_bar")
+        val NAV_LABEL_VISIBILITY = stringPreferencesKey("nav_label_visibility")
+        val PLAYLIST_GRID_COLUMNS = intPreferencesKey("playlist_grid_columns")
+        val HOME_SHOW_MOST_PLAYED = booleanPreferencesKey("home_show_most_played")
+        val MIXES_LOCATION = stringPreferencesKey("mixes_location")
 
-        val SHOW_ALBUM_IN_LIST          = booleanPreferencesKey("show_album_in_list")
-        val LIST_ARTWORK_SIZE           = stringPreferencesKey("list_artwork_size")
-        val SHOW_REMAINING_TIME         = booleanPreferencesKey("show_remaining_time")
-        val SHOW_NEXT_SONG_IN_PLAYER    = booleanPreferencesKey("show_next_song_in_player")
-        val LYRICS_LINE_SPACING         = stringPreferencesKey("lyrics_line_spacing")
-        val MINI_PLAYER_SHOW_PROGRESS   = booleanPreferencesKey("mini_player_show_progress")
-        val MINI_PLAYER_SHOW_SKIP_BTN   = booleanPreferencesKey("mini_player_show_skip_btn")
-        val HOME_SHOW_RECENTLY_ADDED    = booleanPreferencesKey("home_show_recently_added")
-        val HOME_RECENTLY_ADDED_COUNT   = intPreferencesKey("home_recently_added_count")
-        val DEFAULT_SONGS_SORT          = stringPreferencesKey("default_songs_sort")
-        val SHOW_EQUALIZER_IN_PLAYER    = booleanPreferencesKey("show_equalizer_in_player")
-        val LYRICS_FONT_FAMILY          = stringPreferencesKey("lyrics_font_family")
+        val SHOW_ALBUM_IN_LIST = booleanPreferencesKey("show_album_in_list")
+        val LIST_ARTWORK_SIZE = stringPreferencesKey("list_artwork_size")
+        val SHOW_REMAINING_TIME = booleanPreferencesKey("show_remaining_time")
+        val SHOW_NEXT_SONG_IN_PLAYER = booleanPreferencesKey("show_next_song_in_player")
+        val LYRICS_LINE_SPACING = stringPreferencesKey("lyrics_line_spacing")
+        val MINI_PLAYER_SHOW_PROGRESS = booleanPreferencesKey("mini_player_show_progress")
+        val MINI_PLAYER_SHOW_SKIP_BTN = booleanPreferencesKey("mini_player_show_skip_btn")
+        val HOME_SHOW_RECENTLY_ADDED = booleanPreferencesKey("home_show_recently_added")
+        val HOME_RECENTLY_ADDED_COUNT = intPreferencesKey("home_recently_added_count")
+        val DEFAULT_SONGS_SORT = stringPreferencesKey("default_songs_sort")
+        val SHOW_EQUALIZER_IN_PLAYER = booleanPreferencesKey("show_equalizer_in_player")
+        val LYRICS_FONT_FAMILY = stringPreferencesKey("lyrics_font_family")
     }
 
     val isFirstRun: Flow<Boolean> = data.mapDistinct { it[IS_FIRST_RUN] ?: true }
@@ -359,7 +359,7 @@ class ResonancePreferences @Inject constructor(
     suspend fun setNavidromeCredentials(url: String, username: String, password: String) {
         ds.edit {
             it[NAVIDROME_SERVER_URL] = url
-            it[NAVIDROME_USERNAME]   = username
+            it[NAVIDROME_USERNAME] = username
         }
         navidromePasswordMigrated = true
         secureCredentialStore.setNavidromePassword(password)
@@ -493,7 +493,7 @@ class ResonancePreferences @Inject constructor(
     val discogsApiToken: Flow<String> = data.mapDistinct { it[DISCOGS_API_TOKEN] ?: "" }
     suspend fun setDiscogsApiToken(v: String) { ds.edit { it[DISCOGS_API_TOKEN] = v } }
 
-    val remoteShareServerUrl: Flow<String>   = data.mapDistinct { it[REMOTE_SHARE_SERVER_URL] ?: "" }
+    val remoteShareServerUrl: Flow<String> = data.mapDistinct { it[REMOTE_SHARE_SERVER_URL] ?: "" }
     val remoteShareUploadToken: Flow<String> = data.mapDistinct { it[REMOTE_SHARE_UPLOAD_TOKEN] ?: "" }
     suspend fun setRemoteShareServerUrl(v: String)   { ds.edit { it[REMOTE_SHARE_SERVER_URL] = v } }
     suspend fun setRemoteShareUploadToken(v: String) { ds.edit { it[REMOTE_SHARE_UPLOAD_TOKEN] = v } }
@@ -535,11 +535,11 @@ class ResonancePreferences @Inject constructor(
             if (key.name in BACKUP_EXCLUDED_KEYS) return@mapNotNull null
             when (value) {
                 is Boolean -> BackupPreferenceEntry(key.name, "boolean", value.toString())
-                is String  -> BackupPreferenceEntry(key.name, "string", value)
-                is Int     -> BackupPreferenceEntry(key.name, "int", value.toString())
-                is Long    -> BackupPreferenceEntry(key.name, "long", value.toString())
-                is Float   -> BackupPreferenceEntry(key.name, "float", value.toString())
-                is Set<*>  -> BackupPreferenceEntry(key.name, "stringSet", values = value.filterIsInstance<String>())
+                is String -> BackupPreferenceEntry(key.name, "string", value)
+                is Int -> BackupPreferenceEntry(key.name, "int", value.toString())
+                is Long -> BackupPreferenceEntry(key.name, "long", value.toString())
+                is Float -> BackupPreferenceEntry(key.name, "float", value.toString())
+                is Set<*> -> BackupPreferenceEntry(key.name, "stringSet", values = value.filterIsInstance<String>())
                 else -> null
             }
         }

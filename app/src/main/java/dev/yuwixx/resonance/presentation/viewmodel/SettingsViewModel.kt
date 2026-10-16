@@ -106,9 +106,9 @@ class SettingsViewModel @Inject constructor(
 
                 val shouldCheck = when (freq) {
                     "LAUNCH" -> true
-                    "DAILY"  -> hoursSinceLast >= 24
+                    "DAILY" -> hoursSinceLast >= 24
                     "WEEKLY" -> hoursSinceLast >= 168
-                    else     -> false
+                    else -> false
                 }
                 if (!shouldCheck) return@launch
             }
@@ -351,13 +351,13 @@ class SettingsViewModel @Inject constructor(
         navidromeRepository.resetSyncState()
     }
 
-        fun testNavidromeConnection(serverUrl: String, username: String, password: String) {
+    fun testNavidromeConnection(serverUrl: String, username: String, password: String) {
         viewModelScope.launch {
             navidromeRepository.testConnection(serverUrl, username, password)
         }
     }
 
-        fun saveNavidromeAndSwitch(serverUrl: String, username: String, password: String) {
+    fun saveNavidromeAndSwitch(serverUrl: String, username: String, password: String) {
         viewModelScope.launch {
             val effectivePassword = password.ifBlank { prefs.getNavidromePassword() ?: password }
             prefs.setNavidromeCredentials(serverUrl, username, effectivePassword)
@@ -370,7 +370,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-        fun switchToLocal() {
+    fun switchToLocal() {
         viewModelScope.launch {
             prefs.clearNavidromeCredentials()
             navidromeRepository.clearCache()

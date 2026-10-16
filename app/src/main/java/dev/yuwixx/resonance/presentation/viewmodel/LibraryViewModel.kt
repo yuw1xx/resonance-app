@@ -167,7 +167,7 @@ class LibraryViewModel @Inject constructor(
     val allAlbums: StateFlow<List<Album>> = prefs.musicSource
         .flatMapLatest { source ->
             when (source) {
-                MusicSource.LOCAL     -> musicRepository.allAlbums
+                MusicSource.LOCAL -> musicRepository.allAlbums
                 MusicSource.NAVIDROME -> navidromeRepository.cachedAlbums
             }
         }
@@ -179,7 +179,7 @@ class LibraryViewModel @Inject constructor(
     val allArtists: StateFlow<List<Artist>> = prefs.musicSource
         .flatMapLatest { source ->
             when (source) {
-                MusicSource.LOCAL     -> musicRepository.allArtists
+                MusicSource.LOCAL -> musicRepository.allArtists
                 MusicSource.NAVIDROME -> _navidromeArtists
             }
         }

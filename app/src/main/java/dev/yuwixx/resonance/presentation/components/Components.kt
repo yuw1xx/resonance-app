@@ -71,10 +71,10 @@ fun MixArtwork(
 ) {
     val (gradientColors, icon) = remember(mixType) {
         when (mixType) {
-            MixType.FAVORITES      -> listOf(Color(0xFFFF6B6B), Color(0xFFFFE66D)) to Icons.Rounded.Favorite
-            MixType.TOP_ARTIST     -> listOf(Color(0xFFA855F7), Color(0xFF6366F1)) to Icons.Rounded.Mic
-            MixType.TOP_GENRE      -> listOf(Color(0xFF10B981), Color(0xFF06B6D4)) to Icons.Rounded.LibraryMusic
-            MixType.ERA            -> listOf(Color(0xFFF59E0B), Color(0xFFEF4444)) to Icons.Rounded.History
+            MixType.FAVORITES -> listOf(Color(0xFFFF6B6B), Color(0xFFFFE66D)) to Icons.Rounded.Favorite
+            MixType.TOP_ARTIST -> listOf(Color(0xFFA855F7), Color(0xFF6366F1)) to Icons.Rounded.Mic
+            MixType.TOP_GENRE -> listOf(Color(0xFF10B981), Color(0xFF06B6D4)) to Icons.Rounded.LibraryMusic
+            MixType.ERA -> listOf(Color(0xFFF59E0B), Color(0xFFEF4444)) to Icons.Rounded.History
             MixType.RECENTLY_LOVED -> listOf(Color(0xFFEC4899), Color(0xFF8B5CF6)) to Icons.Rounded.AutoAwesome
         }
     }

@@ -54,26 +54,26 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
-    data object Setup         : Screen("setup")
-    data object Home          : Screen("home")
-    data object Library       : Screen("library")
-    data object Playlists     : Screen("playlists")
-    data object Search        : Screen("search")
-    data object Settings      : Screen("settings")
-    data object Licenses      : Screen("licenses")
-    data object LyricsEditor  : Screen("lyrics_editor")
-    data object Statistics    : Screen("statistics")
-    data object Equalizer     : Screen("equalizer")
+    data object Setup : Screen("setup")
+    data object Home : Screen("home")
+    data object Library : Screen("library")
+    data object Playlists : Screen("playlists")
+    data object Search : Screen("search")
+    data object Settings : Screen("settings")
+    data object Licenses : Screen("licenses")
+    data object LyricsEditor : Screen("lyrics_editor")
+    data object Statistics : Screen("statistics")
+    data object Equalizer : Screen("equalizer")
     data object MetadataEnrichment : Screen("metadata_enrichment")
 
     data object TagEditor : Screen("tag_editor/{songId}") {
         fun createRoute(songId: Long) = "tag_editor/$songId"
     }
 
-    data object AlbumDetail   : Screen("album_detail/{albumId}") {
+    data object AlbumDetail : Screen("album_detail/{albumId}") {
         fun createRoute(albumId: Long) = "album_detail/$albumId"
     }
-    data object ArtistDetail  : Screen("artist_detail/{artistName}") {
+    data object ArtistDetail : Screen("artist_detail/{artistName}") {
         fun createRoute(artistName: String) = "artist_detail/${URLEncoder.encode(artistName, "UTF-8")}"
     }
     data object PlaylistDetail : Screen("playlist_detail/{playlistId}") {
@@ -239,326 +239,326 @@ fun ResonanceNavGraph(
         LocalContentColor provides MaterialTheme.colorScheme.onSurface,
         LocalPlaybackActive provides isPlaying,
     ) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-        if (isFirstRun != null) {
-            val padding = PaddingValues(bottom = contentBottomPadding)
-            NavHost(
-                navController = navController,
-                startDestination = if (isFirstRun == true) Screen.Setup.route else Screen.Home.route,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    // Screens below must not add the navigation-bar inset again.
-                    .consumeWindowInsets(padding),
-                // Tab ↔ tab: M3 fade-through. Drill-in/out: M3 shared axis X. Both use the
-                // theme's motion scheme so they match the rest of the app.
-                enterTransition = {
-                    if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
-                        fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.defaultSpatialSpec(), initialScale = 0.96f)
-                    } else {
-                        slideInHorizontally(motion.defaultSpatialSpec()) { (it * 0.15f).toInt() } + fadeIn(motion.defaultEffectsSpec())
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+            if (isFirstRun != null) {
+                val padding = PaddingValues(bottom = contentBottomPadding)
+                NavHost(
+                    navController = navController,
+                    startDestination = if (isFirstRun == true) Screen.Setup.route else Screen.Home.route,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        // Screens below must not add the navigation-bar inset again.
+                        .consumeWindowInsets(padding),
+                    // Tab ↔ tab: M3 fade-through. Drill-in/out: M3 shared axis X. Both use the
+                    // theme's motion scheme so they match the rest of the app.
+                    enterTransition = {
+                        if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
+                            fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.defaultSpatialSpec(), initialScale = 0.96f)
+                        } else {
+                            slideInHorizontally(motion.defaultSpatialSpec()) { (it * 0.15f).toInt() } + fadeIn(motion.defaultEffectsSpec())
+                        }
+                    },
+                    exitTransition = {
+                        if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
+                            fadeOut(motion.fastEffectsSpec())
+                        } else {
+                            slideOutHorizontally(motion.defaultSpatialSpec()) { -(it * 0.15f).toInt() } + fadeOut(motion.fastEffectsSpec())
+                        }
+                    },
+                    popEnterTransition = {
+                        if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
+                            fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.defaultSpatialSpec(), initialScale = 0.96f)
+                        } else {
+                            slideInHorizontally(motion.defaultSpatialSpec()) { -(it * 0.15f).toInt() } + fadeIn(motion.defaultEffectsSpec())
+                        }
+                    },
+                    popExitTransition = {
+                        if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
+                            fadeOut(motion.fastEffectsSpec())
+                        } else {
+                            slideOutHorizontally(motion.defaultSpatialSpec()) { (it * 0.15f).toInt() } + fadeOut(motion.fastEffectsSpec())
+                        }
+                    },
+                ) {
+                    composable(Screen.Setup.route) {
+                        SetupScreen(onComplete = {
+                            scope.launch {
+                                libraryViewModel.prefs.setFirstRunCompleted()
+                                libraryViewModel.syncLibrary(force = true)
+                                navController.navigate(Screen.Home.route) {
+                                    popUpTo(Screen.Setup.route) { inclusive = true }
+                                }
+                            }
+                        })
                     }
-                },
-                exitTransition = {
-                    if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
-                        fadeOut(motion.fastEffectsSpec())
-                    } else {
-                        slideOutHorizontally(motion.defaultSpatialSpec()) { -(it * 0.15f).toInt() } + fadeOut(motion.fastEffectsSpec())
+
+                    composable(Screen.Home.route) {
+                        HomeScreen(
+                            playerViewModel = playerViewModel,
+                            libraryViewModel = libraryViewModel,
+                            onNavigateTo = { navController.navigate(it.route) },
+                            onOpenPlayer = navigateToPlayer,
+                        )
                     }
-                },
-                popEnterTransition = {
-                    if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
-                        fadeIn(motion.defaultEffectsSpec()) + scaleIn(motion.defaultSpatialSpec(), initialScale = 0.96f)
-                    } else {
-                        slideInHorizontally(motion.defaultSpatialSpec()) { -(it * 0.15f).toInt() } + fadeIn(motion.defaultEffectsSpec())
-                    }
-                },
-                popExitTransition = {
-                    if (isTab(initialState.destination.route) && isTab(targetState.destination.route)) {
-                        fadeOut(motion.fastEffectsSpec())
-                    } else {
-                        slideOutHorizontally(motion.defaultSpatialSpec()) { (it * 0.15f).toInt() } + fadeOut(motion.fastEffectsSpec())
-                    }
-                },
-            ) {
-                composable(Screen.Setup.route) {
-                    SetupScreen(onComplete = {
-                        scope.launch {
-                            libraryViewModel.prefs.setFirstRunCompleted()
-                            libraryViewModel.syncLibrary(force = true)
-                            navController.navigate(Screen.Home.route) {
-                                popUpTo(Screen.Setup.route) { inclusive = true }
+
+                    composable(Screen.Library.route) {
+                        val goToSearch: () -> Unit = { navigateToTab(Screen.Search.route) }
+                        val libraryContent: @Composable () -> Unit = {
+                            LibraryScreen(showFolders = musicSource == MusicSource.LOCAL) { section ->
+                                when (section) {
+                                    LibrarySection.Songs -> SongsScreen(
+                                        libraryViewModel = libraryViewModel,
+                                        playerViewModel = playerViewModel,
+                                        onSearchClick = goToSearch,
+                                        onNavigateToPlayer = navigateToPlayer,
+                                        onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
+                                    )
+                                    LibrarySection.Albums -> AlbumsScreen(
+                                        libraryViewModel = libraryViewModel,
+                                        onAlbumClick = { album -> navController.navigate(Screen.AlbumDetail.createRoute(album.id)) },
+                                        onSearchClick = goToSearch,
+                                    )
+                                    LibrarySection.Artists -> ArtistsScreen(
+                                        libraryViewModel = libraryViewModel,
+                                        onArtistClick = { artist -> navController.navigate(Screen.ArtistDetail.createRoute(artist.name)) },
+                                        onSearchClick = goToSearch,
+                                    )
+                                    LibrarySection.Liked -> LikedSongsScreen(
+                                        playerViewModel = playerViewModel,
+                                        libraryViewModel = libraryViewModel,
+                                        onBack = {},
+                                        onNavigateToPlayer = navigateToPlayer,
+                                    )
+                                    LibrarySection.Folders -> FoldersScreen(
+                                        libraryViewModel = libraryViewModel,
+                                        playerViewModel = playerViewModel,
+                                        onBack = {},
+                                    )
+                                }
                             }
                         }
-                    })
-                }
-
-                composable(Screen.Home.route) {
-                    HomeScreen(
-                        playerViewModel = playerViewModel,
-                        libraryViewModel = libraryViewModel,
-                        onNavigateTo = { navController.navigate(it.route) },
-                        onOpenPlayer = navigateToPlayer,
-                    )
-                }
-
-                composable(Screen.Library.route) {
-                    val goToSearch: () -> Unit = { navigateToTab(Screen.Search.route) }
-                    val libraryContent: @Composable () -> Unit = {
-                        LibraryScreen(showFolders = musicSource == MusicSource.LOCAL) { section ->
-                            when (section) {
-                                LibrarySection.Songs -> SongsScreen(
-                                    libraryViewModel = libraryViewModel,
-                                    playerViewModel = playerViewModel,
-                                    onSearchClick = goToSearch,
-                                    onNavigateToPlayer = navigateToPlayer,
-                                    onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
-                                )
-                                LibrarySection.Albums -> AlbumsScreen(
-                                    libraryViewModel = libraryViewModel,
-                                    onAlbumClick = { album -> navController.navigate(Screen.AlbumDetail.createRoute(album.id)) },
-                                    onSearchClick = goToSearch,
-                                )
-                                LibrarySection.Artists -> ArtistsScreen(
-                                    libraryViewModel = libraryViewModel,
-                                    onArtistClick = { artist -> navController.navigate(Screen.ArtistDetail.createRoute(artist.name)) },
-                                    onSearchClick = goToSearch,
-                                )
-                                LibrarySection.Liked -> LikedSongsScreen(
-                                    playerViewModel = playerViewModel,
-                                    libraryViewModel = libraryViewModel,
-                                    onBack = {},
-                                    onNavigateToPlayer = navigateToPlayer,
-                                )
-                                LibrarySection.Folders -> FoldersScreen(
-                                    libraryViewModel = libraryViewModel,
-                                    playerViewModel = playerViewModel,
-                                    onBack = {},
-                                )
-                            }
-                        }
+                        if (musicSource == MusicSource.LOCAL) PermissionWrapper(libraryContent) else libraryContent()
                     }
-                    if (musicSource == MusicSource.LOCAL) PermissionWrapper(libraryContent) else libraryContent()
-                }
 
-                composable(Screen.Playlists.route) {
-                    PlaylistsScreen(
-                        libraryViewModel = libraryViewModel,
-                        onPlaylistClick = { playlist -> navController.navigate(Screen.PlaylistDetail.createRoute(playlist.id)) }
-                    )
-                }
+                    composable(Screen.Playlists.route) {
+                        PlaylistsScreen(
+                            libraryViewModel = libraryViewModel,
+                            onPlaylistClick = { playlist -> navController.navigate(Screen.PlaylistDetail.createRoute(playlist.id)) }
+                        )
+                    }
 
-                composable(Screen.Search.route) {
-                    SearchScreen(
-                        libraryViewModel = libraryViewModel,
-                        playerViewModel = playerViewModel,
-                        onAlbumClick = { album -> navController.navigate(Screen.AlbumDetail.createRoute(album.id)) },
-                        onArtistClick = { artist -> navController.navigate(Screen.ArtistDetail.createRoute(artist.name)) },
-                        onNavigateToPlayer = navigateToPlayer,
-                    )
-                }
+                    composable(Screen.Search.route) {
+                        SearchScreen(
+                            libraryViewModel = libraryViewModel,
+                            playerViewModel = playerViewModel,
+                            onAlbumClick = { album -> navController.navigate(Screen.AlbumDetail.createRoute(album.id)) },
+                            onArtistClick = { artist -> navController.navigate(Screen.ArtistDetail.createRoute(artist.name)) },
+                            onNavigateToPlayer = navigateToPlayer,
+                        )
+                    }
 
-                composable(
-                    route = Screen.TagEditor.route,
-                    arguments = listOf(navArgument("songId") { type = NavType.LongType })
-                ) { backStackEntry ->
-                    val songId = backStackEntry.arguments?.getLong("songId") ?: return@composable
-                    TagEditorScreen(
-                        songId = songId,
-                        libraryViewModel = libraryViewModel,
-                        // The save result can arrive after the user already left; only pop this screen.
-                        onBack = { if (navController.currentBackStackEntry == backStackEntry) navController.popBackStack() }
-                    )
-                }
+                    composable(
+                        route = Screen.TagEditor.route,
+                        arguments = listOf(navArgument("songId") { type = NavType.LongType })
+                    ) { backStackEntry ->
+                        val songId = backStackEntry.arguments?.getLong("songId") ?: return@composable
+                        TagEditorScreen(
+                            songId = songId,
+                            libraryViewModel = libraryViewModel,
+                            // The save result can arrive after the user already left; only pop this screen.
+                            onBack = { if (navController.currentBackStackEntry == backStackEntry) navController.popBackStack() }
+                        )
+                    }
 
-                composable(
-                    route = Screen.AlbumDetail.route,
-                    arguments = listOf(navArgument("albumId") { type = NavType.LongType }),
-                ) { backStackEntry ->
-                    val albumId = backStackEntry.arguments?.getLong("albumId") ?: return@composable
-                    AlbumDetailScreen(
-                        albumId = albumId,
-                        libraryViewModel = libraryViewModel,
-                        playerViewModel = playerViewModel,
-                        onBack = { navController.popBackStack() },
-                        onNavigateToPlayer = navigateToPlayer,
-                        onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
-                        onArtistClick = { name -> navController.navigate(Screen.ArtistDetail.createRoute(name)) },
-                    )
-                }
+                    composable(
+                        route = Screen.AlbumDetail.route,
+                        arguments = listOf(navArgument("albumId") { type = NavType.LongType }),
+                    ) { backStackEntry ->
+                        val albumId = backStackEntry.arguments?.getLong("albumId") ?: return@composable
+                        AlbumDetailScreen(
+                            albumId = albumId,
+                            libraryViewModel = libraryViewModel,
+                            playerViewModel = playerViewModel,
+                            onBack = { navController.popBackStack() },
+                            onNavigateToPlayer = navigateToPlayer,
+                            onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
+                            onArtistClick = { name -> navController.navigate(Screen.ArtistDetail.createRoute(name)) },
+                        )
+                    }
 
-                composable(
-                    route = Screen.ArtistDetail.route,
-                    arguments = listOf(navArgument("artistName") { type = NavType.StringType }),
-                ) { backStackEntry ->
-                    val artistName = URLDecoder.decode(
-                        backStackEntry.arguments?.getString("artistName") ?: return@composable,
-                        "UTF-8"
-                    )
-                    ArtistDetailScreen(
-                        artistName = artistName,
-                        libraryViewModel = libraryViewModel,
-                        playerViewModel = playerViewModel,
-                        onAlbumClick = { album -> navController.navigate(Screen.AlbumDetail.createRoute(album.id)) },
-                        onBack = { navController.popBackStack() },
-                        onNavigateToPlayer = navigateToPlayer,
-                        onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
-                    )
-                }
+                    composable(
+                        route = Screen.ArtistDetail.route,
+                        arguments = listOf(navArgument("artistName") { type = NavType.StringType }),
+                    ) { backStackEntry ->
+                        val artistName = URLDecoder.decode(
+                            backStackEntry.arguments?.getString("artistName") ?: return@composable,
+                            "UTF-8"
+                        )
+                        ArtistDetailScreen(
+                            artistName = artistName,
+                            libraryViewModel = libraryViewModel,
+                            playerViewModel = playerViewModel,
+                            onAlbumClick = { album -> navController.navigate(Screen.AlbumDetail.createRoute(album.id)) },
+                            onBack = { navController.popBackStack() },
+                            onNavigateToPlayer = navigateToPlayer,
+                            onNavigateToTagEditor = { id -> navController.navigate(Screen.TagEditor.createRoute(id)) },
+                        )
+                    }
 
-                composable(
-                    route = Screen.SongDetail.route,
-                    arguments = listOf(navArgument("songId") { type = NavType.LongType }),
-                ) { backStackEntry ->
-                    val songId = backStackEntry.arguments?.getLong("songId") ?: return@composable
-                    SongDetailScreen(
-                        songId = songId,
-                        onBack = { navController.popBackStack() },
-                        onArtistClick = { name -> navController.navigate(Screen.ArtistDetail.createRoute(name)) },
-                    )
-                }
+                    composable(
+                        route = Screen.SongDetail.route,
+                        arguments = listOf(navArgument("songId") { type = NavType.LongType }),
+                    ) { backStackEntry ->
+                        val songId = backStackEntry.arguments?.getLong("songId") ?: return@composable
+                        SongDetailScreen(
+                            songId = songId,
+                            onBack = { navController.popBackStack() },
+                            onArtistClick = { name -> navController.navigate(Screen.ArtistDetail.createRoute(name)) },
+                        )
+                    }
 
-                composable(
-                    route = Screen.PlaylistDetail.route,
-                    arguments = listOf(navArgument("playlistId") { type = NavType.LongType }),
-                ) { backStackEntry ->
-                    val playlistId = backStackEntry.arguments?.getLong("playlistId") ?: return@composable
-                    PlaylistDetailScreen(
-                        playlistId = playlistId,
-                        libraryViewModel = libraryViewModel,
-                        playerViewModel = playerViewModel,
-                        onBack = { navController.popBackStack() },
-                        onNavigateToPlayer = navigateToPlayer,
-                    )
-                }
+                    composable(
+                        route = Screen.PlaylistDetail.route,
+                        arguments = listOf(navArgument("playlistId") { type = NavType.LongType }),
+                    ) { backStackEntry ->
+                        val playlistId = backStackEntry.arguments?.getLong("playlistId") ?: return@composable
+                        PlaylistDetailScreen(
+                            playlistId = playlistId,
+                            libraryViewModel = libraryViewModel,
+                            playerViewModel = playerViewModel,
+                            onBack = { navController.popBackStack() },
+                            onNavigateToPlayer = navigateToPlayer,
+                        )
+                    }
 
-                composable(Screen.Settings.route) {
-                    SettingsScreen(
-                        onBack = { navController.popBackStack() },
-                        onNavigateToLicenses = { navController.navigate(Screen.Licenses.route) },
-                        onNavigateToEqualizer = { navController.navigate(Screen.Equalizer.route) },
-                        onNavigateToMetadataEnrichment = { navController.navigate(Screen.MetadataEnrichment.route) },
-                        libraryViewModel = libraryViewModel,
-                        settingsViewModel = settingsViewModel,
-                    )
-                }
+                    composable(Screen.Settings.route) {
+                        SettingsScreen(
+                            onBack = { navController.popBackStack() },
+                            onNavigateToLicenses = { navController.navigate(Screen.Licenses.route) },
+                            onNavigateToEqualizer = { navController.navigate(Screen.Equalizer.route) },
+                            onNavigateToMetadataEnrichment = { navController.navigate(Screen.MetadataEnrichment.route) },
+                            libraryViewModel = libraryViewModel,
+                            settingsViewModel = settingsViewModel,
+                        )
+                    }
 
-                composable(Screen.Statistics.route) {
-                    StatisticsScreen(onBack = { navController.popBackStack() })
-                }
+                    composable(Screen.Statistics.route) {
+                        StatisticsScreen(onBack = { navController.popBackStack() })
+                    }
 
-                composable(Screen.Equalizer.route) {
-                    EqualizerScreen(onBack = { navController.popBackStack() })
-                }
+                    composable(Screen.Equalizer.route) {
+                        EqualizerScreen(onBack = { navController.popBackStack() })
+                    }
 
-                composable(Screen.MetadataEnrichment.route) {
-                    MetadataEnrichmentScreen(onBack = { navController.popBackStack() })
-                }
+                    composable(Screen.MetadataEnrichment.route) {
+                        MetadataEnrichmentScreen(onBack = { navController.popBackStack() })
+                    }
 
-                composable(Screen.Licenses.route) {
-                    LicensesScreen(onBack = { navController.popBackStack() })
-                }
+                    composable(Screen.Licenses.route) {
+                        LicensesScreen(onBack = { navController.popBackStack() })
+                    }
 
-                composable(Screen.LyricsEditor.route) {
-                    LyricsEditorScreen(
-                        playerViewModel = playerViewModel,
-                        lyricsRepository = playerViewModel.lyricsRepository,
-                        onBack = { navController.popBackStack() },
-                    )
+                    composable(Screen.LyricsEditor.route) {
+                        LyricsEditorScreen(
+                            playerViewModel = playerViewModel,
+                            lyricsRepository = playerViewModel.lyricsRepository,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
             }
-        }
 
-        AnimatedVisibility(
-            visible = showSheet,
-            enter = slideInVertically(motion.defaultSpatialSpec()) { it / 4 } + fadeIn(motion.defaultEffectsSpec()),
-            exit = slideOutVertically(motion.fastSpatialSpec()) { it / 4 } + fadeOut(motion.fastEffectsSpec()),
-        ) {
+            AnimatedVisibility(
+                visible = showSheet,
+                enter = slideInVertically(motion.defaultSpatialSpec()) { it / 4 } + fadeIn(motion.defaultEffectsSpec()),
+                exit = slideOutVertically(motion.fastSpatialSpec()) { it / 4 } + fadeOut(motion.fastEffectsSpec()),
+            ) {
 
-                PlayerSheet(
-                    state = sheetState,
-                    metrics = miniMetrics,
-                    bottomBarHeightPx = { bottomBarHeightPx },
-                    collapsedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    expandedContainerColor = MaterialTheme.colorScheme.surface,
-                    artworkUri = currentSong?.artworkUri,
-                    mini = { onExpand ->
-                        MiniPlayerBar(
-                            playerViewModel = playerViewModel,
-                            metrics = miniMetrics,
-                            onExpand = onExpand,
-                        )
-                    },
-                    full = { onCollapse ->
-                        PlayerScreen(
-                            playerViewModel = playerViewModel,
-                            onBack = onCollapse,
-                            onLyricsEdit = { navigateFromPlayer(Screen.LyricsEditor.route) },
-                            onNavigateToEqualizer = { navigateFromPlayer(Screen.Equalizer.route) },
-                            playlists = allPlaylists,
-                            onAddToPlaylist = { playlist ->
-                                playerViewModel.currentSong.value?.let { song ->
-                                    libraryViewModel.addSongsToPlaylist(playlist.id, listOf(song.id))
-                                }
-                            },
-                            onCreatePlaylist = { name ->
-                                val songIds = listOfNotNull(playerViewModel.currentSong.value?.id)
-                                libraryViewModel.createPlaylistWithSongs(name, songIds)
-                            },
-                            onArtistClick = { name -> navigateFromPlayer(Screen.ArtistDetail.createRoute(name)) },
-                            onSongClick = { songId -> navigateFromPlayer(Screen.SongDetail.createRoute(songId)) },
-                        )
+                    PlayerSheet(
+                        state = sheetState,
+                        metrics = miniMetrics,
+                        bottomBarHeightPx = { bottomBarHeightPx },
+                        collapsedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        expandedContainerColor = MaterialTheme.colorScheme.surface,
+                        artworkUri = currentSong?.artworkUri,
+                        mini = { onExpand ->
+                            MiniPlayerBar(
+                                playerViewModel = playerViewModel,
+                                metrics = miniMetrics,
+                                onExpand = onExpand,
+                            )
+                        },
+                        full = { onCollapse ->
+                            PlayerScreen(
+                                playerViewModel = playerViewModel,
+                                onBack = onCollapse,
+                                onLyricsEdit = { navigateFromPlayer(Screen.LyricsEditor.route) },
+                                onNavigateToEqualizer = { navigateFromPlayer(Screen.Equalizer.route) },
+                                playlists = allPlaylists,
+                                onAddToPlaylist = { playlist ->
+                                    playerViewModel.currentSong.value?.let { song ->
+                                        libraryViewModel.addSongsToPlaylist(playlist.id, listOf(song.id))
+                                    }
+                                },
+                                onCreatePlaylist = { name ->
+                                    val songIds = listOfNotNull(playerViewModel.currentSong.value?.id)
+                                    libraryViewModel.createPlaylistWithSongs(name, songIds)
+                                },
+                                onArtistClick = { name -> navigateFromPlayer(Screen.ArtistDetail.createRoute(name)) },
+                                onSongClick = { songId -> navigateFromPlayer(Screen.SongDetail.createRoute(songId)) },
+                            )
+                        },
+                    )
+            }
+
+            // Drawn after the sheet so it stays on top of the collapsed mini player's container;
+            // slides away as the sheet expands.
+            AnimatedVisibility(
+                visible = showBottomBar,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = slideInVertically(motion.defaultSpatialSpec()) { it },
+                exit = slideOutVertically(motion.fastSpatialSpec()) { it },
+            ) {
+                ResonanceBottomBar(
+                    items = visibleNavItems,
+                    currentDestination = currentDestination,
+                    floating = floatingNav,
+                    tinted = tintedNav,
+                    labelVisibility = navLabelVis,
+                    onSelect = { navigateToTab(it.screen.route) },
+                    modifier = Modifier.graphicsLayer { translationY = size.height * sheetState.progress },
+                )
+            }
+
+            // App-wide undo snackbar ("Play next", "Add to queue"…), just above the mini player.
+            val undoSnackbar = remember { SnackbarHostState() }
+            LaunchedEffect(Unit) {
+                playerViewModel.undoEvents.collectLatest { event ->
+                    undoSnackbar.currentSnackbarData?.dismiss()
+                    val result = undoSnackbar.showSnackbar(event.message, actionLabel = "Undo", duration = SnackbarDuration.Short)
+                    if (result == SnackbarResult.ActionPerformed) event.undo()
+                }
+            }
+            SnackbarHost(
+                undoSnackbar,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = contentBottomPadding)
+                    .graphicsLayer { alpha = 1f - sheetState.progress },
+            )
+
+            receiveUri?.let { uri ->
+                ReceiveSheet(
+                    uri = uri,
+                    onDismiss = onReceiveDismiss,
+                    onPlayNow = { songs ->
+                        playerViewModel.play(songs, 0)
+                        navigateToPlayer()
                     },
                 )
-        }
-
-        // Drawn after the sheet so it stays on top of the collapsed mini player's container;
-        // slides away as the sheet expands.
-        AnimatedVisibility(
-            visible = showBottomBar,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically(motion.defaultSpatialSpec()) { it },
-            exit = slideOutVertically(motion.fastSpatialSpec()) { it },
-        ) {
-            ResonanceBottomBar(
-                items = visibleNavItems,
-                currentDestination = currentDestination,
-                floating = floatingNav,
-                tinted = tintedNav,
-                labelVisibility = navLabelVis,
-                onSelect = { navigateToTab(it.screen.route) },
-                modifier = Modifier.graphicsLayer { translationY = size.height * sheetState.progress },
-            )
-        }
-
-        // App-wide undo snackbar ("Play next", "Add to queue"…), just above the mini player.
-        val undoSnackbar = remember { SnackbarHostState() }
-        LaunchedEffect(Unit) {
-            playerViewModel.undoEvents.collectLatest { event ->
-                undoSnackbar.currentSnackbarData?.dismiss()
-                val result = undoSnackbar.showSnackbar(event.message, actionLabel = "Undo", duration = SnackbarDuration.Short)
-                if (result == SnackbarResult.ActionPerformed) event.undo()
             }
         }
-        SnackbarHost(
-            undoSnackbar,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = contentBottomPadding)
-                .graphicsLayer { alpha = 1f - sheetState.progress },
-        )
-
-        receiveUri?.let { uri ->
-            ReceiveSheet(
-                uri       = uri,
-                onDismiss = onReceiveDismiss,
-                onPlayNow = { songs ->
-                    playerViewModel.play(songs, 0)
-                    navigateToPlayer()
-                },
-            )
-        }
-    }
     }
 }
 

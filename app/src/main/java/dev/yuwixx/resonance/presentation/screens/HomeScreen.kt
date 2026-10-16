@@ -272,12 +272,12 @@ private fun MixCard(
     onClick: () -> Unit,
 ) {
     val description = when (mix.mixType) {
-        MixType.TOP_ARTIST     -> "Your top artist this week"
-        MixType.TOP_GENRE      -> "Your most-played genre"
-        MixType.ERA            -> "Songs from your favorite decade"
-        MixType.FAVORITES      -> "Your most played tracks of all time"
+        MixType.TOP_ARTIST -> "Your top artist this week"
+        MixType.TOP_GENRE -> "Your most-played genre"
+        MixType.ERA -> "Songs from your favorite decade"
+        MixType.FAVORITES -> "Your most played tracks of all time"
         MixType.RECENTLY_LOVED -> "What you've been playing this week"
-        null                   -> ""
+        null -> ""
     }
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()

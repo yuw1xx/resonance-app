@@ -19,18 +19,18 @@ class ShareViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
 ) : ViewModel() {
 
-    val nearbyState     = nearbyManager.state
-    val nearbyDevices   = nearbyManager.nearbyDevices
-    val localName       = nearbyManager.localName
+    val nearbyState = nearbyManager.state
+    val nearbyDevices = nearbyManager.nearbyDevices
+    val localName = nearbyManager.localName
     val incomingRequest = nearbyManager.incomingRequest
-    val incomingFile    = nearbyManager.incomingFile
-    val isGrapheneOs    = nearbyManager.isGrapheneOs
+    val incomingFile = nearbyManager.incomingFile
+    val isGrapheneOs = nearbyManager.isGrapheneOs
 
     fun startScanning(activity: Activity? = null) = nearbyManager.startScanning(activity)
-    fun stopScanning()                = nearbyManager.stopScanning()
+    fun stopScanning() = nearbyManager.stopScanning()
     fun connectTo(endpointId: String) = nearbyManager.connectTo(endpointId)
-    fun disconnectNearby()            = nearbyManager.disconnect()
-    fun clearIncoming()               = nearbyManager.clearIncoming()
+    fun disconnectNearby() = nearbyManager.disconnect()
+    fun clearIncoming() = nearbyManager.clearIncoming()
 
     fun sendViaNearby(endpointId: String) {
         val song = _selectedSongs.value.singleOrNull() ?: return
@@ -60,8 +60,8 @@ class ShareViewModel @Inject constructor(
         else transferManager.prepareRemoteMultiTransfer(songs, _remoteTtlHours.value)
     }
 
-    fun cancelTransfer()            = transferManager.cancel()
-    fun dismissNoWifi()             = transferManager.dismissNoWifi()
+    fun cancelTransfer() = transferManager.cancel()
+    fun dismissNoWifi() = transferManager.dismissNoWifi()
 
     private val _selectedSongs = MutableStateFlow<List<Song>>(emptyList())
     val selectedSongs: StateFlow<List<Song>> = _selectedSongs.asStateFlow()

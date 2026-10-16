@@ -51,16 +51,16 @@ import kotlin.coroutines.resume
 import kotlinx.coroutines.*
 
 data class ReceiveParams(
-    val mode     : String,
-    val ip       : String = "",
-    val port     : Int = 0,
-    val token    : String = "",
+    val mode: String,
+    val ip: String = "",
+    val port: Int = 0,
+    val token: String = "",
     val remoteUrl: String? = null,
-    val title    : String,
-    val artist   : String,
-    val mimeType : String,
-    val ext      : String,
-    val ssid     : String? = null,
+    val title: String,
+    val artist: String,
+    val mimeType: String,
+    val ext: String,
+    val ssid: String? = null,
     val passphrase: String? = null,
 ) {
     val downloadUrl: String get() = if (mode == "remote") remoteUrl ?: "" else "http://$ip:$port/$token"
@@ -73,24 +73,24 @@ data class ReceiveParams(
                 if (mode == "remote-multi") return null
                 if (mode == "remote") {
                     ReceiveParams(
-                        mode      = mode,
+                        mode = mode,
                         remoteUrl = uri.getQueryParameter("url") ?: return null,
-                        title     = uri.getQueryParameter("title")  ?: "Unknown",
-                        artist    = uri.getQueryParameter("artist") ?: "Unknown",
-                        mimeType  = uri.getQueryParameter("mime")   ?: "audio/mpeg",
-                        ext       = uri.getQueryParameter("ext")    ?: "mp3",
+                        title = uri.getQueryParameter("title") ?: "Unknown",
+                        artist = uri.getQueryParameter("artist") ?: "Unknown",
+                        mimeType = uri.getQueryParameter("mime") ?: "audio/mpeg",
+                        ext = uri.getQueryParameter("ext") ?: "mp3",
                     )
                 } else {
                     ReceiveParams(
-                        mode      = mode,
-                        ip        = uri.getQueryParameter("ip")     ?: return null,
-                        port      = uri.getQueryParameter("port")?.toInt() ?: return null,
-                        token     = uri.getQueryParameter("token")  ?: return null,
-                        title     = uri.getQueryParameter("title")  ?: "Unknown",
-                        artist    = uri.getQueryParameter("artist") ?: "Unknown",
-                        mimeType  = uri.getQueryParameter("mime")   ?: "audio/mpeg",
-                        ext       = uri.getQueryParameter("ext")    ?: "mp3",
-                        ssid      = uri.getQueryParameter("ssid"),
+                        mode = mode,
+                        ip = uri.getQueryParameter("ip") ?: return null,
+                        port = uri.getQueryParameter("port")?.toInt() ?: return null,
+                        token = uri.getQueryParameter("token") ?: return null,
+                        title = uri.getQueryParameter("title") ?: "Unknown",
+                        artist = uri.getQueryParameter("artist") ?: "Unknown",
+                        mimeType = uri.getQueryParameter("mime") ?: "audio/mpeg",
+                        ext = uri.getQueryParameter("ext") ?: "mp3",
+                        ssid = uri.getQueryParameter("ssid"),
                         passphrase = uri.getQueryParameter("pass"),
                     )
                 }
@@ -113,18 +113,18 @@ private data class RemoteMultiParams(val serverUrl: String, val manifestToken: S
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ReceiveSheet(
-    uri          : Uri,
-    onDismiss    : () -> Unit,
-    onPlayNow    : (List<Song>) -> Unit,
+    uri: Uri,
+    onDismiss: () -> Unit,
+    onPlayNow: (List<Song>) -> Unit,
 ) {
     val mode = remember(uri) { uri.getQueryParameter("mode") }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState       = sheetState,
-        dragHandle       = null,
-        shape            = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        sheetState = sheetState,
+        dragHandle = null,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
         if (mode == "remote-multi") {
             val multiParams = remember(uri) { RemoteMultiParams.parse(uri) }
@@ -151,8 +151,8 @@ fun ReceiveSheet(
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 private fun StoragePermissionGate(
-    onDismiss : () -> Unit,
-    content   : @Composable () -> Unit,
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit,
 ) {
     val needsWritePermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
     val permissions = if (needsWritePermission) {
@@ -165,16 +165,20 @@ private fun StoragePermissionGate(
         granted = !needsWritePermission || permissions.allPermissionsGranted,
         prompt = {
             Column(
-                modifier              = Modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .padding(32.dp)
                     .navigationBarsPadding(),
-                horizontalAlignment   = Alignment.CenterHorizontally,
-                verticalArrangement   = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Icon(Icons.Rounded.FolderOpen, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
                 Text("Storage permission needed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Resonance needs storage access to save the incoming track.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Resonance needs storage access to save the incoming track.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(4.dp))
                 Button(onClick = permissions::launchMultiplePermissionRequest, shape = MaterialTheme.shapes.medium) { Text("Grant permission") }
                 TextButton(onClick = onDismiss) { Text("Cancel") }
@@ -188,8 +192,8 @@ private sealed class ReceiveState {
     data class  Connecting(val detail: String) : ReceiveState()
     data class  Prompting(val network: Network?) : ReceiveState()
     data class  Downloading(val progress: Float, val network: Network?) : ReceiveState()
-    data class  Done(val file: File)         : ReceiveState()
-    data class  Error(val message: String)   : ReceiveState()
+    data class  Done(val file: File) : ReceiveState()
+    data class  Error(val message: String) : ReceiveState()
 }
 
 private data class ManifestSongEntry(val token: String, val title: String, val artist: String, val mime: String, val ext: String)
@@ -209,13 +213,13 @@ private sealed class MultiReceiveState {
 
 @Composable
 private fun ReceiveTransferContent(
-    params    : ReceiveParams,
-    onDismiss : () -> Unit,
-    onPlayNow : (Song) -> Unit,
+    params: ReceiveParams,
+    onDismiss: () -> Unit,
+    onPlayNow: (Song) -> Unit,
 ) {
     val context = LocalContext.current
     var state by remember { mutableStateOf<ReceiveState>(ReceiveState.Connecting("Preparing…")) }
-    val scope   = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
     // However the sheet goes away (swipe, back, Done), leave the sender's network: otherwise
     // the whole app stays bound to a Wi-Fi Direct network without internet.
@@ -270,28 +274,33 @@ private fun ReceiveTransferContent(
         // share the same icon, so keying on `state` directly would replay the pop-in animation
         // on every one of those updates instead of only on an actual icon change.
         val iconKey = when (state) {
-            is ReceiveState.Done      -> "done"
-            is ReceiveState.Error     -> "error"
+            is ReceiveState.Done -> "done"
+            is ReceiveState.Error -> "error"
             is ReceiveState.Prompting -> "prompting"
-            else                      -> "active"
+            else -> "active"
         }
         AnimatedStateSwap(targetState = iconKey, label = "receive_state_icon") { key ->
             val iconRes = when (key) {
-                "done"      -> Icons.Rounded.CheckCircle
-                "error"     -> Icons.Rounded.ErrorOutline
+                "done" -> Icons.Rounded.CheckCircle
+                "error" -> Icons.Rounded.ErrorOutline
                 "prompting" -> Icons.AutoMirrored.Rounded.HelpOutline
-                else        -> if (params.mode == "p2p") Icons.Rounded.Wifi else Icons.Rounded.Download
+                else -> if (params.mode == "p2p") Icons.Rounded.Wifi else Icons.Rounded.Download
             }
             val iconTint = when (key) {
-                "done"      -> MaterialTheme.colorScheme.primary
-                "error"     -> MaterialTheme.colorScheme.error
+                "done" -> MaterialTheme.colorScheme.primary
+                "error" -> MaterialTheme.colorScheme.error
                 "prompting" -> MaterialTheme.colorScheme.primary
-                else        -> MaterialTheme.colorScheme.onSurfaceVariant
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
             }
             Icon(iconRes, null, tint = iconTint, modifier = Modifier.size(48.dp))
         }
 
-        Text(text = params.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+        Text(
+            text = params.title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
         Text(text = params.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Spacer(Modifier.height(4.dp))
@@ -311,7 +320,11 @@ private fun ReceiveTransferContent(
                     }
 
                     is ReceiveState.Prompting -> {
-                        Text("Accept this song?", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Accept this song?",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Spacer(Modifier.height(4.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedButton(
@@ -340,13 +353,29 @@ private fun ReceiveTransferContent(
                     }
 
                     is ReceiveState.Downloading -> {
-                        val animatedProgress by animateFloatAsState(s.progress, tween(300, easing = EmphasizedDecelerate), label = "receive_progress")
-                        LinearProgressIndicator(progress = { animatedProgress }, modifier = Modifier.fillMaxWidth().height(6.dp), trackColor = MaterialTheme.colorScheme.surfaceVariant)
-                        Text("${(animatedProgress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val animatedProgress by animateFloatAsState(
+                            s.progress,
+                            tween(300, easing = EmphasizedDecelerate),
+                            label = "receive_progress",
+                        )
+                        LinearProgressIndicator(
+                            progress = { animatedProgress },
+                            modifier = Modifier.fillMaxWidth().height(6.dp),
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                        Text(
+                            "${(animatedProgress * 100).toInt()}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
 
                     is ReceiveState.Done -> {
-                        Text("Saved to Music/Resonance", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "Saved to Music/Resonance",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Spacer(Modifier.height(4.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedButton(onClick = onDismiss, shape = MaterialTheme.shapes.medium) { Text("Done") }
@@ -364,7 +393,12 @@ private fun ReceiveTransferContent(
                     }
 
                     is ReceiveState.Error -> {
-                        Text(s.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+                        Text(
+                            s.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                        )
                         Spacer(Modifier.height(4.dp))
                         OutlinedButton(onClick = onDismiss, shape = MaterialTheme.shapes.medium) { Text("Close") }
                     }
@@ -376,9 +410,9 @@ private fun ReceiveTransferContent(
 
 @Composable
 private fun ReceiveMultiTransferContent(
-    params    : RemoteMultiParams,
-    onDismiss : () -> Unit,
-    onPlayNow : (List<Song>) -> Unit,
+    params: RemoteMultiParams,
+    onDismiss: () -> Unit,
+    onPlayNow: (List<Song>) -> Unit,
 ) {
     val context = LocalContext.current
     var state by remember { mutableStateOf<MultiReceiveState>(MultiReceiveState.Loading) }
@@ -419,7 +453,12 @@ private fun ReceiveMultiTransferContent(
 
             is MultiReceiveState.Error -> {
                 Icon(Icons.Rounded.ErrorOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                Text(s.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+                Text(
+                    s.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center,
+                )
                 Spacer(Modifier.height(4.dp))
                 OutlinedButton(onClick = onDismiss, shape = MaterialTheme.shapes.medium) { Text("Close") }
             }
@@ -449,8 +488,20 @@ private fun ReceiveMultiTransferContent(
                         ) {
                             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(song.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(song.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        song.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        song.artist,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                                 }
                                 // Keyed on a coarse status bucket (frozen per AnimatedContent instance) rather
                                 // than the live `status` object directly — Downloading's `progress` changes many
@@ -458,21 +509,44 @@ private fun ReceiveMultiTransferContent(
                                 // the "downloading" branch below reads the live outer `status` for its progress
                                 // value, which is safe since that branch only runs while the key is "downloading".
                                 val statusKey = when (status) {
-                                    is SongDownloadStatus.Pending     -> "pending"
+                                    is SongDownloadStatus.Pending -> "pending"
                                     is SongDownloadStatus.Downloading -> "downloading"
-                                    is SongDownloadStatus.Done        -> "done"
-                                    is SongDownloadStatus.Failed      -> "failed"
+                                    is SongDownloadStatus.Done -> "done"
+                                    is SongDownloadStatus.Failed -> "failed"
                                 }
                                 AnimatedStateSwap(targetState = statusKey, label = "song_status_$index") { key ->
                                     when (key) {
-                                        "pending" -> Icon(Icons.Rounded.Download, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                                        "pending" -> Icon(
+                                            Icons.Rounded.Download,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp),
+                                        )
                                         "downloading" -> {
                                             val progress = (status as? SongDownloadStatus.Downloading)?.progress ?: 0f
-                                            val animatedProgress by animateFloatAsState(progress, tween(300, easing = EmphasizedDecelerate), label = "song_progress_$index")
-                                            CircularProgressIndicator(progress = { animatedProgress }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                            val animatedProgress by animateFloatAsState(
+                                                progress,
+                                                tween(300, easing = EmphasizedDecelerate),
+                                                label = "song_progress_$index",
+                                            )
+                                            CircularProgressIndicator(
+                                                progress = { animatedProgress },
+                                                modifier = Modifier.size(20.dp),
+                                                strokeWidth = 2.dp,
+                                            )
                                         }
-                                        "done" -> Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                        else -> Icon(Icons.Rounded.ErrorOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                        "done" -> Icon(
+                                            Icons.Rounded.CheckCircle,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                        else -> Icon(
+                                            Icons.Rounded.ErrorOutline,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(20.dp),
+                                        )
                                     }
                                 }
                             }
@@ -525,7 +599,12 @@ private fun ReceiveMultiTransferContent(
                         shape = MaterialTheme.shapes.medium,
                     ) {
                         if (isDownloading) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary, trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f))
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.3f),
+                            )
                             Spacer(Modifier.width(8.dp))
                             Text("Downloading…")
                         } else if (allDone) {
@@ -556,20 +635,20 @@ private suspend fun fetchManifest(serverUrl: String, manifestToken: String): Lis
     (0 until array.length()).map { i ->
         val obj = array.getJSONObject(i)
         ManifestSongEntry(
-            token  = obj.getString("token"),
-            title  = obj.optString("title", "Unknown"),
+            token = obj.getString("token"),
+            title = obj.optString("title", "Unknown"),
             artist = obj.optString("artist", "Unknown"),
-            mime   = obj.optString("mime", "audio/mpeg"),
-            ext    = obj.optString("ext", "mp3"),
+            mime = obj.optString("mime", "audio/mpeg"),
+            ext = obj.optString("ext", "mp3"),
         )
     }
 }
 
 @RequiresApi(Build.VERSION_CODES.Q)
 private suspend fun connectToP2pNetwork(context: Context, params: ReceiveParams): Network? {
-    val ssid       = params.ssid       ?: return null
+    val ssid = params.ssid ?: return null
     val passphrase = params.passphrase ?: return null
-    val cm         = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
     val specifier = WifiNetworkSpecifier.Builder().setSsid(ssid).setWpa2Passphrase(passphrase).build()
     val request = NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).setNetworkSpecifier(specifier).build()
@@ -610,7 +689,7 @@ private suspend fun downloadToStorage(
     while (true) {
         val connection = ((network?.openConnection(url) ?: url.openConnection()) as HttpURLConnection).apply {
             connectTimeout = 15_000
-            readTimeout    = 300_000
+            readTimeout = 300_000
             if (received > 0) setRequestProperty("Range", "bytes=$received-")
             connect()
         }
@@ -722,7 +801,12 @@ private fun InvalidLinkContent(onDismiss: () -> Unit) {
     ) {
         Icon(Icons.Rounded.LinkOff, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
         Text("Invalid share link", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("This QR code doesn't contain a valid Resonance transfer link.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        Text(
+            "This QR code doesn't contain a valid Resonance transfer link.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
         Spacer(Modifier.height(4.dp))
         Button(onClick = onDismiss, shape = MaterialTheme.shapes.medium) { Text("Close") }
     }

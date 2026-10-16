@@ -150,7 +150,7 @@ class LocalAudioServer @Inject constructor(
 
     // Closing the returned stream also closes the file descriptor.
     private fun closingWith(pfd: ParcelFileDescriptor, inner: InputStream): InputStream =
-        object : InputStream() {
+        object: InputStream() {
             override fun read(): Int = inner.read()
             override fun read(b: ByteArray, off: Int, len: Int): Int = inner.read(b, off, len)
             override fun close() {

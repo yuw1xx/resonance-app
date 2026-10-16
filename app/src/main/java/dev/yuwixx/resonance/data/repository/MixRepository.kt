@@ -30,7 +30,7 @@ class MixRepository @Inject constructor(
 ) {
     suspend fun generateAndPersistMixes() = withContext(Dispatchers.Default) {
         when (prefs.musicSource.first()) {
-            MusicSource.LOCAL     -> generateLocalMixes()
+            MusicSource.LOCAL -> generateLocalMixes()
             MusicSource.NAVIDROME -> generateNavidromeMixes()
         }
     }

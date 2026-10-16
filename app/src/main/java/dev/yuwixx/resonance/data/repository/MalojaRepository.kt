@@ -33,9 +33,9 @@ import kotlinx.coroutines.sync.withLock
 private val Context.malojaStore: DataStore<Preferences> by preferencesDataStore(name = "maloja_prefs")
 
 private object MalojaKeys {
-    val ENABLED    = booleanPreferencesKey("enabled")
+    val ENABLED = booleanPreferencesKey("enabled")
     val SERVER_URL = stringPreferencesKey("server_url")
-    val API_KEY    = stringPreferencesKey("api_key")
+    val API_KEY = stringPreferencesKey("api_key")
 }
 
 private data class PendingMalojaScrobble(
@@ -59,8 +59,8 @@ class MalojaRepository @Inject constructor(
     private val flushMutex = Mutex()
 
     val isEnabled: Flow<Boolean> = store.data.map { it[MalojaKeys.ENABLED] ?: false }
-    val serverUrl: Flow<String>  = store.data.map { it[MalojaKeys.SERVER_URL] ?: "" }
-    val apiKey: Flow<String>     = store.data.map { it[MalojaKeys.API_KEY] ?: "" }
+    val serverUrl: Flow<String> = store.data.map { it[MalojaKeys.SERVER_URL] ?: "" }
+    val apiKey: Flow<String> = store.data.map { it[MalojaKeys.API_KEY] ?: "" }
 
     @Volatile private var currentApi: MalojaApi? = null
     @Volatile private var currentApiUrl: String = ""
@@ -112,15 +112,15 @@ class MalojaRepository @Inject constructor(
         }
     }
 
-    suspend fun setEnabled(v: Boolean)  { store.edit { it[MalojaKeys.ENABLED]    = v } }
+    suspend fun setEnabled(v: Boolean)  { store.edit { it[MalojaKeys.ENABLED] = v } }
 
     /** Returns false (and saves nothing) when [url] isn't a usable http(s) address. */
     suspend fun configure(url: String, key: String): Boolean {
         val normalized = normalizeUrl(url) ?: return false
         store.edit {
             it[MalojaKeys.SERVER_URL] = normalized
-            it[MalojaKeys.API_KEY]    = key.trim()
-            it[MalojaKeys.ENABLED]    = true
+            it[MalojaKeys.API_KEY] = key.trim()
+            it[MalojaKeys.ENABLED] = true
         }
         return true
     }
@@ -143,10 +143,10 @@ class MalojaRepository @Inject constructor(
             pending.add(
                 PendingMalojaScrobble(
                     artists = song.artists.ifEmpty { listOf(song.artist) },
-                    title   = song.title,
-                    album   = song.album.takeIf { it.isNotBlank() },
-                    length  = (song.duration / 1000).toInt().takeIf { it > 0 },
-                    time    = startedAt / 1000,
+                    title = song.title,
+                    album = song.album.takeIf { it.isNotBlank() },
+                    length = (song.duration / 1000).toInt().takeIf { it > 0 },
+                    time = startedAt / 1000,
                 )
             )
             flush()
@@ -189,11 +189,11 @@ class MalojaRepository @Inject constructor(
                     val resp = api.scrobble(
                         MalojaScrobbleRequest(
                             artists = p.artists,
-                            title   = p.title,
-                            album   = p.album,
-                            length  = p.length,
-                            time    = p.time,
-                            key     = key,
+                            title = p.title,
+                            album = p.album,
+                            length = p.length,
+                            time = p.time,
+                            key = key,
                         )
                     )
                     if (resp.status == "success" || resp.status == "ok") {

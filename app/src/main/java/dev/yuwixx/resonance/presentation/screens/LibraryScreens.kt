@@ -102,9 +102,9 @@ fun SongsScreen(
     val songs = remember(rawSongs, defaultSongsSort) {
         when (defaultSongsSort) {
             "ARTIST" -> rawSongs.sortedBy { it.displayArtist.lowercase() }
-            "ALBUM"  -> rawSongs.sortedBy { it.album.lowercase() }
-            "ADDED"  -> rawSongs.sortedByDescending { it.dateAdded }
-            else     -> rawSongs.sortedBy { it.title.lowercase() }
+            "ALBUM" -> rawSongs.sortedBy { it.album.lowercase() }
+            "ADDED" -> rawSongs.sortedByDescending { it.dateAdded }
+            else -> rawSongs.sortedBy { it.title.lowercase() }
         }
     }
     val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
@@ -133,106 +133,106 @@ fun SongsScreen(
     Scaffold(
         topBar = {
             Column {
-            AnimatedContent(
-                targetState = isSelectionMode,
-                transitionSpec = {
-                    (slideInVertically(tween(700, easing = EmphasizedDecelerate)) { -it / 3 } +
-                        fadeIn(tween(700, delayMillis = 70, easing = EmphasizedDecelerate)))
-                        .togetherWith(
-                            slideOutVertically(tween(560, easing = EmphasizedAccelerate)) { -it / 3 } +
-                                fadeOut(tween(280, easing = EmphasizedAccelerate))
+                AnimatedContent(
+                    targetState = isSelectionMode,
+                    transitionSpec = {
+                        (slideInVertically(tween(700, easing = EmphasizedDecelerate)) { -it / 3 } +
+                            fadeIn(tween(700, delayMillis = 70, easing = EmphasizedDecelerate)))
+                            .togetherWith(
+                                slideOutVertically(tween(560, easing = EmphasizedAccelerate)) { -it / 3 } +
+                                    fadeOut(tween(280, easing = EmphasizedAccelerate))
+                            )
+                    },
+                    label = "songs_topbar",
+                ) { selectionMode ->
+                    if (selectionMode) {
+                        TopAppBar(
+                            title = { Text("${selectedSongs.size}") },
+                            navigationIcon = {
+                                IconButton(onClick = { selectedSongs = emptySet() }) {
+                                    Icon(Icons.Rounded.Close, "Cancel")
+                                }
+                            },
+                            actions = {
+                                IconButton(onClick = { selectedSongs = songs.toSet() }) {
+                                    Icon(Icons.Rounded.SelectAll, "Select All")
+                                }
+                                IconButton(onClick = {
+                                    shareViewModel.preselectSongs(selectedSongs.toList())
+                                    showShareSheet = true
+                                }) {
+                                    Icon(Icons.Rounded.Share, "Share")
+                                }
+                                IconButton(onClick = { showAddToPlaylistDialog = true }) {
+                                    Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "Add to Playlist")
+                                }
+                                if (musicSource == MusicSource.LOCAL) {
+                                    IconButton(onClick = { showBatchEditDialog = true }) {
+                                        Icon(Icons.Rounded.Edit, "Edit Tags")
+                                    }
+                                }
+                                IconButton(onClick = {
+                                    playerViewModel.addToQueueEnd(songs.filter { it in selectedSongs })
+                                    selectedSongs = emptySet()
+                                }) {
+                                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Add to Queue")
+                                }
+                                IconButton(onClick = {
+                                    playerViewModel.addToQueueNext(songs.filter { it in selectedSongs })
+                                    selectedSongs = emptySet()
+                                }) {
+                                    Icon(Icons.Rounded.SkipNext, "Play Next")
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            ),
                         )
-                },
-                label = "songs_topbar",
-            ) { selectionMode ->
-                if (selectionMode) {
-                    TopAppBar(
-                        title = { Text("${selectedSongs.size}") },
-                        navigationIcon = {
-                            IconButton(onClick = { selectedSongs = emptySet() }) {
-                                Icon(Icons.Rounded.Close, "Cancel")
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = { selectedSongs = songs.toSet() }) {
-                                Icon(Icons.Rounded.SelectAll, "Select All")
-                            }
-                            IconButton(onClick = {
-                                shareViewModel.preselectSongs(selectedSongs.toList())
-                                showShareSheet = true
-                            }) {
-                                Icon(Icons.Rounded.Share, "Share")
-                            }
-                            IconButton(onClick = { showAddToPlaylistDialog = true }) {
-                                Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "Add to Playlist")
-                            }
-                            if (musicSource == MusicSource.LOCAL) {
-                                IconButton(onClick = { showBatchEditDialog = true }) {
-                                    Icon(Icons.Rounded.Edit, "Edit Tags")
+                    } else {
+                        TopAppBar(
+                            title = { LibraryTitle() },
+                            actions = {
+                                IconButton(onClick = {
+                                    playerViewModel.playShuffled(songs)
+                                    onNavigateToPlayer()
+                                }, enabled = songs.isNotEmpty()) {
+                                    Icon(Icons.Rounded.Shuffle, "Shuffle Play")
                                 }
-                            }
-                            IconButton(onClick = {
-                                playerViewModel.addToQueueEnd(songs.filter { it in selectedSongs })
-                                selectedSongs = emptySet()
-                            }) {
-                                Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Add to Queue")
-                            }
-                            IconButton(onClick = {
-                                playerViewModel.addToQueueNext(songs.filter { it in selectedSongs })
-                                selectedSongs = emptySet()
-                            }) {
-                                Icon(Icons.Rounded.SkipNext, "Play Next")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
-                    )
-                } else {
-                    TopAppBar(
-                        title = { LibraryTitle() },
-                        actions = {
-                            IconButton(onClick = {
-                                playerViewModel.playShuffled(songs)
-                                onNavigateToPlayer()
-                            }, enabled = songs.isNotEmpty()) {
-                                Icon(Icons.Rounded.Shuffle, "Shuffle Play")
-                            }
-                            IconButton(onClick = onSearchClick) {
-                                Icon(Icons.Rounded.Search, "Search")
-                            }
-                            IconButton(onClick = { libraryViewModel.syncLibrary(force = true) }) {
-                                if (isSyncing) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                } else {
-                                    Icon(Icons.Rounded.Refresh, "Refresh")
+                                IconButton(onClick = onSearchClick) {
+                                    Icon(Icons.Rounded.Search, "Search")
                                 }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                        ),
-                    )
+                                IconButton(onClick = { libraryViewModel.syncLibrary(force = true) }) {
+                                    if (isSyncing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    } else {
+                                        Icon(Icons.Rounded.Refresh, "Refresh")
+                                    }
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = Color.Transparent,
+                            ),
+                        )
+                    }
                 }
-            }
-            LocalLibrarySections.current?.invoke()
-            // Background sync with a cached library: a slim indicator, not a blocking view.
-            val syncing = navSyncState as? NavidromeSyncState.Syncing
-            if (syncing != null && songs.isNotEmpty()) {
-                val total = syncing.estimatedTotal
-                if (total > 0) {
-                    LinearWavyProgressIndicator(
-                        progress = { (syncing.songsDone.toFloat() / total).coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    )
-                } else {
-                    LinearWavyProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+                LocalLibrarySections.current?.invoke()
+                // Background sync with a cached library: a slim indicator, not a blocking view.
+                val syncing = navSyncState as? NavidromeSyncState.Syncing
+                if (syncing != null && songs.isNotEmpty()) {
+                    val total = syncing.estimatedTotal
+                    if (total > 0) {
+                        LinearWavyProgressIndicator(
+                            progress = { (syncing.songsDone.toFloat() / total).coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                    } else {
+                        LinearWavyProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+                    }
                 }
-            }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -348,10 +348,10 @@ fun SongsScreen(
 
     if (showShareSheet) {
         ShareSheet(
-            viewModel    = shareViewModel,
+            viewModel = shareViewModel,
             currentSongs = selectedSongs.toList(),
-            onDismiss    = { showShareSheet = false },
-            onPlayNow    = { receivedSong ->
+            onDismiss = { showShareSheet = false },
+            onPlayNow = { receivedSong ->
                 playerViewModel.play(listOf(receivedSong), 0)
                 onNavigateToPlayer()
                 showShareSheet = false
@@ -405,8 +405,8 @@ private fun NavidromeSyncingView(navSyncState: NavidromeSyncState) {
         }
     }
 
-    val albumsDone     = syncing?.albumsDone     ?: 0
-    val songsDone      = syncing?.songsDone      ?: 0
+    val albumsDone = syncing?.albumsDone ?: 0
+    val songsDone = syncing?.songsDone ?: 0
     val estimatedTotal = syncing?.estimatedTotal ?: 0
 
     val progress = if (estimatedTotal > 0 && songsDone > 0)
@@ -415,9 +415,9 @@ private fun NavidromeSyncingView(navSyncState: NavidromeSyncState) {
     val etaText: String? = if (elapsedSeconds > 5 && songsDone > 0 && estimatedTotal > songsDone) {
         val etaSecs = (elapsedSeconds * (estimatedTotal - songsDone).toFloat() / songsDone).toLong()
         when {
-            etaSecs < 60   -> "Less than a minute remaining"
+            etaSecs < 60 -> "Less than a minute remaining"
             etaSecs < 3600 -> "~${etaSecs / 60} min remaining"
-            else           -> "~${etaSecs / 3600}h ${(etaSecs % 3600) / 60}m remaining"
+            else -> "~${etaSecs / 3600}h ${(etaSecs % 3600) / 60}m remaining"
         }
     } else null
 
@@ -550,18 +550,18 @@ fun AlbumsScreen(
     Scaffold(
         topBar = {
             Column {
-            TopAppBar(
-                title = { LibraryTitle() },
-                actions = {
-                    IconButton(onClick = onSearchClick) {
-                        Icon(Icons.Rounded.Search, "Search")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                ),
-            )
-            LocalLibrarySections.current?.invoke()
+                TopAppBar(
+                    title = { LibraryTitle() },
+                    actions = {
+                        IconButton(onClick = onSearchClick) {
+                            Icon(Icons.Rounded.Search, "Search")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                    ),
+                )
+                LocalLibrarySections.current?.invoke()
             }
         }
     ) { padding ->
@@ -574,25 +574,25 @@ fun AlbumsScreen(
                 columnCount = 2,
                 modifier = Modifier.fillMaxSize(),
             ) {
-            LazyVerticalGrid(
-                state = gridState,
-                columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(
-                    start = 12.dp, end = 12.dp, top = padding.calculateTopPadding(), bottom = 16.dp
-                ),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                item(span = { GridItemSpan(maxLineSpan) }) { if (LocalLibrarySections.current == null) BigScreenTitle("Albums") }
-                itemsIndexed(albums, key = { _, a -> a.id }) { index, album ->
-                    AlbumCard(
-                        album = album,
-                        onClick = { onAlbumClick(album) },
-                        modifier = Modifier.animateItem().staggeredEntrance(index),
-                    )
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(
+                        start = 12.dp, end = 12.dp, top = padding.calculateTopPadding(), bottom = 16.dp
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    item(span = { GridItemSpan(maxLineSpan) }) { if (LocalLibrarySections.current == null) BigScreenTitle("Albums") }
+                    itemsIndexed(albums, key = { _, a -> a.id }) { index, album ->
+                        AlbumCard(
+                            album = album,
+                            onClick = { onAlbumClick(album) },
+                            modifier = Modifier.animateItem().staggeredEntrance(index),
+                        )
+                    }
                 }
-            }
             }
         }
     }
@@ -654,18 +654,18 @@ fun ArtistsScreen(
     Scaffold(
         topBar = {
             Column {
-            TopAppBar(
-                title = { LibraryTitle() },
-                actions = {
-                    IconButton(onClick = onSearchClick) {
-                        Icon(Icons.Rounded.Search, "Search")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                ),
-            )
-            LocalLibrarySections.current?.invoke()
+                TopAppBar(
+                    title = { LibraryTitle() },
+                    actions = {
+                        IconButton(onClick = onSearchClick) {
+                            Icon(Icons.Rounded.Search, "Search")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                    ),
+                )
+                LocalLibrarySections.current?.invoke()
             }
         }
     ) { padding ->
@@ -678,58 +678,58 @@ fun ArtistsScreen(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
             ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    top = padding.calculateTopPadding(), bottom = 16.dp
-                ),
-            ) {
-                item { if (LocalLibrarySections.current == null) BigScreenTitle("Artists") }
-                itemsIndexed(artists, key = { _, a -> a.name }) { index, artist ->
-                    var imageUrl by remember(artist.name) { mutableStateOf<String?>(null) }
-                    LaunchedEffect(artist.name, fetchImages) {
-                        imageUrl = if (fetchImages) libraryViewModel.getArtistArtworkUrl(artist.name) else null
-                    }
-                    ListItem(
-                        modifier = Modifier.animateItem().staggeredEntrance(index).clickable { onArtistClick(artist) },
-                        headlineContent = { Text(artist.name, fontWeight = FontWeight.SemiBold) },
-                        supportingContent = { Text("${artist.songCount} songs · ${artist.albumCount} albums") },
-                        leadingContent = {
-                            Crossfade(
-                                targetState = fetchImages && imageUrl != null,
-                                animationSpec = tween(280, easing = EmphasizedDecelerate),
-                                label = "artist_row_avatar",
-                            ) { hasImage ->
-                                if (hasImage) {
-                                    coil.compose.AsyncImage(
-                                        model = imageUrl,
-                                        contentDescription = artist.name,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .size(52.dp)
-                                            .clip(CircleShape),
-                                    )
-                                } else {
-                                    Surface(
-                                        modifier = Modifier.size(52.dp),
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                    ) {
-                                        Icon(
-                                            Icons.Rounded.Person,
-                                            null,
-                                            modifier = Modifier.padding(12.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = padding.calculateTopPadding(), bottom = 16.dp
+                    ),
+                ) {
+                    item { if (LocalLibrarySections.current == null) BigScreenTitle("Artists") }
+                    itemsIndexed(artists, key = { _, a -> a.name }) { index, artist ->
+                        var imageUrl by remember(artist.name) { mutableStateOf<String?>(null) }
+                        LaunchedEffect(artist.name, fetchImages) {
+                            imageUrl = if (fetchImages) libraryViewModel.getArtistArtworkUrl(artist.name) else null
+                        }
+                        ListItem(
+                            modifier = Modifier.animateItem().staggeredEntrance(index).clickable { onArtistClick(artist) },
+                            headlineContent = { Text(artist.name, fontWeight = FontWeight.SemiBold) },
+                            supportingContent = { Text("${artist.songCount} songs · ${artist.albumCount} albums") },
+                            leadingContent = {
+                                Crossfade(
+                                    targetState = fetchImages && imageUrl != null,
+                                    animationSpec = tween(280, easing = EmphasizedDecelerate),
+                                    label = "artist_row_avatar",
+                                ) { hasImage ->
+                                    if (hasImage) {
+                                        coil.compose.AsyncImage(
+                                            model = imageUrl,
+                                            contentDescription = artist.name,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(52.dp)
+                                                .clip(CircleShape),
                                         )
+                                    } else {
+                                        Surface(
+                                            modifier = Modifier.size(52.dp),
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Person,
+                                                null,
+                                                modifier = Modifier.padding(12.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
-                            }
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                    )
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                        )
+                    }
                 }
-            }
             }
         }
     }
@@ -1334,18 +1334,18 @@ fun PlaylistDetailScreen(
     val playlistSongs: List<Song> = remember(allSongs, playlist, sortOrder) {
         val base = playlist?.songs ?: emptyList()
         when (sortOrder) {
-            SortOrder.TITLE_ASC          -> base.sortedBy { it.title.lowercase() }
-            SortOrder.TITLE_DESC         -> base.sortedByDescending { it.title.lowercase() }
-            SortOrder.ARTIST_ASC         -> base.sortedBy { it.artist.lowercase() }
-            SortOrder.ARTIST_DESC        -> base.sortedByDescending { it.artist.lowercase() }
-            SortOrder.ALBUM_ASC          -> base.sortedBy { it.album.lowercase() }
-            SortOrder.ALBUM_DESC         -> base.sortedByDescending { it.album.lowercase() }
-            SortOrder.DURATION_ASC       -> base.sortedBy { it.duration }
-            SortOrder.DURATION_DESC      -> base.sortedByDescending { it.duration }
-            SortOrder.DATE_ADDED_ASC     -> base.sortedBy { it.dateAdded }
-            SortOrder.DATE_ADDED_DESC    -> base.sortedByDescending { it.dateAdded }
-            SortOrder.LISTEN_COUNT_DESC  -> base.sortedByDescending { it.listenCount }
-            else                         -> base
+            SortOrder.TITLE_ASC -> base.sortedBy { it.title.lowercase() }
+            SortOrder.TITLE_DESC -> base.sortedByDescending { it.title.lowercase() }
+            SortOrder.ARTIST_ASC -> base.sortedBy { it.artist.lowercase() }
+            SortOrder.ARTIST_DESC -> base.sortedByDescending { it.artist.lowercase() }
+            SortOrder.ALBUM_ASC -> base.sortedBy { it.album.lowercase() }
+            SortOrder.ALBUM_DESC -> base.sortedByDescending { it.album.lowercase() }
+            SortOrder.DURATION_ASC -> base.sortedBy { it.duration }
+            SortOrder.DURATION_DESC -> base.sortedByDescending { it.duration }
+            SortOrder.DATE_ADDED_ASC -> base.sortedBy { it.dateAdded }
+            SortOrder.DATE_ADDED_DESC -> base.sortedByDescending { it.dateAdded }
+            SortOrder.LISTEN_COUNT_DESC -> base.sortedByDescending { it.listenCount }
+            else -> base
         }
     }
 
@@ -2219,11 +2219,11 @@ fun SongInfoBottomSheet(
 
                 if (isNavidromeSource) {
                     val (downloadLabel, downloadIcon, downloadEnabled) = when (downloadState?.state) {
-                        DownloadState.DOWNLOADED   -> Triple("Remove Download", Icons.Rounded.DownloadDone, true)
-                        DownloadState.DOWNLOADING  -> Triple("Downloading…", Icons.Rounded.Downloading, false)
-                        DownloadState.QUEUED       -> Triple("Queued…", Icons.Rounded.Downloading, false)
-                        DownloadState.FAILED       -> Triple("Retry Download", Icons.Rounded.Download, true)
-                        else                       -> Triple("Download", Icons.Rounded.Download, true)
+                        DownloadState.DOWNLOADED -> Triple("Remove Download", Icons.Rounded.DownloadDone, true)
+                        DownloadState.DOWNLOADING -> Triple("Downloading…", Icons.Rounded.Downloading, false)
+                        DownloadState.QUEUED -> Triple("Queued…", Icons.Rounded.Downloading, false)
+                        DownloadState.FAILED -> Triple("Retry Download", Icons.Rounded.Download, true)
+                        else -> Triple("Download", Icons.Rounded.Download, true)
                     }
                     ListItem(
                         modifier = Modifier.clickable(enabled = downloadEnabled) { onDownloadToggle() },
@@ -2288,86 +2288,86 @@ fun LikedSongsScreen(
     Scaffold(
         topBar = {
             Column {
-            AnimatedContent(
-                targetState = isSelectionMode,
-                transitionSpec = {
-                    (slideInVertically(tween(700, easing = EmphasizedDecelerate)) { -it / 3 } +
-                        fadeIn(tween(700, delayMillis = 70, easing = EmphasizedDecelerate)))
-                        .togetherWith(
-                            slideOutVertically(tween(560, easing = EmphasizedAccelerate)) { -it / 3 } +
-                                fadeOut(tween(280, easing = EmphasizedAccelerate))
+                AnimatedContent(
+                    targetState = isSelectionMode,
+                    transitionSpec = {
+                        (slideInVertically(tween(700, easing = EmphasizedDecelerate)) { -it / 3 } +
+                            fadeIn(tween(700, delayMillis = 70, easing = EmphasizedDecelerate)))
+                            .togetherWith(
+                                slideOutVertically(tween(560, easing = EmphasizedAccelerate)) { -it / 3 } +
+                                    fadeOut(tween(280, easing = EmphasizedAccelerate))
+                            )
+                    },
+                    label = "liked_songs_topbar",
+                ) { selectionMode ->
+                    if (selectionMode) {
+                        TopAppBar(
+                            title = { Text("${selectedSongs.size}") },
+                            navigationIcon = {
+                                IconButton(onClick = { selectedSongs = emptySet() }) {
+                                    Icon(Icons.Rounded.Close, "Cancel")
+                                }
+                            },
+                            actions = {
+                                IconButton(onClick = { selectedSongs = likedSongs.toSet() }) {
+                                    Icon(Icons.Rounded.SelectAll, "Select All")
+                                }
+                                IconButton(onClick = {
+                                    shareViewModel.preselectSongs(selectedSongs.toList())
+                                    showShareSheet = true
+                                }) {
+                                    Icon(Icons.Rounded.Share, "Share")
+                                }
+                                IconButton(onClick = { showAddToPlaylistDialog = true }) {
+                                    Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "Add to Playlist")
+                                }
+                                IconButton(onClick = {
+                                    playerViewModel.addToQueueEnd(likedSongs.filter { it in selectedSongs })
+                                    selectedSongs = emptySet()
+                                }) {
+                                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Add to Queue")
+                                }
+                                IconButton(onClick = {
+                                    playerViewModel.addToQueueNext(likedSongs.filter { it in selectedSongs })
+                                    selectedSongs = emptySet()
+                                }) {
+                                    Icon(Icons.Rounded.SkipNext, "Play Next")
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            ),
                         )
-                },
-                label = "liked_songs_topbar",
-            ) { selectionMode ->
-                if (selectionMode) {
-                    TopAppBar(
-                        title = { Text("${selectedSongs.size}") },
-                        navigationIcon = {
-                            IconButton(onClick = { selectedSongs = emptySet() }) {
-                                Icon(Icons.Rounded.Close, "Cancel")
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = { selectedSongs = likedSongs.toSet() }) {
-                                Icon(Icons.Rounded.SelectAll, "Select All")
-                            }
-                            IconButton(onClick = {
-                                shareViewModel.preselectSongs(selectedSongs.toList())
-                                showShareSheet = true
-                            }) {
-                                Icon(Icons.Rounded.Share, "Share")
-                            }
-                            IconButton(onClick = { showAddToPlaylistDialog = true }) {
-                                Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "Add to Playlist")
-                            }
-                            IconButton(onClick = {
-                                playerViewModel.addToQueueEnd(likedSongs.filter { it in selectedSongs })
-                                selectedSongs = emptySet()
-                            }) {
-                                Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Add to Queue")
-                            }
-                            IconButton(onClick = {
-                                playerViewModel.addToQueueNext(likedSongs.filter { it in selectedSongs })
-                                selectedSongs = emptySet()
-                            }) {
-                                Icon(Icons.Rounded.SkipNext, "Play Next")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
-                    )
-                } else {
-                    TopAppBar(
-                        title = { LibraryTitle() },
-                        actions = {
-                            if (likedSongs.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    playerViewModel.playShuffled(likedSongs)
-                                    onNavigateToPlayer()
-                                }) {
-                                    Icon(Icons.Rounded.Shuffle, "Shuffle Play")
+                    } else {
+                        TopAppBar(
+                            title = { LibraryTitle() },
+                            actions = {
+                                if (likedSongs.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        playerViewModel.playShuffled(likedSongs)
+                                        onNavigateToPlayer()
+                                    }) {
+                                        Icon(Icons.Rounded.Shuffle, "Shuffle Play")
+                                    }
+                                    IconButton(onClick = {
+                                        playerViewModel.play(likedSongs, 0)
+                                        onNavigateToPlayer()
+                                    }) {
+                                        Icon(
+                                            Icons.Rounded.PlayArrow,
+                                            "Play all",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
                                 }
-                                IconButton(onClick = {
-                                    playerViewModel.play(likedSongs, 0)
-                                    onNavigateToPlayer()
-                                }) {
-                                    Icon(
-                                        Icons.Rounded.PlayArrow,
-                                        "Play all",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                        ),
-                    )
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = Color.Transparent,
+                            ),
+                        )
+                    }
                 }
-            }
-            LocalLibrarySections.current?.invoke()
+                LocalLibrarySections.current?.invoke()
             }
         },
     ) { padding ->
@@ -2481,10 +2481,10 @@ fun LikedSongsScreen(
 
     if (showShareSheet) {
         ShareSheet(
-            viewModel    = shareViewModel,
+            viewModel = shareViewModel,
             currentSongs = selectedSongs.toList(),
-            onDismiss    = { showShareSheet = false },
-            onPlayNow    = { receivedSong ->
+            onDismiss = { showShareSheet = false },
+            onPlayNow = { receivedSong ->
                 playerViewModel.play(listOf(receivedSong), 0)
                 onNavigateToPlayer()
                 showShareSheet = false
@@ -2819,10 +2819,10 @@ fun SearchScreen(
 
     if (showShareSheet) {
         ShareSheet(
-            viewModel    = shareViewModel,
+            viewModel = shareViewModel,
             currentSongs = selectedSongs.toList(),
-            onDismiss    = { showShareSheet = false },
-            onPlayNow    = { receivedSong ->
+            onDismiss = { showShareSheet = false },
+            onPlayNow = { receivedSong ->
                 playerViewModel.play(listOf(receivedSong), 0)
                 onNavigateToPlayer()
                 showShareSheet = false
@@ -2872,15 +2872,15 @@ fun TagEditorScreen(
                         onClick = {
                             isSaving = true
                             libraryViewModel.updateSongTags(
-                                songId      = songId,
-                                title       = title,
-                                artist      = artist,
+                                songId = songId,
+                                title = title,
+                                artist = artist,
                                 albumArtist = albumArtist,
-                                album       = album,
-                                genre       = genre,
-                                year        = year.toIntOrNull() ?: 0,
+                                album = album,
+                                genre = genre,
+                                year = year.toIntOrNull() ?: 0,
                                 trackNumber = track.toIntOrNull() ?: 0,
-                                discNumber  = disc.toIntOrNull() ?: 0,
+                                discNumber = disc.toIntOrNull() ?: 0,
                                 onResult = { success ->
                                     if (success) {
                                         onBack()
@@ -2913,16 +2913,59 @@ fun TagEditorScreen(
         ) {
             Spacer(Modifier.height(4.dp))
 
-            OutlinedTextField(value = title,       onValueChange = { title = it },       label = { Text("Title") },        modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = artist,      onValueChange = { artist = it },      label = { Text("Artist") },       modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = albumArtist, onValueChange = { albumArtist = it }, label = { Text("Album Artist") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = album,       onValueChange = { album = it },       label = { Text("Album") },        modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = genre,       onValueChange = { genre = it },       label = { Text("Genre") },        modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Title") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = artist,
+                onValueChange = { artist = it },
+                label = { Text("Artist") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = albumArtist,
+                onValueChange = { albumArtist = it },
+                label = { Text("Album Artist") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = album,
+                onValueChange = { album = it },
+                label = { Text("Album") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = genre,
+                onValueChange = { genre = it },
+                label = { Text("Genre") },
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = year,  onValueChange = { year = it },  label = { Text("Year") },     modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                OutlinedTextField(value = track, onValueChange = { track = it }, label = { Text("Track") },    modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                OutlinedTextField(value = disc,  onValueChange = { disc = it },  label = { Text("Disc") },     modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                OutlinedTextField(
+                    value = year,
+                    onValueChange = { year = it },
+                    label = { Text("Year") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = track,
+                    onValueChange = { track = it },
+                    label = { Text("Track") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = disc,
+                    onValueChange = { disc = it },
+                    label = { Text("Disc") },
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -2986,6 +3029,6 @@ private fun formatTagDuration(ms: Long): String {
 
 private fun formatTagFileSize(bytes: Long): String = when {
     bytes >= 1_048_576 -> "%.1f MB".format(bytes / 1_048_576.0)
-    bytes >= 1_024     -> "%.1f KB".format(bytes / 1_024.0)
-    else               -> "$bytes B"
+    bytes >= 1_024 -> "%.1f KB".format(bytes / 1_024.0)
+    else -> "$bytes B"
 }

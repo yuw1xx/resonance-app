@@ -46,7 +46,12 @@ class NavidromeSyncRepository @Inject constructor(
     fun star(songId: Long, navidromeId: String) {
         scope.launch {
             pendingStarActionDao.insert(
-                PendingStarActionEntity(songId = songId, navidromeId = navidromeId, action = StarAction.STAR, timestamp = System.currentTimeMillis())
+                PendingStarActionEntity(
+                    songId = songId,
+                    navidromeId = navidromeId,
+                    action = StarAction.STAR,
+                    timestamp = System.currentTimeMillis(),
+                )
             )
             flushPendingStarActions()
         }
@@ -55,7 +60,12 @@ class NavidromeSyncRepository @Inject constructor(
     fun unstar(songId: Long, navidromeId: String) {
         scope.launch {
             pendingStarActionDao.insert(
-                PendingStarActionEntity(songId = songId, navidromeId = navidromeId, action = StarAction.UNSTAR, timestamp = System.currentTimeMillis())
+                PendingStarActionEntity(
+                    songId = songId,
+                    navidromeId = navidromeId,
+                    action = StarAction.UNSTAR,
+                    timestamp = System.currentTimeMillis(),
+                )
             )
             flushPendingStarActions()
         }

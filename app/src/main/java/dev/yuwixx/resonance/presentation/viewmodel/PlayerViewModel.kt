@@ -393,10 +393,10 @@ class PlayerViewModel @Inject constructor(
             System.currentTimeMillis() - scrobbleSegmentStart else 0L
         val listenedMs = scrobbleAccumulatedMs + currentSegmentMs
         val minSecs = scrobbleMinSecs.value
-        val minPct  = scrobblePct.value
+        val minPct = scrobblePct.value
 
         val meetsTimeCriteria = listenedMs >= minSecs * 1000L
-        val meetsPctCriteria  = positionMs.toFloat() / durationMs >= minPct
+        val meetsPctCriteria = positionMs.toFloat() / durationMs >= minPct
 
         if (meetsTimeCriteria && meetsPctCriteria) {
             scrobbleSubmittedForCurrentTrack = true
@@ -1107,31 +1107,31 @@ private fun MediaItem.toSong(): Song? {
     val extras = meta.extras
     val artist = meta.artist?.toString() ?: ""
     return Song(
-        id            = songId,
-        uri           = songUri,
-        title         = meta.title?.toString() ?: "",
-        artist        = artist,
-        artists       = listOf(artist),
-        albumArtist   = meta.albumArtist?.toString() ?: artist,
-        album         = meta.albumTitle?.toString() ?: "",
-        albumId       = extras?.getLong(EXTRA_ALBUM_ID) ?: 0L,
-        genre         = "",
-        duration      = extras?.getLong(EXTRA_DURATION) ?: 0L,
-        size          = 0L,
-        bitrate       = 0,
-        sampleRate    = 0,
-        trackNumber   = 0,
-        discNumber    = 1,
-        year          = 0,
-        dateAdded     = 0L,
-        dateModified  = 0L,
-        path          = songUri.toString(),
-        folder        = "",
-        mimeType      = "",
+        id = songId,
+        uri = songUri,
+        title = meta.title?.toString() ?: "",
+        artist = artist,
+        artists = listOf(artist),
+        albumArtist = meta.albumArtist?.toString() ?: artist,
+        album = meta.albumTitle?.toString() ?: "",
+        albumId = extras?.getLong(EXTRA_ALBUM_ID) ?: 0L,
+        genre = "",
+        duration = extras?.getLong(EXTRA_DURATION) ?: 0L,
+        size = 0L,
+        bitrate = 0,
+        sampleRate = 0,
+        trackNumber = 0,
+        discNumber = 1,
+        year = 0,
+        dateAdded = 0L,
+        dateModified = 0L,
+        path = songUri.toString(),
+        folder = "",
+        mimeType = "",
         replayGainTrack = extras?.getFloat("replayGainTrack").takeIf { extras?.containsKey("replayGainTrack") == true },
         replayGainAlbum = extras?.getFloat("replayGainAlbum").takeIf { extras?.containsKey("replayGainAlbum") == true },
-        artworkUri    = meta.artworkUri,
-        navidromeId   = extras?.getString(EXTRA_NAVIDROME_ID),
+        artworkUri = meta.artworkUri,
+        navidromeId = extras?.getString(EXTRA_NAVIDROME_ID),
     )
 }
 

@@ -52,27 +52,27 @@ private const val TAG = "ResonanceWidget"
 private const val APP_PACKAGE = "dev.yuwixx.resonance"
 private const val SEEK_ZONES = 10
 
-const val ACTION_WIDGET_PLAY_PAUSE  = "dev.yuwixx.resonance.WIDGET_PLAY_PAUSE"
-const val ACTION_WIDGET_SKIP_NEXT   = "dev.yuwixx.resonance.WIDGET_SKIP_NEXT"
-const val ACTION_WIDGET_SKIP_PREV   = "dev.yuwixx.resonance.WIDGET_SKIP_PREV"
-const val ACTION_WIDGET_SEEK        = "dev.yuwixx.resonance.WIDGET_SEEK"
+const val ACTION_WIDGET_PLAY_PAUSE = "dev.yuwixx.resonance.WIDGET_PLAY_PAUSE"
+const val ACTION_WIDGET_SKIP_NEXT = "dev.yuwixx.resonance.WIDGET_SKIP_NEXT"
+const val ACTION_WIDGET_SKIP_PREV = "dev.yuwixx.resonance.WIDGET_SKIP_PREV"
+const val ACTION_WIDGET_SEEK = "dev.yuwixx.resonance.WIDGET_SEEK"
 const val ACTION_WIDGET_TOGGLE_LIKE = "dev.yuwixx.resonance.WIDGET_TOGGLE_LIKE"
-const val EXTRA_SEEK_FRACTION_PCT   = "seek_fraction_pct"
+const val EXTRA_SEEK_FRACTION_PCT = "seek_fraction_pct"
 
 // Signature-protected: only apps signed with the same key as this one (i.e. only this app)
 // can broadcast these widget control actions. Without it, any installed app could send an
 // unprotected implicit broadcast with a matching action string to hijack playback controls.
 const val PERMISSION_WIDGET_CONTROL = "dev.yuwixx.resonance.permission.WIDGET_CONTROL"
 
-val KEY_TITLE         = stringPreferencesKey("widget_title")
-val KEY_ARTIST        = stringPreferencesKey("widget_artist")
-val KEY_ARTWORK_URI   = stringPreferencesKey("widget_artwork_uri")
-val KEY_IS_PLAYING    = booleanPreferencesKey("widget_is_playing")
-val KEY_HAS_SONG      = booleanPreferencesKey("widget_has_song")
-val KEY_HAS_PREV      = booleanPreferencesKey("widget_has_prev")
-val KEY_HAS_NEXT      = booleanPreferencesKey("widget_has_next")
-val KEY_PROGRESS      = floatPreferencesKey("widget_progress")
-val KEY_IS_LIKED      = booleanPreferencesKey("widget_is_liked")
+val KEY_TITLE = stringPreferencesKey("widget_title")
+val KEY_ARTIST = stringPreferencesKey("widget_artist")
+val KEY_ARTWORK_URI = stringPreferencesKey("widget_artwork_uri")
+val KEY_IS_PLAYING = booleanPreferencesKey("widget_is_playing")
+val KEY_HAS_SONG = booleanPreferencesKey("widget_has_song")
+val KEY_HAS_PREV = booleanPreferencesKey("widget_has_prev")
+val KEY_HAS_NEXT = booleanPreferencesKey("widget_has_next")
+val KEY_PROGRESS = floatPreferencesKey("widget_progress")
+val KEY_IS_LIKED = booleanPreferencesKey("widget_is_liked")
 val KEY_CORNER_RADIUS = intPreferencesKey("widget_corner_radius")
 
 class ResonanceWidget : GlanceAppWidget() {
@@ -114,18 +114,18 @@ class ResonanceWidget : GlanceAppWidget() {
 
         provideContent {
             GlanceTheme(colors = glanceColors) {
-                val state         = currentState<Preferences>()
-                val hasSong       = state[KEY_HAS_SONG]   ?: false
-                val title         = state[KEY_TITLE]       ?: ""
-                val artist        = state[KEY_ARTIST]      ?: ""
-                val isPlaying     = state[KEY_IS_PLAYING]  ?: false
-                val hasPrev       = state[KEY_HAS_PREV]    ?: false
-                val hasNext       = state[KEY_HAS_NEXT]    ?: false
-                val progress      = state[KEY_PROGRESS]    ?: 0f
-                val isLiked       = state[KEY_IS_LIKED]    ?: false
-                val cornerRadius  = (state[KEY_CORNER_RADIUS] ?: 28).dp
-                val size          = LocalSize.current
-                val artworkUri    = state[KEY_ARTWORK_URI] ?: ""
+                val state = currentState<Preferences>()
+                val hasSong = state[KEY_HAS_SONG]   ?: false
+                val title = state[KEY_TITLE]       ?: ""
+                val artist = state[KEY_ARTIST]      ?: ""
+                val isPlaying = state[KEY_IS_PLAYING]  ?: false
+                val hasPrev = state[KEY_HAS_PREV]    ?: false
+                val hasNext = state[KEY_HAS_NEXT]    ?: false
+                val progress = state[KEY_PROGRESS]    ?: 0f
+                val isLiked = state[KEY_IS_LIKED]    ?: false
+                val cornerRadius = (state[KEY_CORNER_RADIUS] ?: 28).dp
+                val size = LocalSize.current
+                val artworkUri = state[KEY_ARTWORK_URI] ?: ""
                 var artworkBitmap by remember { mutableStateOf(initialBitmap) }
                 var loadedUri by remember { mutableStateOf(initialUri) }
                 LaunchedEffect(artworkUri) {
@@ -136,18 +136,18 @@ class ResonanceWidget : GlanceAppWidget() {
                 }
 
                 WidgetContent(
-                    hasSong        = hasSong,
-                    title          = title,
-                    artist         = artist,
-                    artworkBitmap  = artworkBitmap,
-                    isPlaying      = isPlaying,
-                    hasPrev        = hasPrev,
-                    hasNext        = hasNext,
-                    progress       = progress,
-                    isLiked        = isLiked,
-                    cornerRadius   = cornerRadius,
-                    widgetWidth    = size.width,
-                    widgetHeight   = size.height,
+                    hasSong = hasSong,
+                    title = title,
+                    artist = artist,
+                    artworkBitmap = artworkBitmap,
+                    isPlaying = isPlaying,
+                    hasPrev = hasPrev,
+                    hasNext = hasNext,
+                    progress = progress,
+                    isLiked = isLiked,
+                    cornerRadius = cornerRadius,
+                    widgetWidth = size.width,
+                    widgetHeight = size.height,
                 )
             }
         }
@@ -170,7 +170,7 @@ class ResonanceWidget : GlanceAppWidget() {
                     "http", "https" -> {
                         val connection = (URL(uriStr).openConnection() as HttpURLConnection).apply {
                             connectTimeout = 5_000
-                            readTimeout    = 8_000
+                            readTimeout = 8_000
                         }
                         try {
                             connection.inputStream.use { it.readBytes() }
@@ -218,15 +218,15 @@ class ResonanceWidget : GlanceAppWidget() {
                 for (id in ids) {
                     updateAppWidgetState(context, PreferencesGlanceStateDefinition, id) { prefs ->
                         prefs.toMutablePreferences().apply {
-                            this[KEY_TITLE]         = title
-                            this[KEY_ARTIST]        = artist
-                            this[KEY_ARTWORK_URI]   = artworkUri
-                            this[KEY_IS_PLAYING]    = isPlaying
-                            this[KEY_HAS_SONG]      = hasSong
-                            this[KEY_HAS_PREV]      = hasPrev
-                            this[KEY_HAS_NEXT]      = hasNext
-                            this[KEY_PROGRESS]      = progress
-                            this[KEY_IS_LIKED]      = isLiked
+                            this[KEY_TITLE] = title
+                            this[KEY_ARTIST] = artist
+                            this[KEY_ARTWORK_URI] = artworkUri
+                            this[KEY_IS_PLAYING] = isPlaying
+                            this[KEY_HAS_SONG] = hasSong
+                            this[KEY_HAS_PREV] = hasPrev
+                            this[KEY_HAS_NEXT] = hasNext
+                            this[KEY_PROGRESS] = progress
+                            this[KEY_IS_LIKED] = isLiked
                             this[KEY_CORNER_RADIUS] = cornerRadiusDp
                         }
                     }
@@ -269,36 +269,36 @@ private fun WidgetContent(
             IdleContent(stacked = stacked, expanded = widgetWidth >= 320.dp)
         } else if (stacked) {
             StackedNowPlayingContent(
-                title         = title,
-                artist        = artist,
+                title = title,
+                artist = artist,
                 artworkBitmap = artworkBitmap,
-                isPlaying     = isPlaying,
-                hasPrev       = hasPrev,
-                hasNext       = hasNext,
-                progress      = progress,
-                isLiked       = isLiked,
-                cornerRadius  = cornerRadius,
-                widgetWidth   = widgetWidth,
+                isPlaying = isPlaying,
+                hasPrev = hasPrev,
+                hasNext = hasNext,
+                progress = progress,
+                isLiked = isLiked,
+                cornerRadius = cornerRadius,
+                widgetWidth = widgetWidth,
             )
         } else {
-            val showArt  = widgetWidth >= 240.dp
+            val showArt = widgetWidth >= 240.dp
             val expanded = widgetWidth >= 320.dp
-            val tall     = widgetHeight >= 130.dp
+            val tall = widgetHeight >= 130.dp
 
             BannerNowPlayingContent(
-                title         = title,
-                artist        = artist,
+                title = title,
+                artist = artist,
                 artworkBitmap = artworkBitmap,
-                isPlaying     = isPlaying,
-                hasPrev       = hasPrev,
-                hasNext       = hasNext,
-                progress      = progress,
-                isLiked       = isLiked,
-                cornerRadius  = cornerRadius,
-                showArt       = showArt,
-                expanded      = expanded,
-                tall          = tall,
-                widgetWidth   = widgetWidth,
+                isPlaying = isPlaying,
+                hasPrev = hasPrev,
+                hasNext = hasNext,
+                progress = progress,
+                isLiked = isLiked,
+                cornerRadius = cornerRadius,
+                showArt = showArt,
+                expanded = expanded,
+                tall = tall,
+                widgetWidth = widgetWidth,
             )
         }
     }
@@ -307,8 +307,8 @@ private fun WidgetContent(
 @Composable
 private fun IdleContent(stacked: Boolean, expanded: Boolean) {
     val iconBoxSize = if (stacked) 72.dp else 52.dp
-    val iconSize    = if (stacked) 34.dp else 26.dp
-    val titleSize   = if (stacked || expanded) 17.sp else 16.sp
+    val iconSize = if (stacked) 34.dp else 26.dp
+    val titleSize = if (stacked || expanded) 17.sp else 16.sp
     val subtitleSize = if (stacked || expanded) 14.sp else 13.sp
 
     val icon: @Composable () -> Unit = {
@@ -372,9 +372,9 @@ private fun BannerNowPlayingContent(
     widgetWidth: Dp,
 ) {
     val artSize = when {
-        tall     -> 110.dp
+        tall -> 110.dp
         expanded -> 80.dp
-        else     -> 60.dp
+        else -> 60.dp
     }
     val padding = if (expanded) 14.dp else 10.dp
     val artCornerRadius = (cornerRadius * 0.4f).coerceAtMost(20.dp)
@@ -398,7 +398,11 @@ private fun BannerNowPlayingContent(
                 Column(modifier = GlanceModifier.defaultWeight()) {
                     Text(
                         text = title,
-                        style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Bold, fontSize = if (expanded) 15.sp else 13.sp),
+                        style = TextStyle(
+                            color = GlanceTheme.colors.onSurface,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (expanded) 15.sp else 13.sp,
+                        ),
                         maxLines = 1,
                     )
                     Spacer(GlanceModifier.height(2.dp))
@@ -416,7 +420,7 @@ private fun BannerNowPlayingContent(
 
             Spacer(GlanceModifier.defaultWeight())
 
-            val artOffset  = if (showArt) artSize + 12.dp else 0.dp
+            val artOffset = if (showArt) artSize + 12.dp else 0.dp
             val trackWidth = (widgetWidth - padding * 2 - artOffset).coerceAtLeast(0.dp)
             SeekableProgressBar(trackWidth = trackWidth, progress = progress)
 
@@ -425,27 +429,27 @@ private fun BannerNowPlayingContent(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (expanded) {
                     ControlButton(
-                        iconRes     = R.drawable.widget_ic_skip_prev,
+                        iconRes = R.drawable.widget_ic_skip_prev,
                         description = "Previous",
-                        active      = hasPrev,
-                        action      = actionSendBroadcast(Intent(ACTION_WIDGET_SKIP_PREV).setPackage(APP_PACKAGE)),
+                        active = hasPrev,
+                        action = actionSendBroadcast(Intent(ACTION_WIDGET_SKIP_PREV).setPackage(APP_PACKAGE)),
                     )
                     Spacer(GlanceModifier.width(6.dp))
                 }
                 ControlButton(
-                    iconRes     = if (isPlaying) R.drawable.widget_ic_pause else R.drawable.widget_ic_play,
+                    iconRes = if (isPlaying) R.drawable.widget_ic_pause else R.drawable.widget_ic_play,
                     description = if (isPlaying) "Pause" else "Play",
-                    active      = true,
-                    primary     = true,
-                    action      = actionSendBroadcast(Intent(ACTION_WIDGET_PLAY_PAUSE).setPackage(APP_PACKAGE)),
+                    active = true,
+                    primary = true,
+                    action = actionSendBroadcast(Intent(ACTION_WIDGET_PLAY_PAUSE).setPackage(APP_PACKAGE)),
                 )
                 if (expanded) {
                     Spacer(GlanceModifier.width(6.dp))
                     ControlButton(
-                        iconRes     = R.drawable.widget_ic_skip_next,
+                        iconRes = R.drawable.widget_ic_skip_next,
                         description = "Next",
-                        active      = hasNext,
-                        action      = actionSendBroadcast(Intent(ACTION_WIDGET_SKIP_NEXT).setPackage(APP_PACKAGE)),
+                        active = hasNext,
+                        action = actionSendBroadcast(Intent(ACTION_WIDGET_SKIP_NEXT).setPackage(APP_PACKAGE)),
                     )
                 }
             }
@@ -505,25 +509,25 @@ private fun StackedNowPlayingContent(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             ControlButton(
-                iconRes     = R.drawable.widget_ic_skip_prev,
+                iconRes = R.drawable.widget_ic_skip_prev,
                 description = "Previous",
-                active      = hasPrev,
-                action      = actionSendBroadcast(Intent(ACTION_WIDGET_SKIP_PREV).setPackage(APP_PACKAGE)),
+                active = hasPrev,
+                action = actionSendBroadcast(Intent(ACTION_WIDGET_SKIP_PREV).setPackage(APP_PACKAGE)),
             )
             Spacer(GlanceModifier.width(10.dp))
             ControlButton(
-                iconRes     = if (isPlaying) R.drawable.widget_ic_pause else R.drawable.widget_ic_play,
+                iconRes = if (isPlaying) R.drawable.widget_ic_pause else R.drawable.widget_ic_play,
                 description = if (isPlaying) "Pause" else "Play",
-                active      = true,
-                primary     = true,
-                action      = actionSendBroadcast(Intent(ACTION_WIDGET_PLAY_PAUSE).setPackage(APP_PACKAGE)),
+                active = true,
+                primary = true,
+                action = actionSendBroadcast(Intent(ACTION_WIDGET_PLAY_PAUSE).setPackage(APP_PACKAGE)),
             )
             Spacer(GlanceModifier.width(10.dp))
             ControlButton(
-                iconRes     = R.drawable.widget_ic_skip_next,
+                iconRes = R.drawable.widget_ic_skip_next,
                 description = "Next",
-                active      = hasNext,
-                action      = actionSendBroadcast(Intent(ACTION_WIDGET_SKIP_NEXT).setPackage(APP_PACKAGE)),
+                active = hasNext,
+                action = actionSendBroadcast(Intent(ACTION_WIDGET_SKIP_NEXT).setPackage(APP_PACKAGE)),
             )
         }
 
@@ -639,11 +643,11 @@ private fun ControlButton(
     primary: Boolean = false,
     action: Action,
 ) {
-    val bgColor   = if (primary) GlanceTheme.colors.primaryContainer else GlanceTheme.colors.secondaryContainer
+    val bgColor = if (primary) GlanceTheme.colors.primaryContainer else GlanceTheme.colors.secondaryContainer
     val iconColor = when {
         primary -> GlanceTheme.colors.onPrimaryContainer
-        active  -> GlanceTheme.colors.onSecondaryContainer
-        else    -> GlanceTheme.colors.outline
+        active -> GlanceTheme.colors.onSecondaryContainer
+        else -> GlanceTheme.colors.outline
     }
     val size = if (primary) 48.dp else 40.dp
 

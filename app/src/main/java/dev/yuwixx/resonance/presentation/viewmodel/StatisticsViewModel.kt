@@ -74,28 +74,28 @@ class StatisticsViewModel @Inject constructor(
     private suspend fun computeStats(period: StatsPeriod): StatisticsData {
         val (from, to) = periodRange(period)
 
-        val totalTime        = historyDao.getTotalListenTime(from, to)
-        val playCount        = historyDao.getPlayCount(from, to)
+        val totalTime = historyDao.getTotalListenTime(from, to)
+        val playCount = historyDao.getPlayCount(from, to)
         val uniqueTrackCount = historyDao.getUniqueTrackCount(from, to)
-        val hourly           = historyDao.getPlaysByHour(from, to)
-        val dailyTrend        = historyDao.getDailyTotals(from, to)
+        val hourly = historyDao.getPlaysByHour(from, to)
+        val dailyTrend = historyDao.getDailyTotals(from, to)
         val dayOfWeekActivity = historyDao.getPlaysByDayOfWeek(from, to)
 
         // Top songs — batch fetch, no N+1
-        val topIds  = historyDao.getTopSongIds(from, to, 10)
+        val topIds = historyDao.getTopSongIds(from, to, 10)
         val songMap = songDao.getSongsByIds(topIds.map { it.songId }).associateBy { it.id }
         val topSongs = topIds.mapNotNull { entry -> songMap[entry.songId]?.let { it to entry.playCount } }
 
         // Top artists / albums / genre / format breakdown — all sampled from the same top-100
         // batch fetch (no N+1), same approach the original Top Artists computation already used.
-        val allTopIds         = historyDao.getTopSongIds(from, to, 100)
+        val allTopIds = historyDao.getTopSongIds(from, to, 100)
         val allSongsForArtists = songDao.getSongsByIds(allTopIds.map { it.songId }).associateBy { it.id }
-        val playCounts        = allTopIds.associate { it.songId to it.playCount }
+        val playCounts = allTopIds.associate { it.songId to it.playCount }
 
         val artistCounts = mutableMapOf<String, Int>()
-        val albumCounts  = mutableMapOf<Long, Int>()
-        val albumSongs   = mutableMapOf<Long, SongEntity>()
-        val genreCounts  = mutableMapOf<String, Int>()
+        val albumCounts = mutableMapOf<Long, Int>()
+        val albumSongs = mutableMapOf<Long, SongEntity>()
+        val genreCounts = mutableMapOf<String, Int>()
         val formatCounts = mutableMapOf<String, Int>()
         allSongsForArtists.forEach { (id, song) ->
             val count = playCounts[id] ?: 0
@@ -139,19 +139,19 @@ class StatisticsViewModel @Inject constructor(
 
         return StatisticsData(
             totalListenTimeMs = totalTime,
-            playCount         = playCount,
-            uniqueTrackCount  = uniqueTrackCount,
-            listenStreak      = listenStreak,
-            longestStreak     = longestStreak,
-            avgSessionMs      = avgSessionMs,
-            topSongs          = topSongs,
-            topArtists        = topArtists,
-            topAlbums         = topAlbums,
-            hourlyActivity    = hourly,
-            dailyTrend        = dailyTrend,
-            genreBreakdown    = genreBreakdown,
+            playCount = playCount,
+            uniqueTrackCount = uniqueTrackCount,
+            listenStreak = listenStreak,
+            longestStreak = longestStreak,
+            avgSessionMs = avgSessionMs,
+            topSongs = topSongs,
+            topArtists = topArtists,
+            topAlbums = topAlbums,
+            hourlyActivity = hourly,
+            dailyTrend = dailyTrend,
+            genreBreakdown = genreBreakdown,
             dayOfWeekActivity = dayOfWeekActivity,
-            formatBreakdown   = formatBreakdown,
+            formatBreakdown = formatBreakdown,
         )
     }
 

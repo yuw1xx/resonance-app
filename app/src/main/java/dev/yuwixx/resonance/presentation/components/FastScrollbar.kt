@@ -51,7 +51,7 @@ fun LazyColumnWithScrollbar(
 ) {
     val haptic = LocalHapticFeedback.current
     val config = LocalAppearanceConfig.current
-    val scope  = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
     var visible by remember { mutableStateOf(false) }
     var isDragging by remember { mutableStateOf(false) }
@@ -190,7 +190,7 @@ fun LazyGridWithScrollbar(
 ) {
     val haptic = LocalHapticFeedback.current
     val config = LocalAppearanceConfig.current
-    val scope  = rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
     var visible by remember { mutableStateOf(false) }
     var isDragging by remember { mutableStateOf(false) }
@@ -265,7 +265,7 @@ fun LazyGridWithScrollbar(
                     dragPosition = thumbPosition
                     if (config.hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 },
-                onDragEnd   = { isDragging = false },
+                onDragEnd = { isDragging = false },
                 onDragCancel = { isDragging = false },
                 onVerticalDrag = { _, dragAmount ->
                     if (trackHeightPx <= 0f) return@detectVerticalDragGestures

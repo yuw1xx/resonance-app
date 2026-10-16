@@ -29,7 +29,7 @@ class WaveformExtractor @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val memCache: MutableMap<Long, WaveformData> = Collections.synchronizedMap(
-        object : LinkedHashMap<Long, WaveformData>(128, 0.75f, true) {
+        object: LinkedHashMap<Long, WaveformData>(128, 0.75f, true) {
             override fun removeEldestEntry(eldest: Map.Entry<Long, WaveformData>) = size > 100
         }
     )

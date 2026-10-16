@@ -39,13 +39,13 @@ enum class EqPreset(val label: String) {
 
     fun gains(bandCount: Int): List<Short> {
         val template = when (this) {
-            FLAT      -> listOf(0, 0, 0, 0, 0)
-            ROCK      -> listOf(5, 3, -1, 3, 5)
-            POP       -> listOf(-1, 2, 5, 2, -1)
-            JAZZ      -> listOf(4, 2, -1, 2, 5)
+            FLAT -> listOf(0, 0, 0, 0, 0)
+            ROCK -> listOf(5, 3, -1, 3, 5)
+            POP -> listOf(-1, 2, 5, 2, -1)
+            JAZZ -> listOf(4, 2, -1, 2, 5)
             CLASSICAL -> listOf(5, 3, -2, 3, 4)
             BASS_BOOST -> listOf(8, 5, 1, 0, 0)
-            VOCAL     -> listOf(-2, -1, 3, 3, -1)
+            VOCAL -> listOf(-2, -1, 3, 3, -1)
         }
         // The 5-point curve is stretched over however many bands the device has, interpolating
         // between points, so its shape is the same on a 3-band and a 10-band equalizer.

@@ -373,15 +373,15 @@ class MusicService : MediaLibraryService() {
         scope.launch {
             // Repeat and shuffle come back with the saved queue (restoreQueue).
             player.skipSilenceEnabled = prefs.skipSilence.first()
-            smartShuffleEnabled       = prefs.smartShuffleEnabled.first()
+            smartShuffleEnabled = prefs.smartShuffleEnabled.first()
 
-            gaplessEnabled            = prefs.gaplessEnabled.first()
-            crossfadeDurationMs       = prefs.crossfadeDurationMs.first()
+            gaplessEnabled = prefs.gaplessEnabled.first()
+            crossfadeDurationMs = prefs.crossfadeDurationMs.first()
             volumeNormalizationEnabled = prefs.volumeNormalization.first()
-            replayGainMode            = prefs.replayGainMode.first()
-            replayGainPreampDb        = prefs.replayGainPreampDb.first()
-            resumeOnHeadphones        = prefs.resumeOnHeadphones.first()
-            showSkipButtons           = prefs.showSkipButtons.first()
+            replayGainMode = prefs.replayGainMode.first()
+            replayGainPreampDb = prefs.replayGainPreampDb.first()
+            resumeOnHeadphones = prefs.resumeOnHeadphones.first()
+            showSkipButtons = prefs.showSkipButtons.first()
 
             updateNotificationCommandButtons(showSkipButtons)
         }
@@ -496,8 +496,8 @@ class MusicService : MediaLibraryService() {
 
         val fadeDurationMs = when {
             crossfadeDurationMs > 0 -> crossfadeDurationMs
-            !gaplessEnabled         -> 200
-            else                    -> 0
+            !gaplessEnabled -> 200
+            else -> 0
         }
 
         if (fadeDurationMs == 0) {
@@ -555,9 +555,9 @@ class MusicService : MediaLibraryService() {
         player.volume = targetVolume
     }
 
-        // ReplayGain multiplier: convert dB gain tag → linear amplitude, fall back to -3 dBFS
-        // normalisation (0.707) if no tag is present and volume normalisation is on.
-        private fun computeTargetVolume(): Float {
+    // ReplayGain multiplier: convert dB gain tag → linear amplitude, fall back to -3 dBFS
+    // normalisation (0.707) if no tag is present and volume normalisation is on.
+    private fun computeTargetVolume(): Float {
         if (replayGainMode != "OFF") {
             val extras = player.currentMediaItem?.mediaMetadata?.extras
             if (extras != null) {
@@ -569,14 +569,14 @@ class MusicService : MediaLibraryService() {
                 if (trackGain != null || albumGain != null) {
                     val info = ReplayGainProcessor.ReplayGainInfo(
                         trackGainDb = trackGain,
-                        trackPeak   = null,
+                        trackPeak = null,
                         albumGainDb = albumGain,
-                        albumPeak   = null,
+                        albumPeak = null,
                     )
                     val mode = when (replayGainMode) {
                         "ALBUM" -> ReplayGainProcessor.Mode.ALBUM
-                        "OFF"   -> ReplayGainProcessor.Mode.OFF
-                        else    -> ReplayGainProcessor.Mode.TRACK
+                        "OFF" -> ReplayGainProcessor.Mode.OFF
+                        else -> ReplayGainProcessor.Mode.TRACK
                     }
                     val multiplier = replayGainProcessor.computeMultiplier(info, mode, replayGainPreampDb)
                     return multiplier * sleepFadeFactor
@@ -702,7 +702,7 @@ class MusicService : MediaLibraryService() {
         player.replaceMediaItem(index, item.buildUpon().setMediaMetadata(updatedMetadata).build())
     }
 
-        private fun updateNotificationCommandButtons(showSkip: Boolean) {
+    private fun updateNotificationCommandButtons(showSkip: Boolean) {
         val layout = mutableListOf<CommandButton>()
 
         if (showSkip) {
@@ -826,7 +826,7 @@ class MusicService : MediaLibraryService() {
                 val repeatMode = when (queueEntity.repeatMode) {
                     "ONE" -> Player.REPEAT_MODE_ONE
                     "ALL" -> Player.REPEAT_MODE_ALL
-                    else  -> Player.REPEAT_MODE_OFF
+                    else -> Player.REPEAT_MODE_OFF
                 }
 
                 withContext(Dispatchers.Main) {
@@ -1032,35 +1032,35 @@ class MusicService : MediaLibraryService() {
             val cornerRadius = widgetCornerRadius
             scope.launch {
                 ResonanceWidget.updateState(
-                    context        = this@MusicService,
-                    title          = "", artist = "", artworkUri = "",
-                    isPlaying      = false, hasSong = false,
-                    hasPrev        = false, hasNext = false, progress = 0f,
-                    isLiked        = false, cornerRadiusDp = cornerRadius,
+                    context = this@MusicService,
+                    title = "", artist = "", artworkUri = "",
+                    isPlaying = false, hasSong = false,
+                    hasPrev = false, hasNext = false, progress = 0f,
+                    isLiked = false, cornerRadiusDp = cornerRadius,
                 )
             }
             return
         }
-        val meta       = mediaItem.mediaMetadata
-        val title      = meta.title?.toString() ?: mediaItem.mediaId
-        val artist     = meta.artist?.toString() ?: meta.albumArtist?.toString() ?: ""
+        val meta = mediaItem.mediaMetadata
+        val title = meta.title?.toString() ?: mediaItem.mediaId
+        val artist = meta.artist?.toString() ?: meta.albumArtist?.toString() ?: ""
         val artworkUri = meta.artworkUri?.toString() ?: ""
-        val duration   = player.duration.takeIf { it > 0 } ?: 1L
-        val progress   = (player.currentPosition.toFloat() / duration).coerceIn(0f, 1f)
-        val isLiked      = widgetIsLiked
+        val duration = player.duration.takeIf { it > 0 } ?: 1L
+        val progress = (player.currentPosition.toFloat() / duration).coerceIn(0f, 1f)
+        val isLiked = widgetIsLiked
         val cornerRadius = widgetCornerRadius
         scope.launch {
             ResonanceWidget.updateState(
-                context        = this@MusicService,
-                title          = title,
-                artist         = artist,
-                artworkUri     = artworkUri,
-                isPlaying      = player.isPlaying,
-                hasSong        = true,
-                hasPrev        = player.hasPreviousMediaItem(),
-                hasNext        = player.hasNextMediaItem(),
-                progress       = progress,
-                isLiked        = isLiked,
+                context = this@MusicService,
+                title = title,
+                artist = artist,
+                artworkUri = artworkUri,
+                isPlaying = player.isPlaying,
+                hasSong = true,
+                hasPrev = player.hasPreviousMediaItem(),
+                hasNext = player.hasNextMediaItem(),
+                progress = progress,
+                isLiked = isLiked,
                 cornerRadiusDp = cornerRadius,
             )
         }
@@ -1199,8 +1199,8 @@ class MusicService : MediaLibraryService() {
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
-        private val ROOT_ID      = "resonance_root"
-        private val SONGS_ID     = "songs"
+        private val ROOT_ID = "resonance_root"
+        private val SONGS_ID = "songs"
         private val PLAYLISTS_ID = "playlists"
 
         override fun onGetLibraryRoot(

@@ -87,15 +87,15 @@ class ShareTransferManager @Inject constructor(
 ) {
 
     sealed class TransferState {
-        data object Idle      : TransferState()
+        data object Idle : TransferState()
         data object Preparing : TransferState()
         /** Uploading to the internet relay. [completedSongs]/[totalSongs] are 0/1 for a single song. */
         data class Uploading(val progress: Float, val completedSongs: Int = 0, val totalSongs: Int = 1) : TransferState()
         data class Ready(val qrContent: String, val mode: String) : TransferState()
         data class Serving(val progress: Float) : TransferState()
-        data object Done      : TransferState()
-        data object Rejected  : TransferState()
-        data object NoWifi    : TransferState()
+        data object Done : TransferState()
+        data object Rejected : TransferState()
+        data object NoWifi : TransferState()
         data class Error(val message: String) : TransferState()
     }
 
@@ -164,9 +164,9 @@ class ShareTransferManager @Inject constructor(
                 return@launch
             }
             when {
-                isOnWifi()       -> prepareLan(song, file)
-                isWifiEnabled()  -> prepareP2p(song, file)
-                else             -> _state.value = TransferState.NoWifi
+                isOnWifi() -> prepareLan(song, file)
+                isWifiEnabled() -> prepareP2p(song, file)
+                else -> _state.value = TransferState.NoWifi
             }
         }
     }
@@ -392,20 +392,20 @@ class ShareTransferManager @Inject constructor(
         }
 
         val handle = fileServer.serve(
-            file       = file,
-            mimeType   = song.mimeType,
+            file = file,
+            mimeType = song.mimeType,
             onProgress = { _state.value = TransferState.Serving(it) },
-            onDone     = { _state.value = TransferState.Done },
+            onDone = { _state.value = TransferState.Done },
             onRejected = { _state.value = TransferState.Rejected }
         )
 
         val qrContent = buildTransferUri(
-            mode   = "lan",
-            ip     = ip,
-            port   = handle.port,
-            token  = handle.token,
-            song   = song,
-            file   = file,
+            mode = "lan",
+            ip = ip,
+            port = handle.port,
+            token = handle.token,
+            song = song,
+            file = file,
         )
 
         _state.value = TransferState.Ready(qrContent, "lan")
@@ -449,21 +449,21 @@ class ShareTransferManager @Inject constructor(
         }
 
         val handle = fileServer.serve(
-            file       = file,
-            mimeType   = song.mimeType,
+            file = file,
+            mimeType = song.mimeType,
             onProgress = { _state.value = TransferState.Serving(it) },
-            onDone     = { _state.value = TransferState.Done },
+            onDone = { _state.value = TransferState.Done },
             onRejected = { _state.value = TransferState.Rejected }
         )
 
         val qrContent = buildTransferUri(
-            mode       = "p2p",
-            ip         = goIp,
-            port       = handle.port,
-            token      = handle.token,
-            song       = song,
-            file       = file,
-            p2pSsid    = group.networkName,
+            mode = "p2p",
+            ip = goIp,
+            port = handle.port,
+            token = handle.token,
+            song = song,
+            file = file,
+            p2pSsid = group.networkName,
             p2pPassphrase = group.passphrase,
         )
 
@@ -496,9 +496,9 @@ class ShareTransferManager @Inject constructor(
     }
 
     private fun isOnWifi(): Boolean {
-        val cm    = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val net   = cm.activeNetwork ?: return false
-        val caps  = cm.getNetworkCapabilities(net) ?: return false
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
         return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     }
 

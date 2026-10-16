@@ -109,8 +109,8 @@ class MainActivity : ComponentActivity() {
 
             val useDark = when (darkThemePref) {
                 "LIGHT" -> false
-                "DARK"  -> true
-                else    -> systemDark
+                "DARK" -> true
+                else -> systemDark
             }
 
             LaunchedEffect(Unit) {

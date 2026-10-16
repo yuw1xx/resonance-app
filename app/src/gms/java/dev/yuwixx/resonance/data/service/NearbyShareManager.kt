@@ -252,7 +252,7 @@ class NearbyShareManager @Inject constructor(
             .addOnFailureListener { _state.value = NearbyState.Error(it.message ?: "Connection request failed") }
     }
 
-        fun sendSong(song: Song, endpointId: String) {
+    fun sendSong(song: Song, endpointId: String) {
         val scheme = song.uri.scheme ?: ""
         if (scheme == "http" || scheme == "https") {
             _state.value = NearbyState.Error("This song is streamed from a remote server and can't be shared as a file.")
@@ -405,7 +405,7 @@ class NearbyShareManager @Inject constructor(
                             _incomingRequest.value = IncomingRequest(
                                 endpointId = endpointId,
                                 senderName = senderName,
-                                songTitle  = title,
+                                songTitle = title,
                                 songArtist = artist
                             )
                         }
@@ -438,15 +438,15 @@ class NearbyShareManager @Inject constructor(
             when (update.payloadId) {
                 filePayloadId -> when (update.status) {
                     PayloadTransferUpdate.Status.IN_PROGRESS -> _state.value = NearbyState.Sending(progress)
-                    PayloadTransferUpdate.Status.SUCCESS     -> _state.value = NearbyState.SendSuccess
-                    PayloadTransferUpdate.Status.FAILURE     -> _state.value = NearbyState.Error("Transfer failed")
+                    PayloadTransferUpdate.Status.SUCCESS -> _state.value = NearbyState.SendSuccess
+                    PayloadTransferUpdate.Status.FAILURE -> _state.value = NearbyState.Error("Transfer failed")
                     else -> Unit
                 }
                 incomingFilePayloadId -> when (update.status) {
                     PayloadTransferUpdate.Status.IN_PROGRESS -> _state.value = NearbyState.Receiving(progress)
                     PayloadTransferUpdate.Status.SUCCESS -> {
                         val payload = incomingPendingPayload
-                        val sender  = incomingPendingSender
+                        val sender = incomingPendingSender
                         incomingFilePayloadId = null
                         incomingPendingPayload = null
                         incomingPendingSender = ""
@@ -486,9 +486,9 @@ class NearbyShareManager @Inject constructor(
             } ?: throw Exception("Could not open received file")
             _incomingFile.value = IncomingFile(
                 senderName = senderName,
-                songTitle  = title,
+                songTitle = title,
                 songArtist = artist,
-                file       = destFile,
+                file = destFile,
             )
             _state.value = NearbyState.Idle
         } catch (e: Exception) {

@@ -22,24 +22,24 @@ class NavidromeApiProvider @Inject constructor(
     @Volatile private var currentUsername: String? = null
     @Volatile private var currentPassword: String? = null
 
-        fun currentApi(): NavidromeApi? = api
+    fun currentApi(): NavidromeApi? = api
 
         data class Credentials(val serverUrl: String, val username: String, val password: String)
     fun currentCredentials(): Credentials? {
-        val url  = currentServerUrl ?: return null
-        val user = currentUsername  ?: return null
-        val pass = currentPassword  ?: return null
+        val url = currentServerUrl ?: return null
+        val user = currentUsername ?: return null
+        val pass = currentPassword ?: return null
         return Credentials(url, user, pass)
     }
 
-        suspend fun initFromPrefs(prefs: ResonancePreferences) {
-        val url  = prefs.navidromeServerUrl.first() ?: return
-        val user = prefs.navidromeUsername.first()   ?: return
-        val pass = prefs.getNavidromePassword()       ?: return
+    suspend fun initFromPrefs(prefs: ResonancePreferences) {
+        val url = prefs.navidromeServerUrl.first() ?: return
+        val user = prefs.navidromeUsername.first() ?: return
+        val pass = prefs.getNavidromePassword() ?: return
         rebuild(url, user, pass)
     }
 
-        fun serverUrl(): String? = currentServerUrl
+    fun serverUrl(): String? = currentServerUrl
 
         fun rebuild(serverUrl: String, username: String, password: String): NavidromeApi {
         val normalizedUrl = serverUrl.trimEnd('/') + "/"
@@ -63,7 +63,7 @@ class NavidromeApiProvider @Inject constructor(
         return newApi
     }
 
-        fun buildApi(serverUrl: String, username: String, password: String): NavidromeApi {
+    fun buildApi(serverUrl: String, username: String, password: String): NavidromeApi {
         val normalizedUrl = serverUrl.trimEnd('/') + "/"
         val client = okHttp.newBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)

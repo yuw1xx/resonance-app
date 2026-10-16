@@ -7,8 +7,22 @@ import org.junit.Test
 class SongMatcherTest {
 
     private val library = listOf(
-        MatchCandidate(1, "/storage/emulated/0/Music/Daft Punk/Discovery/01 One More Time.flac", "One More Time", "Daft Punk", "Discovery", 320_000),
-        MatchCandidate(2, "/storage/emulated/0/Music/Daft Punk/Discovery/02 Aerodynamic.flac", "Aerodynamic", "Daft Punk", "Discovery", 212_000),
+        MatchCandidate(
+            1,
+            "/storage/emulated/0/Music/Daft Punk/Discovery/01 One More Time.flac",
+            "One More Time",
+            "Daft Punk",
+            "Discovery",
+            320_000,
+        ),
+        MatchCandidate(
+            2,
+            "/storage/emulated/0/Music/Daft Punk/Discovery/02 Aerodynamic.flac",
+            "Aerodynamic",
+            "Daft Punk",
+            "Discovery",
+            212_000,
+        ),
         MatchCandidate(3, "/storage/emulated/0/Music/Other/Intro.mp3", "Intro", "Band A", "First", 60_000),
         MatchCandidate(4, "/storage/emulated/0/Music/Another/Intro.mp3", "Intro", "Band B", "Second", 90_000),
         MatchCandidate(5, "/storage/1234-ABCD/Music/Sigur Rós/Hoppípolla.flac", "Hoppípolla", "Sigur Rós", "Takk", 268_000),

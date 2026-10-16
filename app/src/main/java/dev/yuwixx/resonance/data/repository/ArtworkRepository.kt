@@ -30,7 +30,7 @@ class ArtworkRepository @Inject constructor(
 ) {
     private val paletteCache = ConcurrentHashMap<Long, ArtworkColors>(64)
 
-        suspend fun getArtistArtworkUrl(artistName: String): String? = withContext(Dispatchers.IO) {
+    suspend fun getArtistArtworkUrl(artistName: String): String? = withContext(Dispatchers.IO) {
         val cached = artworkDao.getArtistArtwork(artistName)
         val cacheAgeMs = 7L * 24 * 60 * 60 * 1000
         if (cached != null && System.currentTimeMillis() - cached.fetchedAt < cacheAgeMs) {

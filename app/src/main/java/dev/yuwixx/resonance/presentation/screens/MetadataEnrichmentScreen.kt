@@ -104,7 +104,12 @@ private fun IdleContent(onScan: () -> Unit) {
     ) {
         Icon(Icons.Rounded.AutoFixHigh, null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(16.dp))
-        Text("Scan Library for Metadata Fixes", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text(
+            "Scan Library for Metadata Fixes",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
         Spacer(Modifier.height(8.dp))
         Text(
             "Checks each local song against MusicBrainz and Last.fm for a corrected release year " +
@@ -220,8 +225,20 @@ private fun ChangeRow(
             Checkbox(checked = checked, onCheckedChange = { onToggle() })
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(change.song.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(change.song.displayArtist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    change.song.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    change.song.displayArtist,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "${if (change.field == MetadataEnrichmentScanner.Field.YEAR) "Year" else "Genre"}: ${change.oldValue} → ${change.newValue}",
@@ -262,7 +279,11 @@ private fun DoneContent(state: EnrichmentUiState.Done, onScanAgain: () -> Unit) 
             Text("${state.failed} failed to write", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         }
         if (state.skipped > 0) {
-            Text("${state.skipped} skipped (not selected)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "${state.skipped} skipped (not selected)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Spacer(Modifier.height(24.dp))
         Button(onClick = onScanAgain) { Text("Scan Again") }

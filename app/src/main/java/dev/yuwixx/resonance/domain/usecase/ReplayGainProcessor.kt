@@ -58,7 +58,7 @@ class ReplayGainProcessor @Inject constructor() {
     private fun parseGainString(raw: String?): Float? =
         raw?.trim()?.removeSuffix("dB")?.removeSuffix("DB")?.trim()?.toFloatOrNull()
 
-        fun computeMultiplier(
+    fun computeMultiplier(
         info: ReplayGainInfo,
         mode: Mode,
         preampDb: Float = 0f,

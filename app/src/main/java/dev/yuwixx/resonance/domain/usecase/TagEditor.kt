@@ -38,7 +38,7 @@ class TagEditor @Inject constructor(
         val lyrics: String,
     )
 
-        suspend fun readTags(song: Song): SongTags = withContext(Dispatchers.IO) {
+    suspend fun readTags(song: Song): SongTags = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(context, song.uri)

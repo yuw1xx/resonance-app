@@ -165,7 +165,12 @@ private fun CastSheet(
                     leadingContent = {
                         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(40.dp)) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(castDeviceIcon(connectedRoute!!), null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                                Icon(
+                                    castDeviceIcon(connectedRoute!!),
+                                    null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(20.dp),
+                                )
                             }
                         }
                     },
@@ -177,7 +182,12 @@ private fun CastSheet(
                     leadingContent = {
                         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.size(40.dp)) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Rounded.LinkOff, null, tint = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.size(20.dp))
+                                Icon(
+                                    Icons.Rounded.LinkOff,
+                                    null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(20.dp),
+                                )
                             }
                         }
                     },
@@ -229,7 +239,12 @@ private fun CastRouteItem(route: MediaRouter.RouteInfo, onClick: () -> Unit) {
         leadingContent = {
             Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(40.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(castDeviceIcon(route), null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
+                    Icon(
+                        castDeviceIcon(route),
+                        null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
         },
