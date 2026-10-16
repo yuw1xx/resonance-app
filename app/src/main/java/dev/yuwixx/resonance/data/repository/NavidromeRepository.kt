@@ -76,9 +76,6 @@ class NavidromeRepository @Inject constructor(
         }
     }.flowOn(Dispatchers.Default)
 
-        suspend fun hasCachedData(): Boolean =
-        navidromeSongDao.count() > 0
-
         suspend fun clearCache() = withContext(Dispatchers.IO) {
         navidromeSongDao.deleteAll()
         navidromeAlbumDao.deleteAll()
@@ -231,43 +228,6 @@ class NavidromeRepository @Inject constructor(
         val api = navidromeApiProvider.currentApi() ?: return
         val artists = runCatching { api.getArtists().ok.artists?.index?.flatMap { it.artist } }.getOrNull() ?: return
         runCatching { artistsFile.writeText(artistsAdapter.toJson(artists)) }
-    }
-
-    suspend fun getAllArtists(): List<Artist> = withContext(Dispatchers.IO) {
-        val api   = navidromeApiProvider.currentApi()   ?: return@withContext emptyList()
-        val creds = navidromeApiProvider.currentCredentials() ?: return@withContext emptyList()
-        try {
-            api.getArtists().ok.artists?.index
-                ?.flatMap { it.artist }
-                ?.map { it.toDomain(creds) }
-                ?: emptyList()
-        } catch (e: Exception) {
-            android.util.Log.e("NavidromeRepository", "getAllArtists failed: ${e.message}", e)
-            emptyList()
-        }
-    }
-
-    suspend fun getArtistWithSongs(artistId: String): Artist? = withContext(Dispatchers.IO) {
-        val api   = navidromeApiProvider.currentApi()   ?: return@withContext null
-        val creds = navidromeApiProvider.currentCredentials() ?: return@withContext null
-        try {
-            val artist = api.getArtist(artistId).ok.artist ?: return@withContext null
-            val albums = artist.album.map { summary ->
-                val detail = runCatching { api.getAlbum(summary.id).ok.album }.getOrNull() ?: summary
-                detail.toAlbumDomain(creds)
-            }
-            Artist(
-                name      = artist.name,
-                songCount = albums.sumOf { it.songCount },
-                albumCount = albums.size,
-                artworkUrl = artist.coverArt?.let { coverArtUrl(creds, it) },
-                songs  = albums.flatMap { it.songs },
-                albums = albums,
-            )
-        } catch (e: Exception) {
-            android.util.Log.e("NavidromeRepository", "getArtistWithSongs failed: ${e.message}", e)
-            null
-        }
     }
 
     suspend fun getAllPlaylists(): List<Playlist> = withContext(Dispatchers.IO) {
@@ -480,19 +440,6 @@ internal fun SubsonicSong.toSongDomain(creds: NavidromeApiProvider.Credentials):
         listenCount   = playCount?.toInt() ?: 0,
         lastListened  = 0L,
         navidromeId   = id,
-    )
-}
-
-internal fun SubsonicAlbum.toAlbumDomain(creds: NavidromeApiProvider.Credentials): Album {
-    val cover = coverArt?.let { coverArtUrl(creds, it) }
-    return Album(
-        id        = id.toLongOrNull() ?: stableLongId(id),
-        title     = name,
-        artist    = artist   ?: "Unknown Artist",
-        year      = year     ?: 0,
-        songCount = songCount ?: song.size,
-        artworkUri = cover?.let { Uri.parse(it) },
-        songs     = song.map { it.toSongDomain(creds) },
     )
 }
 

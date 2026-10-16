@@ -22,12 +22,6 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE folder = :folder")
     fun getSongsByFolder(folder: String): Flow<List<SongEntity>>
 
-    @Query("SELECT * FROM songs WHERE album = :album ORDER BY trackNumber ASC")
-    fun getSongsByAlbum(album: String): Flow<List<SongEntity>>
-
-    @Query("SELECT * FROM songs WHERE artist LIKE '%' || :artist || '%'")
-    fun getSongsByArtist(artist: String): Flow<List<SongEntity>>
-
     @Query("SELECT * FROM songs WHERE genre = :genre")
     fun getSongsByGenre(genre: String): Flow<List<SongEntity>>
 
@@ -45,7 +39,7 @@ interface SongDao {
     suspend fun upsertSongs(songs: List<SongEntity>)
 
     /** Just what a MediaStore sync needs to diff against, plus the per-song state it must keep. */
-    @Query("SELECT id, dateModified, size, path, listenCount, lastListened, replayGainTrack, replayGainAlbum FROM songs")
+    @Query("SELECT id, dateModified, size, path, listenCount, lastListened FROM songs")
     suspend fun getSyncKeys(): List<SongSyncKey>
 
     @Query("UPDATE songs SET replayGainTrack = :track, replayGainAlbum = :album WHERE id = :id")
@@ -56,9 +50,6 @@ interface SongDao {
 
     @Query("DELETE FROM songs WHERE id IN (:ids)")
     suspend fun deleteSongsByIds(ids: List<Long>)
-
-    @Query("DELETE FROM songs")
-    suspend fun deleteAllSongs()
 
     @Query("UPDATE songs SET listenCount = listenCount + 1, lastListened = :time WHERE id = :id")
     suspend fun incrementListenCount(id: Long, time: Long)
@@ -74,9 +65,6 @@ interface SongDao {
 
     @Query("SELECT DISTINCT folder FROM songs ORDER BY folder ASC")
     fun getAllFolders(): Flow<List<String>>
-
-    @Query("SELECT DISTINCT genre FROM songs WHERE genre != '' ORDER BY genre ASC")
-    fun getAllGenres(): Flow<List<String>>
 
     @Query("SELECT * FROM songs WHERE path = :path LIMIT 1")
     suspend fun getSongByPath(path: String): SongEntity?
@@ -161,14 +149,6 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY isMix ASC, dateModified DESC")
     suspend fun getAllPlaylistsList(): List<PlaylistEntity>
 
-    @Query("""
-        SELECT s.path FROM songs s
-        INNER JOIN playlist_songs ps ON s.id = ps.songId
-        WHERE ps.playlistId = :playlistId
-        ORDER BY ps.position ASC
-    """)
-    suspend fun getSongPathsForPlaylist(playlistId: Long): List<String>
-
     @Query("SELECT * FROM playlists WHERE navidromePlaylistId = :navidromePlaylistId LIMIT 1")
     suspend fun getPlaylistByNavidromeId(navidromePlaylistId: String): PlaylistEntity?
 
@@ -194,14 +174,6 @@ interface SmartPlaylistDao {
 
     @Query("SELECT * FROM smart_playlists")
     suspend fun getAll(): List<SmartPlaylistEntity>
-
-    // Smart playlist rules compile to SQL at runtime (SmartPlaylistQueryBuilder); observing
-    // songs, history and liked_songs keeps results live as the library and stats change.
-    @RawQuery(observedEntities = [SongEntity::class, HistoryEntity::class, LikedSongEntity::class])
-    fun observeSongs(query: androidx.sqlite.db.SupportSQLiteQuery): Flow<List<SongEntity>>
-
-    @RawQuery
-    suspend fun querySongs(query: androidx.sqlite.db.SupportSQLiteQuery): List<SongEntity>
 }
 
 @Dao
@@ -242,21 +214,11 @@ interface HistoryDao {
     @Insert
     suspend fun insertHistory(history: HistoryEntity)
 
-    @Query("""
-        SELECT * FROM history 
-        WHERE listenedAt BETWEEN :from AND :to
-        ORDER BY listenedAt DESC
-    """)
-    fun getHistoryInRange(from: Long, to: Long): Flow<List<HistoryEntity>>
-
     @Query("SELECT * FROM history ORDER BY listenedAt DESC LIMIT 200")
     fun getRecentHistory(): Flow<List<HistoryEntity>>
 
     @Query("SELECT * FROM history")
     suspend fun getAllHistory(): List<HistoryEntity>
-
-    @Query("DELETE FROM history WHERE listenedAt < :before")
-    suspend fun pruneHistory(before: Long)
 
     @Query("DELETE FROM history")
     suspend fun clearAllHistory()
@@ -348,13 +310,6 @@ interface LikedSongsDao {
 
     @Query("SELECT songId FROM liked_songs")
     suspend fun getAllLikedIds(): List<Long>
-
-    @Query("""
-        SELECT s.path FROM songs s
-        INNER JOIN liked_songs ls ON s.id = ls.songId
-        ORDER BY ls.likedAt DESC
-    """)
-    suspend fun getLikedSongPaths(): List<String>
 }
 
 @Dao
@@ -420,9 +375,6 @@ interface SongDownloadDao {
     @Query("SELECT * FROM song_downloads WHERE songId = :songId")
     suspend fun getBySongId(songId: Long): SongDownloadEntity?
 
-    @Query("SELECT * FROM song_downloads WHERE songId IN (:songIds)")
-    suspend fun getBySongIds(songIds: List<Long>): List<SongDownloadEntity>
-
     @Upsert
     suspend fun upsert(entity: SongDownloadEntity)
 
@@ -435,11 +387,6 @@ interface SongDownloadDao {
     @Query("DELETE FROM song_downloads")
     suspend fun deleteAll()
 
-    @Query("SELECT COALESCE(SUM(fileSizeBytes), 0) FROM song_downloads WHERE state = 'DOWNLOADED'")
-    suspend fun sumDownloadedBytes(): Long
-
-    @Query("SELECT COUNT(*) FROM song_downloads WHERE state = :state")
-    suspend fun countByState(state: String): Int
 }
 
 @Dao
@@ -485,9 +432,6 @@ interface NavidromeAlbumDao {
     @Query("SELECT * FROM navidrome_albums ORDER BY artist ASC, year ASC, name ASC")
     fun getAllAlbums(): Flow<List<NavidromeAlbumEntity>>
 
-    @Query("SELECT * FROM navidrome_albums WHERE navidromeId = :id")
-    suspend fun getAlbumById(id: String): NavidromeAlbumEntity?
-
     @Query("SELECT COUNT(*) FROM navidrome_albums")
     suspend fun count(): Int
 
@@ -511,6 +455,4 @@ data class SongSyncKey(
     val path: String,
     val listenCount: Int,
     val lastListened: Long,
-    val replayGainTrack: Float?,
-    val replayGainAlbum: Float?,
 )

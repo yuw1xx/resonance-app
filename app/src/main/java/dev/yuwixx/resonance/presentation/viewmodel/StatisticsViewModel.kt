@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.viewmodel
 
+import kotlinx.coroutines.FlowPreview
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,6 +44,7 @@ data class StatisticsData(
     val formatBreakdown: List<Pair<String, Int>>,
 )
 
+@OptIn(FlowPreview::class)
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
     private val historyDao: HistoryDao,
@@ -59,8 +61,7 @@ class StatisticsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             _period.collectLatest { period ->
-                // Re-compute stats whenever the history table changes (new plays, pruning, etc.).
-                // debounce prevents cascading reloads from rapid inserts.
+                // Recompute when history changes; the debounce absorbs bursts of inserts.
                 historyDao.getRecentHistory()
                     .debounce(300L)
                     .collect { _ -> _stats.value = computeStats(period) }

@@ -1137,23 +1137,6 @@ class MusicService : MediaLibraryService() {
         )
     }
 
-    fun applyReplayGain(
-        trackGainDb: Float?,
-        albumGainDb: Float?,
-        mode: String,
-        preampDb: Float = 0f,
-    ) {
-        val gainDb = when (mode) {
-            "TRACK" -> trackGainDb
-            "ALBUM" -> albumGainDb ?: trackGainDb
-            else -> null
-        } ?: return
-
-        val totalGain = gainDb + preampDb
-        val linearGain = Math.pow(10.0, totalGain / 20.0).toFloat()
-        player.volume = linearGain.coerceIn(0.01f, 4.0f)
-    }
-
     // ─── Android Auto / Media Browser ───
 
     // Exposes a two-level browse tree (Songs, Playlists) to Android Auto and other Media3 browsers.
@@ -1269,10 +1252,8 @@ class MusicService : MediaLibraryService() {
             return Futures.immediateFuture(resolvedItems.toMutableList())
         }
 
-        // Backs the android.media.action.MEDIA_PLAY_FROM_SEARCH intent filter: Android Auto /
-        // Assistant voice search ("Play <query> on Resonance") arrives here as a single
-        // unresolved MediaItem carrying only a search string, which we resolve against the
-        // local library by title/artist/album.
+        // Voice search from Android Auto or Assistant ("Play <query> on Resonance") arrives as a
+        // single MediaItem with only a search string; resolve it by title, artist or album.
         override fun onSetMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,

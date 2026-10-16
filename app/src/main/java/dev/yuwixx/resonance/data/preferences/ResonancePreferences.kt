@@ -9,7 +9,6 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.BackupPreferenceEntry
 import dev.yuwixx.resonance.data.model.MusicSource
-import dev.yuwixx.resonance.data.model.RepeatMode
 import dev.yuwixx.resonance.data.model.SortOrder
 import dev.yuwixx.resonance.data.security.SecureCredentialStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
@@ -53,8 +52,6 @@ class ResonancePreferences @Inject constructor(
         val UPDATE_FREQUENCY = stringPreferencesKey("update_frequency")
         val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
 
-        val REPEAT_MODE = stringPreferencesKey("repeat_mode")
-        val SHUFFLE_ENABLED = booleanPreferencesKey("shuffle_enabled")
         val GAPLESS_ENABLED = booleanPreferencesKey("gapless_enabled")
         val CROSSFADE_DURATION_MS = intPreferencesKey("crossfade_duration_ms")
         val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
@@ -117,13 +114,8 @@ class ResonancePreferences @Inject constructor(
 
         val EQ_ENABLED = booleanPreferencesKey("eq_enabled")
         val EQ_BAND_LEVELS = stringPreferencesKey("eq_band_levels")
-        val EQ_PRESET = intPreferencesKey("eq_preset")
 
         val PARTY_MODE        = booleanPreferencesKey("party_mode")
-
-        val MALOJA_ENABLED    = booleanPreferencesKey("maloja_enabled")
-        val MALOJA_SERVER_URL = stringPreferencesKey("maloja_server_url")
-        val MALOJA_API_KEY    = stringPreferencesKey("maloja_api_key")
 
         val DISCOGS_API_TOKEN = stringPreferencesKey("discogs_api_token")
 
@@ -131,18 +123,12 @@ class ResonancePreferences @Inject constructor(
         val REMOTE_SHARE_UPLOAD_TOKEN = stringPreferencesKey("remote_share_upload_token")
         val DEVICE_ID                 = stringPreferencesKey("device_id")
 
-        val LAST_FM_ENABLED = booleanPreferencesKey("last_fm_enabled")
-        val LAST_FM_NOW_PLAYING = booleanPreferencesKey("last_fm_now_playing")
         val LAST_FM_SCROBBLE_PERCENT = floatPreferencesKey("last_fm_scrobble_percent")
         val LAST_FM_SCROBBLE_MIN_SECS = intPreferencesKey("last_fm_scrobble_min_secs")
-        val LAST_FM_ONLY_ON_WIFI = booleanPreferencesKey("last_fm_only_on_wifi")
         val LAST_FM_SCROBBLE_OFFLINE = booleanPreferencesKey("last_fm_scrobble_offline")
-        val LAST_FM_USERNAME = stringPreferencesKey("last_fm_username")
-        val LAST_FM_SESSION_KEY = stringPreferencesKey("last_fm_session_key")
 
         val AMOLED_BLACK_THEME    = booleanPreferencesKey("amoled_black_theme")
         val PALETTE_STYLE         = stringPreferencesKey("palette_style")
-        val PLAYER_ARTWORK_THEME  = booleanPreferencesKey("player_artwork_theme")
         val PLAYLIST_SYNC_FOLDER  = stringPreferencesKey("playlist_sync_folder")
         val PLAYLIST_SYNC_EXPORT  = booleanPreferencesKey("playlist_sync_export")
         val PLAYLIST_SYNC_RELATIVE = booleanPreferencesKey("playlist_sync_relative_paths")
@@ -158,8 +144,6 @@ class ResonancePreferences @Inject constructor(
         val NAV_LABEL_VISIBILITY   = stringPreferencesKey("nav_label_visibility")
         val PLAYLIST_GRID_COLUMNS  = intPreferencesKey("playlist_grid_columns")
         val HOME_SHOW_MOST_PLAYED  = booleanPreferencesKey("home_show_most_played")
-        val HOME_SHOW_SMART_QUEUE  = booleanPreferencesKey("home_show_smart_queue")
-        val HOME_SHOW_DAILY_MIXES  = booleanPreferencesKey("home_show_daily_mixes")
         val MIXES_LOCATION         = stringPreferencesKey("mixes_location")
 
         val SHOW_ALBUM_IN_LIST          = booleanPreferencesKey("show_album_in_list")
@@ -184,14 +168,6 @@ class ResonancePreferences @Inject constructor(
 
     val lastUpdateCheck: Flow<Long> = data.mapDistinct { it[LAST_UPDATE_CHECK] ?: 0L }
     suspend fun setLastUpdateCheck(time: Long) { ds.edit { it[LAST_UPDATE_CHECK] = time } }
-
-    val repeatMode: Flow<RepeatMode> = data.mapDistinct {
-        try { RepeatMode.valueOf(it[REPEAT_MODE] ?: "NONE") } catch (e: Exception) { RepeatMode.NONE }
-    }
-    suspend fun setRepeatMode(mode: RepeatMode) { ds.edit { it[REPEAT_MODE] = mode.name } }
-
-    val shuffleEnabled: Flow<Boolean> = data.mapDistinct { it[SHUFFLE_ENABLED] ?: false }
-    suspend fun setShuffleEnabled(enabled: Boolean) { ds.edit { it[SHUFFLE_ENABLED] = enabled } }
 
     val gaplessEnabled: Flow<Boolean> = data.mapDistinct { it[GAPLESS_ENABLED] ?: true }
     suspend fun setGaplessEnabled(enabled: Boolean) { ds.edit { it[GAPLESS_ENABLED] = enabled } }
@@ -352,10 +328,8 @@ class ResonancePreferences @Inject constructor(
     suspend fun setMusicSource(source: MusicSource) { ds.edit { it[MUSIC_SOURCE] = source.name } }
 
     val navidromeServerUrl: Flow<String?> = data.mapDistinct { it[NAVIDROME_SERVER_URL] }
-    suspend fun setNavidromeServerUrl(url: String) { ds.edit { it[NAVIDROME_SERVER_URL] = url } }
 
     val navidromeUsername: Flow<String?> = data.mapDistinct { it[NAVIDROME_USERNAME] }
-    suspend fun setNavidromeUsername(username: String) { ds.edit { it[NAVIDROME_USERNAME] = username } }
 
     // Migrated out of plain DataStore into Keystore-backed encrypted storage (see
     // SecureCredentialStore). navidromePassword used to be a Flow<String?>, but every caller
@@ -410,23 +384,11 @@ class ResonancePreferences @Inject constructor(
     val eqBandLevels: Flow<String> = data.mapDistinct { it[EQ_BAND_LEVELS] ?: "" }
     suspend fun setEqBandLevels(levels: String) { ds.edit { it[EQ_BAND_LEVELS] = levels } }
 
-    val eqPreset: Flow<Int> = data.mapDistinct { it[EQ_PRESET] ?: -1 }
-    suspend fun setEqPreset(preset: Int) { ds.edit { it[EQ_PRESET] = preset } }
-
-    val lastFmEnabled: Flow<Boolean> = data.mapDistinct { it[LAST_FM_ENABLED] ?: false }
-    suspend fun setLastFmEnabled(enabled: Boolean) { ds.edit { it[LAST_FM_ENABLED] = enabled } }
-
-    val lastFmNowPlaying: Flow<Boolean> = data.mapDistinct { it[LAST_FM_NOW_PLAYING] ?: true }
-    suspend fun setLastFmNowPlaying(enabled: Boolean) { ds.edit { it[LAST_FM_NOW_PLAYING] = enabled } }
-
     val lastFmScrobblePercent: Flow<Float> = data.mapDistinct { it[LAST_FM_SCROBBLE_PERCENT] ?: 0.5f }
     suspend fun setLastFmScrobblePercent(percent: Float) { ds.edit { it[LAST_FM_SCROBBLE_PERCENT] = percent } }
 
     val lastFmScrobbleMinSecs: Flow<Int> = data.mapDistinct { it[LAST_FM_SCROBBLE_MIN_SECS] ?: 30 }
     suspend fun setLastFmScrobbleMinSecs(seconds: Int) { ds.edit { it[LAST_FM_SCROBBLE_MIN_SECS] = seconds } }
-
-    val lastFmOnlyOnWifi: Flow<Boolean> = data.mapDistinct { it[LAST_FM_ONLY_ON_WIFI] ?: false }
-    suspend fun setLastFmOnlyOnWifi(enabled: Boolean) { ds.edit { it[LAST_FM_ONLY_ON_WIFI] = enabled } }
 
     val lastFmScrobbleOffline: Flow<Boolean> = data.mapDistinct { it[LAST_FM_SCROBBLE_OFFLINE] ?: true }
     suspend fun setLastFmScrobbleOffline(enabled: Boolean) { ds.edit { it[LAST_FM_SCROBBLE_OFFLINE] = enabled } }
@@ -439,8 +401,6 @@ class ResonancePreferences @Inject constructor(
     suspend fun setPaletteStyle(style: String) { ds.edit { it[PALETTE_STYLE] = style } }
 
     // Tints the expanded player with a scheme generated from the current song's artwork.
-    val playerArtworkTheme: Flow<Boolean> = data.mapDistinct { it[PLAYER_ARTWORK_THEME] ?: true }
-    suspend fun setPlayerArtworkTheme(enabled: Boolean) { ds.edit { it[PLAYER_ARTWORK_THEME] = enabled } }
 
     // ─── M3U folder sync ───
     // SAF tree URI of the folder whose .m3u/.m3u8 files are kept in sync with app playlists.
@@ -488,12 +448,6 @@ class ResonancePreferences @Inject constructor(
     val homeShowMostPlayed: Flow<Boolean> = data.mapDistinct { it[HOME_SHOW_MOST_PLAYED] ?: true }
     suspend fun setHomeShowMostPlayed(show: Boolean) { ds.edit { it[HOME_SHOW_MOST_PLAYED] = show } }
 
-    val homeShowSmartQueue: Flow<Boolean> = data.mapDistinct { it[HOME_SHOW_SMART_QUEUE] ?: true }
-    suspend fun setHomeShowSmartQueue(show: Boolean) { ds.edit { it[HOME_SHOW_SMART_QUEUE] = show } }
-
-    val homeShowDailyMixes: Flow<Boolean> = data.mapDistinct { it[HOME_SHOW_DAILY_MIXES] ?: true }
-    suspend fun setHomeShowDailyMixes(show: Boolean) { ds.edit { it[HOME_SHOW_DAILY_MIXES] = show } }
-
     val mixesLocation: Flow<String> = data.mapDistinct { it[MIXES_LOCATION] ?: "BOTH" }
     suspend fun setMixesLocation(location: String) { ds.edit { it[MIXES_LOCATION] = location } }
 
@@ -536,13 +490,6 @@ class ResonancePreferences @Inject constructor(
     val partyMode: Flow<Boolean> = data.mapDistinct { it[PARTY_MODE] ?: false }
     suspend fun setPartyMode(enabled: Boolean) { ds.edit { it[PARTY_MODE] = enabled } }
 
-    val malojaEnabled: Flow<Boolean>   = data.mapDistinct { it[MALOJA_ENABLED]    ?: false }
-    val malojaServerUrl: Flow<String>  = data.mapDistinct { it[MALOJA_SERVER_URL] ?: "" }
-    val malojaApiKey: Flow<String>     = data.mapDistinct { it[MALOJA_API_KEY]    ?: "" }
-    suspend fun setMalojaEnabled(v: Boolean)  { ds.edit { it[MALOJA_ENABLED]    = v } }
-    suspend fun setMalojaServerUrl(v: String) { ds.edit { it[MALOJA_SERVER_URL] = v } }
-    suspend fun setMalojaApiKey(v: String)    { ds.edit { it[MALOJA_API_KEY]    = v } }
-
     val discogsApiToken: Flow<String> = data.mapDistinct { it[DISCOGS_API_TOKEN] ?: "" }
     suspend fun setDiscogsApiToken(v: String) { ds.edit { it[DISCOGS_API_TOKEN] = v } }
 
@@ -559,22 +506,6 @@ class ResonancePreferences @Inject constructor(
         val generated = UUID.randomUUID().toString()
         ds.edit { it[DEVICE_ID] = generated }
         return generated
-    }
-
-    val lastFmUsername: Flow<String?> = data.mapDistinct { it[LAST_FM_USERNAME] }
-    val lastFmSessionKey: Flow<String?> = data.mapDistinct { it[LAST_FM_SESSION_KEY] }
-    suspend fun setLastFmCredentials(username: String, sessionKey: String) {
-        ds.edit {
-            it[LAST_FM_USERNAME] = username
-            it[LAST_FM_SESSION_KEY] = sessionKey
-        }
-    }
-    suspend fun clearLastFmCredentials() {
-        ds.edit {
-            it.remove(LAST_FM_USERNAME)
-            it.remove(LAST_FM_SESSION_KEY)
-            it[LAST_FM_ENABLED] = false
-        }
     }
 
     // ─── Backup / Restore ───

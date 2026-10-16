@@ -66,8 +66,6 @@ class MusicRepository @Inject constructor(
 
     val allFolders: Flow<List<String>> = songDao.getAllFolders()
 
-    val allGenres: Flow<List<String>> = songDao.getAllGenres()
-
     val allAlbums: Flow<List<Album>> = combine(
         allSongs,
         prefs.groupByAlbumArtist,
@@ -125,11 +123,6 @@ class MusicRepository @Inject constructor(
             else -> this
         }.trim()
     }
-
-    fun searchSongs(query: String): Flow<List<Song>> =
-        combine(songDao.searchSongs(query), prefs.artistDelimiter) { entities, delimiter ->
-            entities.map { it.toDomain(delimiter) }
-        }.flowOn(Dispatchers.Default)
 
     fun getSongsByFolder(folder: String): Flow<List<Song>> =
         combine(songDao.getSongsByFolder(folder), prefs.artistDelimiter) { entities, delimiter ->
@@ -373,7 +366,6 @@ class MusicRepository @Inject constructor(
 
                 allSongs.filter { it.id in memorySongIds }.take(limit)
             }
-            else -> allSongs.shuffled().take(limit)
         }
 
         SmartQueueResult(songs = result, reason = reason)

@@ -83,15 +83,6 @@ data class Playlist(
     val totalDuration: Long get() = songs.sumOf { it.duration }
 }
 
-@Immutable
-data class PlaybackQueue(
-    val songs: List<Song>,
-    val currentIndex: Int,
-    val shuffleEnabled: Boolean,
-    val repeatMode: RepeatMode,
-    val originalOrder: List<Int>,
-)
-
 enum class RepeatMode { NONE, ONE, ALL }
 
 @Immutable

@@ -112,8 +112,6 @@ class MalojaRepository @Inject constructor(
     }
 
     suspend fun setEnabled(v: Boolean)  { store.edit { it[MalojaKeys.ENABLED]    = v } }
-    suspend fun setServerUrl(v: String) { store.edit { it[MalojaKeys.SERVER_URL] = v } }
-    suspend fun setApiKey(v: String)    { store.edit { it[MalojaKeys.API_KEY]    = v } }
 
     /** Returns false (and saves nothing) when [url] isn't a usable http(s) address. */
     suspend fun configure(url: String, key: String): Boolean {

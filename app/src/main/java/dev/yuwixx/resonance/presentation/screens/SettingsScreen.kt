@@ -2,6 +2,9 @@
 // page (Appearance, Playback, Audio, Library, Navidrome, Last.fm, History, Data, About, …).
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import dev.yuwixx.resonance.ui.theme.PaletteStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.selection.toggleable
@@ -513,6 +516,7 @@ private fun AppearanceSection(prefs: ResonancePreferences) {
     val dynamicColor by prefs.dynamicColorEnabled.collectAsStateWithLifecycle(initialValue = true)
     val presetColorInt by prefs.presetColor.collectAsStateWithLifecycle(initialValue = null)
     val darkTheme by prefs.darkTheme.collectAsStateWithLifecycle(initialValue = "SYSTEM")
+    val paletteStyle by prefs.paletteStyle.collectAsStateWithLifecycle(initialValue = "TONAL_SPOT")
     val cornerRadius by prefs.cornerRadius.collectAsStateWithLifecycle(initialValue = 28)
     val seekbarStyle by prefs.seekbarStyle.collectAsStateWithLifecycle(initialValue = "WAVEFORM")
     val blurBackground by prefs.blurArtworkBackground.collectAsStateWithLifecycle(initialValue = true)
@@ -548,10 +552,34 @@ private fun AppearanceSection(prefs: ResonancePreferences) {
             enter = fadeIn(tween(280, easing = EmphasizedDecelerate)) + expandVertically(tween(280, easing = EmphasizedDecelerate)),
             exit = fadeOut(tween(180, easing = EmphasizedAccelerate)) + shrinkVertically(tween(180, easing = EmphasizedAccelerate)),
         ) {
-            ThemeColorPicker(
-                current = presetColorInt,
-                onPick = { scope.launch { prefs.setPresetColor(it) } }
-            )
+            Column {
+                ThemeColorPicker(
+                    current = presetColorInt,
+                    onPick = { scope.launch { prefs.setPresetColor(it) } }
+                )
+                // Only seed-based schemes have a palette style; wallpaper colors come as they are.
+                Text(
+                    "Palette Style",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
+                    PaletteStyle.entries.forEach { style ->
+                        FilterChip(
+                            selected = PaletteStyle.from(paletteStyle) == style,
+                            onClick = { scope.launch { prefs.setPaletteStyle(style.name) } },
+                            label = { Text(style.label) },
+                        )
+                    }
+                }
+            }
         }
         SegmentedSettingsItem(
             title = "Dark Theme",
@@ -1389,7 +1417,6 @@ private fun DataSection(libraryViewModel: LibraryViewModel, snackbarHostState: S
             val msg = when (s) {
                 is BackupUiState.ExportSuccess -> s.message
                 is BackupUiState.ImportSuccess -> s.message
-                else -> ""
             }
             AlertDialog(
                 onDismissRequest = backupViewModel::dismiss,
@@ -2306,15 +2333,6 @@ private fun ScanLibraryItem(isSyncing: Boolean, onScan: () -> Unit) {
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
-}
-
-private fun LazyListScope.settingsToggle(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onToggle: (Boolean) -> Unit,
-) {
-    item { SettingsToggleRow(title, subtitle, checked, onToggle) }
 }
 
 @Composable

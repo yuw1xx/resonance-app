@@ -795,7 +795,6 @@ private fun SeekBarAndTimeLabels(
                 position = position,
                 durationMs = durationMs,
                 onSeek = onSeek,
-                isPlaying = isPlaying,
                 playedColor = playedColor,
                 modifier = Modifier
                     .fillMaxWidth()

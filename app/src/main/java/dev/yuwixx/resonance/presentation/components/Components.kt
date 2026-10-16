@@ -207,14 +207,6 @@ fun BigScreenTitle(title: String, modifier: Modifier = Modifier) {
     )
 }
 
-internal const val M3_SHORT2  = 140
-internal const val M3_SHORT4  = 280
-internal const val M3_MEDIUM2 = 420
-internal const val M3_MEDIUM4 = 560
-internal const val M3_LONG2   = 700
-internal const val M3_LONG4   = 840
-internal const val M3_XLONG1  = 980
-
 data class AppearanceConfig(
     val compactListMode: Boolean = false,
     val showDurationInList: Boolean = false,
@@ -300,56 +292,22 @@ fun AnimatedPermissionGate(
     ) { isGranted -> if (isGranted) content() else prompt() }
 }
 
-/** Remembers which list items have already played their entrance animation, so items
- *  scrolling back into view don't fade/scale in again. Hoist one per list and pass it to
- *  [staggeredEntrance]. Survives configuration changes. */
-private const val UNTRACKED_ENTRANCE_LIMIT = 14
+// Lists can't tell an item's first appearance from scrolling back into view, so only the
+// first screenful animates; deeper items just appear.
+private const val ENTRANCE_LIMIT = 14
 
-class EntranceTracker internal constructor(internal val seen: MutableSet<Any>) {
-    /** True for items composed in the list's first frame — only those get the cascade delay. */
-    internal var firstFrame = true
-}
-
+/**
+ * Staggered fade and scale-in for the first screenful of a list, 40ms apart. Use it after
+ * `Modifier.animateItem()`. Animates in graphicsLayer only, so it never recomposes.
+ */
 @Composable
-fun rememberEntranceTracker(): EntranceTracker {
-    val seen = rememberSaveable(
-        saver = androidx.compose.runtime.saveable.listSaver(
-            save = { it.seen.map(Any::toString) },
-            restore = { EntranceTracker(it.toMutableSet<Any>()) },
-        )
-    ) { EntranceTracker(HashSet()) }
-    LaunchedEffect(seen) { seen.firstFrame = false }
-    return seen
-}
-
-/** Staggered fade+scale entrance for list items. Apply alongside `Modifier.animateItem()`:
- *  `.animateItem().staggeredEntrance(index, key, tracker)`.
- *
- *  Plays once per item key: the initial screenful cascades in (40ms per index, capped), items
- *  revealed later by scrolling get a short undelayed fade, and items that already appeared
- *  (tracked by [tracker]) render immediately — previously every item replayed the full
- *  animation each time it scrolled back on screen. Animates via graphicsLayer only, so it never
- *  triggers recomposition or relayout. */
-@Composable
-fun Modifier.staggeredEntrance(
-    index: Int,
-    key: Any? = null,
-    tracker: EntranceTracker? = null,
-    capMs: Int = 320,
-): Modifier {
-    val trackKey = key?.toString()
-    val alreadySeen = trackKey != null && tracker != null && trackKey in tracker.seen
-    if (alreadySeen) return this
-    // Untracked lists can't tell "first appearance" from "scrolled back into view", so only the
-    // initial screenful animates there; deeper items just appear.
-    if (tracker == null && index >= UNTRACKED_ENTRANCE_LIMIT) return this
-    val cascade = tracker == null || tracker.firstFrame
-    val progress = remember(trackKey ?: index) { Animatable(0f) }
+fun Modifier.staggeredEntrance(index: Int, capMs: Int = 320): Modifier {
+    if (index >= ENTRANCE_LIMIT) return this
+    val progress = remember(index) { Animatable(0f) }
     val spec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-    LaunchedEffect(trackKey ?: index) {
-        if (cascade) delay((index * 40L).coerceAtMost(capMs.toLong()))
+    LaunchedEffect(index) {
+        delay((index * 40L).coerceAtMost(capMs.toLong()))
         progress.animateTo(1f, spec)
-        if (trackKey != null) tracker?.seen?.add(trackKey)
     }
     return this.graphicsLayer {
         val p = progress.value
@@ -441,7 +399,6 @@ fun MaterialYou3Seekbar(
     durationMs: Long,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
-    isPlaying: Boolean = false,
     playedColor: Color = MaterialTheme.colorScheme.primary,
     remainingColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
 ) {
@@ -735,7 +692,6 @@ fun SongCard(
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             cornerRadius = 12.dp,
-                            isAnimating = isPlaying,
                             onArtworkMissing = onArtworkMissing,
                         )
                     }
@@ -796,7 +752,6 @@ fun ArtworkImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 16.dp,
-    isAnimating: Boolean = false,
     // Invoked once, lazily, only if the primary `uri` fails to load (e.g. no embedded art) —
     // lets a caller resolve a fallback image URL (Spotify search, etc.) without fetching it
     // for songs that already have real artwork.

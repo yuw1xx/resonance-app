@@ -60,9 +60,6 @@ class NavidromeDownloadRepository @Inject constructor(
 
     fun localPathForSync(songId: Long): String? = downloadedPaths.value[songId]
 
-    suspend fun isDownloaded(songId: Long): Boolean =
-        songDownloadDao.getBySongId(songId)?.state == DownloadState.DOWNLOADED
-
     suspend fun localPathFor(songId: Long): String? {
         val entity = songDownloadDao.getBySongId(songId) ?: return null
         if (entity.state != DownloadState.DOWNLOADED) return null
@@ -98,8 +95,6 @@ class NavidromeDownloadRepository @Inject constructor(
         downloadsDir().deleteRecursively()
         songDownloadDao.deleteAll()
     }
-
-    suspend fun totalBytesUsed(): Long = songDownloadDao.sumDownloadedBytes()
 
     // getExternalFilesDir is null when shared storage is unavailable; fall back to internal.
     private fun downloadsDir(): File =

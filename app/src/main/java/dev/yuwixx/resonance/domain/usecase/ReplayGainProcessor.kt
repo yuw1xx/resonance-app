@@ -55,19 +55,6 @@ class ReplayGainProcessor @Inject constructor() {
     private fun parseGainString(raw: String?): Float? =
         raw?.trim()?.removeSuffix("dB")?.removeSuffix("DB")?.trim()?.toFloatOrNull()
 
-        fun parseGain(song: Song): ReplayGainInfo {
-        if (song.replayGainTrack != null || song.replayGainAlbum != null) {
-            return ReplayGainInfo(
-                trackGainDb = song.replayGainTrack,
-                trackPeak = null,
-                albumGainDb = song.replayGainAlbum,
-                albumPeak = null,
-            )
-        }
-
-        return ReplayGainInfo(null, null, null, null)
-    }
-
         fun computeMultiplier(
         info: ReplayGainInfo,
         mode: Mode,

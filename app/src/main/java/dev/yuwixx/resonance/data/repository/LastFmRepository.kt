@@ -149,13 +149,6 @@ class LastFmRepository @Inject constructor(
     suspend fun setNowPlaying(v: Boolean) { store.edit { it[LastFmKeys.NOW_PLAYING] = v } }
     suspend fun setOnlyWifi(v: Boolean)   { store.edit { it[LastFmKeys.ONLY_WIFI]   = v } }
 
-    suspend fun setCustomCredentials(apiKey: String, apiSecret: String) {
-        store.edit {
-            it[LastFmKeys.API_KEY]    = apiKey
-            it[LastFmKeys.API_SECRET] = apiSecret
-        }
-    }
-
         suspend fun authenticate(username: String, password: String) {
         _authState.value = LastFmAuthState.Loading
         try {

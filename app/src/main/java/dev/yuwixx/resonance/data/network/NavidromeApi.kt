@@ -52,12 +52,6 @@ interface NavidromeApi {
         @Query("submission") submission: Boolean = true,
     ): SubsonicResponse
 
-    @GET("rest/getRandomSongs.view")
-    suspend fun getRandomSongs(
-        @Query("size") size: Int = 500,
-        @Query("musicFolderId") folderId: String? = null,
-    ): SubsonicResponse
-
     @GET("rest/star.view")
     suspend fun star(@Query("id") id: String): SubsonicResponse
 
@@ -122,7 +116,6 @@ data class SubsonicResponseBody(
     val version: String,
     val error: SubsonicError? = null,
     val songs: SubsonicSongs? = null,
-    val randomSongs: SubsonicSongs? = null,
     val albumList2: SubsonicAlbumList? = null,
     val album: SubsonicAlbum? = null,
     val artists: SubsonicArtistsIndex? = null,

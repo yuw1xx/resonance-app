@@ -52,7 +52,7 @@ fun CastButton(modifier: Modifier = Modifier) {
     var showSheet by remember { mutableStateOf(false) }
     val router = remember { MediaRouter.getInstance(context) }
     val castSelector = remember {
-        try { CastContext.getSharedInstance(context)?.mergedSelector } catch (_: Exception) { null }
+        try { CastContext.getSharedInstance(context).mergedSelector } catch (_: Exception) { null }
     }
     var isCasting by remember { mutableStateOf(!router.selectedRoute.isDefault) }
 
@@ -87,7 +87,7 @@ fun CastButton(modifier: Modifier = Modifier) {
             router = router,
             castSelector = castSelector,
             onDisconnect = {
-                try { CastContext.getSharedInstance(context)?.sessionManager?.endCurrentSession(true) }
+                try { CastContext.getSharedInstance(context).sessionManager.endCurrentSession(true) }
                 catch (_: Exception) {}
             },
             onDismiss = { showSheet = false },

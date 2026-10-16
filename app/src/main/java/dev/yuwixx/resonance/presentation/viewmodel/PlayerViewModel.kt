@@ -100,6 +100,7 @@ class PlayerViewModel @Inject constructor(
     val activeLyricIndex: StateFlow<Int> = _activeLyricIndex.asStateFlow()
 
     // Re-checks liked status whenever the current song changes without an extra DB query.
+    @kotlin.OptIn(ExperimentalCoroutinesApi::class)
     val isCurrentSongLiked: StateFlow<Boolean> = _currentSong
         .flatMapLatest { song ->
             if (song == null) flowOf(false)
@@ -111,6 +112,7 @@ class PlayerViewModel @Inject constructor(
     val artworkColors: StateFlow<ArtworkComposeColors?> = artworkColorsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    @kotlin.OptIn(ExperimentalCoroutinesApi::class)
     private fun artworkColorsFlow(): Flow<ArtworkComposeColors?> = _currentSong
         .map { it?.albumId to it?.artworkUri }
         .distinctUntilChanged()
@@ -706,10 +708,6 @@ class PlayerViewModel @Inject constructor(
         _controller?.clearMediaItems()
     }
 
-    fun removeFromQueue(index: Int) {
-        _controller?.removeMediaItem(index)
-    }
-
     val likedSongIds: StateFlow<List<Long>> = likedSongsDao.getLikedSongIds()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -838,13 +836,6 @@ class PlayerViewModel @Inject constructor(
         return playlistRepository.createPlaylistWithSongs(name, ids)
     }
 
-    /** Seed color for tinting the player from the current artwork (null = use app theme). */
-    val artworkSeed: StateFlow<androidx.compose.ui.graphics.Color?> = combine(
-        artworkColorsFlow(),
-        prefs.playerArtworkTheme,
-    ) { colors, enabled -> if (enabled) colors?.vibrant ?: colors?.dominant else null }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
     // ─── Player Listener ───
 
     private val playerListener = object : Player.Listener {
@@ -865,7 +856,7 @@ class PlayerViewModel @Inject constructor(
             if (songId != null) {
                 viewModelScope.launch {
                     val song = lookupSong(songId)
-                        ?: mediaItem?.toSong()
+                        ?: mediaItem.toSong()
                     if (song != null) {
                         _currentSong.value = song
                         // If play()'s or the previous transition's prefetch already warmed the

@@ -89,8 +89,8 @@ fun FoldersScreen(
                     }
                 },
                 navigationIcon = {
-                    if (currentPath != null || LocalLibrarySections.current == null) {
-                        IconButton(onClick = { if (currentPath != null) navigateUp() else onBack() }) {
+                    if (currentPath != null) {
+                        IconButton(onClick = { navigateUp() }) {
                             Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                         }
                     }

@@ -50,10 +50,6 @@ class SongDownloadManager @Inject constructor(
         workManager.cancelUniqueWork(workNameForSong(songId))
     }
 
-    fun cancelBatch(workName: String) {
-        workManager.cancelUniqueWork(workName)
-    }
-
     fun workNameForAlbum(albumId: Long) = "download_album_$albumId"
     fun workNameForPlaylist(playlistId: Long) = "download_playlist_$playlistId"
 

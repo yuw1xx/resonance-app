@@ -1447,7 +1447,7 @@ fun PlaylistDetailScreen(
                                     leadingIcon = { Icon(Icons.AutoMirrored.Rounded.QueueMusic, null) },
                                     onClick = {
                                         showOverflowMenu = false
-                                        playlist?.let { libraryViewModel.convertSmartToStatic(it) }
+                                        libraryViewModel.convertSmartToStatic(playlist)
                                     }
                                 )
                             } else if (!mix) {
@@ -2336,13 +2336,6 @@ fun LikedSongsScreen(
                 } else {
                     TopAppBar(
                         title = { LibraryTitle() },
-                        navigationIcon = {
-                            if (LocalLibrarySections.current == null) {
-                                IconButton(onClick = onBack) {
-                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
-                                }
-                            }
-                        },
                         actions = {
                             if (likedSongs.isNotEmpty()) {
                                 IconButton(onClick = {
@@ -2417,7 +2410,6 @@ fun LikedSongsScreen(
             ) {
                 item {
                     Column {
-                        if (LocalLibrarySections.current == null) BigScreenTitle("Liked Songs")
                         Text(
                             "${likedSongs.size} songs",
                             style = MaterialTheme.typography.labelMedium,

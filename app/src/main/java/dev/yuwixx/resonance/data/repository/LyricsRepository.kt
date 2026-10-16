@@ -180,12 +180,6 @@ class LyricsRepository @Inject constructor(
             }
         }
 
-    /** Applies a search result the user picked; treated like a manual edit so it sticks. */
-    suspend fun selectLyrics(songId: Long, response: LrclibResponse): LyricsResult {
-        val text = response.syncedLyrics?.takeIf { it.isNotBlank() } ?: response.plainLyrics ?: return LyricsResult.NotFound
-        return store(songId, text, SOURCE_MANUAL)
-    }
-
     private fun parseCached(entity: LyricsEntity): LyricsResult {
         if (entity.source == SOURCE_INSTRUMENTAL) return LyricsResult.Instrumental
         return when {

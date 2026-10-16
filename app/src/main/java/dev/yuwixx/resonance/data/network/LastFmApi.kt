@@ -80,16 +80,6 @@ interface LastFmApi {
         @Query("format") format: String = "json",
     ): LastFmUserInfoResponse
 
-    @GET("2.0/")
-    suspend fun getTopTracks(
-        @Query("method") method: String = "user.getTopTracks",
-        @Query("user") username: String,
-        @Query("period") period: String = "overall",
-        @Query("limit") limit: Int = 20,
-        @Query("api_key") apiKey: String,
-        @Query("format") format: String = "json",
-    ): LastFmTopTracksResponse
-
     // Unauthenticated, read-only — works with the app's default API key even for users who
     // haven't logged into Last.fm scrobbling. Used to enrich the artist info window (bio, tags)
     // and the metadata enrichment scan (genre tags).
@@ -216,28 +206,4 @@ data class LastFmRegistered(
 data class LastFmImage(
     @Json(name = "#text") val url: String = "",
     val size: String = "",
-)
-
-@JsonClass(generateAdapter = true)
-data class LastFmTopTracksResponse(
-    @Json(name = "toptracks") val topTracks: LastFmTopTracks? = null,
-    val error: Int? = null,
-    val message: String? = null,
-)
-
-@JsonClass(generateAdapter = true)
-data class LastFmTopTracks(
-    val track: List<LastFmTopTrack> = emptyList(),
-)
-
-@JsonClass(generateAdapter = true)
-data class LastFmTopTrack(
-    val name: String,
-    val playcount: String = "0",
-    val artist: LastFmTopTrackArtist,
-)
-
-@JsonClass(generateAdapter = true)
-data class LastFmTopTrackArtist(
-    val name: String,
 )

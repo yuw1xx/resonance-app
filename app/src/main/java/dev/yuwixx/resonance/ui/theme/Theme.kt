@@ -200,19 +200,3 @@ fun ResonanceTheme(
         content = content,
     )
 }
-
-/** A nested scheme for one part of the UI (the player tinted by the current artwork). Keeps the
- *  app's shapes, type and motion; only colors change. */
-@Composable
-fun SeededColorScope(seed: Color?, content: @Composable () -> Unit) {
-    if (seed == null) { content(); return }
-    val outer = MaterialTheme.colorScheme
-    val dark = outer.surface.luminanceIsDark()
-    val amoled = outer.background == Color.Black
-    val scheme = remember(seed, dark, amoled) {
-        seedColorScheme(seed, dark, PaletteStyle.TONAL_SPOT).let { if (amoled) it.toAmoled() else it }
-    }
-    MaterialTheme(colorScheme = scheme, shapes = MaterialTheme.shapes, typography = MaterialTheme.typography, content = content)
-}
-
-private fun Color.luminanceIsDark(): Boolean = (0.2126f * red + 0.7152f * green + 0.0722f * blue) < 0.5f

@@ -1130,7 +1130,7 @@ private fun QrTransferDialog(
                     }
                 }
 
-                if (isShareableLink && readyState?.qrContent != null) {
+                if (isShareableLink) {
                     val link = readyState.qrContent
                     Surface(
                         shape = MaterialTheme.shapes.small,

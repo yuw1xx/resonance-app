@@ -111,10 +111,6 @@ class LibraryViewModel @Inject constructor(
     val downloadStates: StateFlow<Map<Long, SongDownloadEntity>> = navidromeDownloadRepository.downloadStates
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
-    val downloadsStorageUsed: StateFlow<Long> = downloadStates
-        .map { it.values.sumOf { d -> d.fileSizeBytes } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
-
     fun downloadSong(songId: Long) {
         viewModelScope.launch { navidromeDownloadRepository.downloadSongs(listOf(songId)) }
     }
@@ -148,39 +144,9 @@ class LibraryViewModel @Inject constructor(
 
     // Same pattern as PlayerViewModel.smartQueueError — a transient, ViewModel-driven error the
     // UI surfaces once (e.g. via a snackbar) then clears.
-    private val _tagEditError = MutableStateFlow<String?>(null)
-    val tagEditError: StateFlow<String?> = _tagEditError.asStateFlow()
-    fun clearTagEditError() { _tagEditError.value = null }
 
     val navSyncState: StateFlow<NavidromeSyncState> = navidromeRepository.syncState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NavidromeSyncState.Idle)
-
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-
-    // Debounce typing so search only runs after the user pauses for 300 ms.
-    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-    val searchResults: StateFlow<List<Song>> = combine(
-        _searchQuery.debounce(300),
-        prefs.musicSource,
-    ) { query, source -> query to source }
-        .flatMapLatest { (query, source) ->
-            if (query.isBlank()) flowOf(emptyList())
-            else when (source) {
-                MusicSource.LOCAL     -> musicRepository.searchSongs(query)
-                MusicSource.NAVIDROME -> allSongs.map { songs ->
-                    val q = query.lowercase()
-                    songs.filter {
-                        it.title.lowercase().contains(q) ||
-                        it.artist.lowercase().contains(q) ||
-                        it.album.lowercase().contains(q)
-                    }
-                }
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    fun updateSearch(query: String) { _searchQuery.value = query }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val allSongs: StateFlow<List<Song>> = activeLibrary.songs
@@ -214,9 +180,6 @@ class LibraryViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val allFolders: StateFlow<List<String>> = musicRepository.allFolders
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    val allGenres: StateFlow<List<String>> = musicRepository.allGenres
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val allPlaylists: StateFlow<List<Playlist>> = combine(
@@ -313,7 +276,6 @@ class LibraryViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             val success = musicRepository.updateSongTags(songId, title, artist, albumArtist, album, genre, year, trackNumber, discNumber)
-            if (!success) _tagEditError.value = "Couldn't save tags — the file couldn't be written"
             // Tag edits only touch local files: rescan MediaStore, never the Navidrome library.
             musicRepository.syncWithMediaStore(force = true)
             onResult(success)

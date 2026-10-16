@@ -226,7 +226,6 @@ private fun ResumeCard(
                 contentDescription = song.album,
                 modifier = Modifier.size(64.dp),
                 cornerRadius = 16.dp,
-                isAnimating = isPlaying,
                 onArtworkMissing = onArtworkMissing,
             )
             Spacer(Modifier.width(16.dp))
