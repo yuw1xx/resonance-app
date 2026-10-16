@@ -6,11 +6,12 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.yuwixx.resonance.data.service.BackupManager
 import dev.yuwixx.resonance.data.service.RestoreResult
+import dev.yuwixx.resonance.presentation.components.count
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 sealed class BackupUiState {
     data object Idle : BackupUiState()
@@ -45,7 +46,7 @@ class BackupViewModel @Inject constructor(
                     val skipped = result.likedSkipped + result.playlistSongsSkipped + result.historySkipped
                     val skippedNote = if (skipped > 0) " ($skipped songs not found in this library)" else ""
                     BackupUiState.ImportSuccess(
-                        "Restored ${result.likedRestored} liked songs, ${result.playlistsRestored} playlists, " +
+                        "Restored ${count(result.likedRestored, "liked song")}, ${count(result.playlistsRestored, "playlist")}, " +
                             "${result.historyRestored} listening history entries, and ${result.settingsRestored} settings$skippedNote"
                     )
                 }

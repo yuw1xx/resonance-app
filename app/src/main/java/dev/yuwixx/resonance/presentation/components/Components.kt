@@ -826,6 +826,9 @@ fun formatDuration(ms: Long): String {
     }
 }
 
+/** "1 song", "3 songs". */
+fun count(n: Int, singular: String, plural: String = singular + "s"): String = "$n ${if (n == 1) singular else plural}"
+
 fun formatFileSize(bytes: Long): String = when {
     bytes >= 1_073_741_824L -> "%.2f GB".format(bytes / 1_073_741_824.0)
     bytes >= 1_048_576L -> "%.1f MB".format(bytes / 1_048_576.0)

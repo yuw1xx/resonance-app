@@ -321,7 +321,7 @@ private fun MixCard(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "${mix.songCount} songs",
+                    count(mix.songCount, "song"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )

@@ -683,7 +683,7 @@ fun ArtistsScreen(
                         ListItem(
                             modifier = Modifier.animateItem().staggeredEntrance(index).clickable { onArtistClick(artist) },
                             headlineContent = { Text(artist.name, fontWeight = FontWeight.SemiBold) },
-                            supportingContent = { Text("${artist.songCount} songs · ${artist.albumCount} albums") },
+                            supportingContent = { Text("${count(artist.songCount, "song")} · ${count(artist.albumCount, "album")}") },
                             leadingContent = {
                                 Crossfade(
                                     targetState = fetchImages && imageUrl != null,
@@ -1029,7 +1029,7 @@ fun AlbumHeader(
             modifier = Modifier.clickable(onClick = onArtistClick),
         )
         Text(
-            text = "${songs.size} songs · ${album.year.takeIf { it > 0 } ?: ""}",
+            text = listOfNotNull(count(songs.size, "song"), album.year.takeIf { it > 0 }?.toString()).joinToString(" · "),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1284,7 +1284,7 @@ fun ArtistHeader(
             textAlign = TextAlign.Center,
         )
         Text(
-            text = "${artist.albumCount} albums · ${songs.size} songs",
+            text = "${count(artist.albumCount, "album")} · ${count(songs.size, "song")}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1775,7 +1775,7 @@ fun PlaylistHeader(
             textAlign = TextAlign.Center,
         )
         Text(
-            text = "${songs.size} songs · ${formatDuration(songs.sumOf { it.duration })}",
+            text = "${count(songs.size, "song")} · ${formatDuration(songs.sumOf { it.duration })}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -2397,7 +2397,7 @@ fun LikedSongsScreen(
                 item {
                     Column {
                         Text(
-                            "${likedSongs.size} songs",
+                            count(likedSongs.size, "song"),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,

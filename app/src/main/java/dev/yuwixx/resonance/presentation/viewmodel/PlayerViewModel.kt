@@ -574,13 +574,18 @@ class PlayerViewModel @Inject constructor(
     val undoEvents: SharedFlow<UndoableEvent> = _undoEvents.asSharedFlow()
 
     // Several adds in a row (multi-select "play next") become one snackbar that undoes them all.
+    private enum class QueueAction(val one: String, val many: String) {
+        PLAY_NEXT("plays next", "play next"),
+        ADD_TO_QUEUE("added to queue", "added to queue"),
+    }
+
     private val pendingUndos = mutableListOf<Pair<String, () -> Unit>>()
-    private var pendingVerb = ""
+    private var pendingAction = QueueAction.ADD_TO_QUEUE
     private var undoFlushJob: Job? = null
 
-    private fun offerUndo(title: String, verb: String, undo: () -> Unit) {
-        if (pendingUndos.isNotEmpty() && verb != pendingVerb) flushUndo()
-        pendingVerb = verb
+    private fun offerUndo(title: String, action: QueueAction, undo: () -> Unit) {
+        if (pendingUndos.isNotEmpty() && action != pendingAction) flushUndo()
+        pendingAction = action
         pendingUndos += title to undo
         undoFlushJob?.cancel()
         undoFlushJob = viewModelScope.launch {
@@ -593,13 +598,17 @@ class PlayerViewModel @Inject constructor(
         if (pendingUndos.isEmpty()) return
         val batch = pendingUndos.toList()
         pendingUndos.clear()
-        val message = if (batch.size == 1) "“${batch[0].first}” $pendingVerb" else "${batch.size} songs $pendingVerb"
+        val message = if (batch.size == 1) {
+            "“${batch[0].first}” ${pendingAction.one}"
+        } else {
+            "${batch.size} songs ${pendingAction.many}"
+        }
         _undoEvents.tryEmit(UndoableEvent(message) { batch.asReversed().forEach { it.second() } })
     }
 
     fun addToQueueEnd(song: Song) {
         _controller?.addMediaItem(song.toMediaItem())
-        offerUndo(song.title, "added to queue") { removeQueuedSong(song.id) }
+        offerUndo(song.title, QueueAction.ADD_TO_QUEUE) { removeQueuedSong(song.id) }
         viewModelScope.launch(Dispatchers.IO) { extractWaveform(song.id, song.uri) }
         prefetchReplayGain(song)
     }
@@ -609,7 +618,7 @@ class PlayerViewModel @Inject constructor(
             val insertIndex = (ctrl.currentMediaItemIndex + 1)
                 .coerceAtMost(ctrl.mediaItemCount)
             ctrl.addMediaItem(insertIndex, song.toMediaItem())
-            offerUndo(song.title, "plays next") { removeQueuedSong(song.id, insertIndex) }
+            offerUndo(song.title, QueueAction.PLAY_NEXT) { removeQueuedSong(song.id, insertIndex) }
         }
         viewModelScope.launch(Dispatchers.IO) { extractWaveform(song.id, song.uri) }
         prefetchReplayGain(song)
@@ -622,7 +631,7 @@ class PlayerViewModel @Inject constructor(
             val insertIndex = (ctrl.currentMediaItemIndex + 1).coerceAtMost(ctrl.mediaItemCount)
             ctrl.addMediaItems(insertIndex, songs.map { it.toMediaItem() })
             songs.forEachIndexed { i, song ->
-                offerUndo(song.title, "plays next") { removeQueuedSong(song.id, insertIndex + i) }
+                offerUndo(song.title, QueueAction.PLAY_NEXT) { removeQueuedSong(song.id, insertIndex + i) }
             }
         }
         songs.forEach(::prefetchReplayGain)
@@ -632,7 +641,7 @@ class PlayerViewModel @Inject constructor(
     fun addToQueueEnd(songs: List<Song>) {
         if (songs.isEmpty()) return
         _controller?.addMediaItems(songs.map { it.toMediaItem() })
-        songs.forEach { song -> offerUndo(song.title, "added to queue") { removeQueuedSong(song.id) } }
+        songs.forEach { song -> offerUndo(song.title, QueueAction.ADD_TO_QUEUE) { removeQueuedSong(song.id) } }
         songs.forEach(::prefetchReplayGain)
     }
 

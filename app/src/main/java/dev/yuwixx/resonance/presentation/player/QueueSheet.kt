@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.presentation.components.SongCard
+import dev.yuwixx.resonance.presentation.components.count
 import dev.yuwixx.resonance.presentation.components.rememberHaptics
 import dev.yuwixx.resonance.presentation.components.rememberReorderState
 import dev.yuwixx.resonance.presentation.components.reorderHandle
@@ -121,7 +122,7 @@ fun QueueSheet(
                             Text("Up next", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                             Text(
                                 buildString {
-                                    append("${items.size} songs")
+                                    append(count(items.size, "song"))
                                     if (shuffle) append(" · shuffled")
                                 },
                                 style = MaterialTheme.typography.bodyMedium,

@@ -59,6 +59,7 @@ import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
 import dev.yuwixx.resonance.presentation.components.SectionCard
 import dev.yuwixx.resonance.presentation.components.SectionDivider
 import dev.yuwixx.resonance.presentation.components.SectionSubHeader
+import dev.yuwixx.resonance.presentation.components.count
 import dev.yuwixx.resonance.presentation.components.formatFileSize
 import dev.yuwixx.resonance.presentation.components.rememberHaptics
 import dev.yuwixx.resonance.presentation.navigation.navItems
@@ -2832,7 +2833,7 @@ fun NavidromeSyncPage(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val countText = if (syncState.albumsDone > 0 || syncState.songsDone > 0)
-                    "${syncState.albumsDone} albums · ${syncState.songsDone} songs found"
+                    "${count(syncState.albumsDone, "album")} · ${count(syncState.songsDone, "song")} found"
                 else "Starting…"
                 Text(countText, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 if (etaText != null) {
@@ -2871,7 +2872,7 @@ fun NavidromeSyncPage(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    "${syncState.albumCount} albums · ${syncState.songCount} songs",
+                    "${count(syncState.albumCount, "album")} · ${count(syncState.songCount, "song")}",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                 )
