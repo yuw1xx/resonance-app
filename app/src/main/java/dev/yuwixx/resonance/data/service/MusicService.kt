@@ -239,6 +239,11 @@ class MusicService : MediaLibraryService() {
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
                 if (shuffleModeEnabled && !restoringShuffle) applyShuffleOrder()
+                if (queueRestored) persistQueue()
+            }
+
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                if (queueRestored) persistQueue()
             }
 
             override fun onTimelineChanged(timeline: Timeline, reason: Int) {

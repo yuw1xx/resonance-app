@@ -297,6 +297,11 @@ class PlayerViewModel @Inject constructor(
                 controller.addListener(playerListener)
                 applySessionExtras(controller.sessionExtras)
                 syncStateWithController()
+                // The service may have restored the queue before we connected; then no transition
+                // event follows, so load the current song now.
+                controller.currentMediaItem?.let {
+                    playerListener.onMediaItemTransition(it, Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED)
+                }
                 // Preferences emit only on change; the first value may have arrived before
                 // the controller existed.
                 viewModelScope.launch {
