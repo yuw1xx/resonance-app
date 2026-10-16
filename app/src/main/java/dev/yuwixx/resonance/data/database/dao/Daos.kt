@@ -346,6 +346,9 @@ interface LikedSongsDao {
     @Query("SELECT COUNT(*) FROM liked_songs WHERE songId = :songId")
     suspend fun isLiked(songId: Long): Int
 
+    @Query("SELECT songId FROM liked_songs")
+    suspend fun getAllLikedIds(): List<Long>
+
     @Query("""
         SELECT s.path FROM songs s
         INNER JOIN liked_songs ls ON s.id = ls.songId
@@ -471,6 +474,9 @@ interface NavidromeSongDao {
 
     @Query("DELETE FROM navidrome_songs")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM navidrome_songs WHERE navidromeId IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }
 
 @Dao
@@ -489,6 +495,12 @@ interface NavidromeAlbumDao {
 
     @Query("DELETE FROM navidrome_albums")
     suspend fun deleteAll()
+
+    @Query("SELECT * FROM navidrome_albums")
+    suspend fun getAllAlbumsList(): List<NavidromeAlbumEntity>
+
+    @Query("DELETE FROM navidrome_albums WHERE navidromeId IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }
 
 data class SongSyncKey(

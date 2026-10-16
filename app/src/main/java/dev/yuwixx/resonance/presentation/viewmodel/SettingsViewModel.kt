@@ -346,7 +346,7 @@ class SettingsViewModel @Inject constructor(
             prefs.setMusicSource(MusicSource.NAVIDROME)
             navidromeApiProvider.rebuild(serverUrl, username, effectivePassword)
             navidromeRepository.resetSyncState()
-            navidromeRepository.syncLibrary()
+            navidromeRepository.syncLibrary(force = true)
             navidromeSyncRepository.pullStarredFromServer()
             navidromeSyncRepository.pullPlaylistsFromServer()
         }

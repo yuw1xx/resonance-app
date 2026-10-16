@@ -12,9 +12,9 @@ import dev.yuwixx.resonance.data.network.*
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,7 +39,17 @@ class NavidromeRepository @Inject constructor(
     private val navidromeSongDao: NavidromeSongDao,
     private val navidromeAlbumDao: NavidromeAlbumDao,
     private val database: ResonanceDatabase,
+    private val moshi: com.squareup.moshi.Moshi,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
 ) {
+    private val syncMutex = kotlinx.coroutines.sync.Mutex()
+    private val artistsFile get() = java.io.File(context.filesDir, "navidrome_artists.json")
+    private val artistsAdapter by lazy {
+        moshi.adapter<List<SubsonicArtistSummary>>(
+            com.squareup.moshi.Types.newParameterizedType(List::class.java, SubsonicArtistSummary::class.java)
+        )
+    }
+
     private val _connectionState = MutableStateFlow<NavidromeConnectionState>(NavidromeConnectionState.Idle)
     val connectionState: StateFlow<NavidromeConnectionState> = _connectionState.asStateFlow()
 
@@ -71,6 +81,8 @@ class NavidromeRepository @Inject constructor(
         suspend fun clearCache() = withContext(Dispatchers.IO) {
         navidromeSongDao.deleteAll()
         navidromeAlbumDao.deleteAll()
+        artistsFile.delete()
+        prefs.setNavidromeSyncStamp(null)
     }
 
     suspend fun testConnection(
@@ -96,59 +108,128 @@ class NavidromeRepository @Inject constructor(
 
     fun resetConnectionState() { _connectionState.value = NavidromeConnectionState.Idle }
 
-        suspend fun syncLibrary(): Boolean = withContext(Dispatchers.IO) {
-        val api   = navidromeApiProvider.currentApi()   ?: return@withContext false
-        val creds = navidromeApiProvider.currentCredentials() ?: return@withContext false
+    /**
+     * Brings the local Navidrome cache up to date.
+     *
+     * Cheap by default: one getScanStatus call, and nothing else when the server's library
+     * hasn't been rescanned since the last sync. When it has (or [force]), songs are paged in
+     * with search3 (~1 request per 500 songs instead of one per album), albums with
+     * getAlbumList2, and only rows that actually changed are written — unchanged rows aren't
+     * touched, so the UI doesn't reload. One sync at a time.
+     */
+    suspend fun syncLibrary(force: Boolean = false): Boolean = syncMutex.withLock {
+        withContext(Dispatchers.IO) { syncLocked(force) }
+    }
+
+    private suspend fun syncLocked(force: Boolean): Boolean {
+        val api   = navidromeApiProvider.currentApi()   ?: return false
+        val creds = navidromeApiProvider.currentCredentials() ?: return false
 
         try {
-            val songEntities  = mutableListOf<NavidromeSongEntity>()
-            val albumEntities = mutableListOf<NavidromeAlbumEntity>()
+            val status = runCatching { api.getScanStatus().response.scanStatus }.getOrNull()
+            val stamp = status?.let { "${creds.serverUrl}|${creds.username}|${it.lastScan}|${it.count}" }
+            val hasCache = navidromeSongDao.count() > 0
+            if (!force && hasCache) {
+                if (stamp != null && stamp == prefs.navidromeSyncStamp.first()) return true
+                // Mid-scan the library is in flux; the next launch will pick up the result.
+                if (status?.scanning == true) return true
+            }
 
-            val previousSongCount = navidromeSongDao.count()
-            _syncState.value = NavidromeSyncState.Syncing(0, 0, previousSongCount)
+            val estimatedTotal = status?.count?.toInt() ?: navidromeSongDao.count()
+            _syncState.value = NavidromeSyncState.Syncing(0, 0, estimatedTotal)
 
-            var estimatedByAlbums = 0
+            // Albums: list pages only (no per-album detail requests).
+            val albums = mutableListOf<SubsonicAlbum>()
             var offset = 0
             while (true) {
-                val batch = api.getAlbumList(size = 500, offset = offset)
-                    .response.albumList2?.album ?: break
-
-                for (summary in batch) {
-                    val album = runCatching { api.getAlbum(summary.id).response.album }
-                        .getOrNull() ?: summary
-
-                    val albumEntity = album.toEntity(creds)
-                    albumEntities += albumEntity
-                    estimatedByAlbums += albumEntity.songCount
-
-                    for (song in album.song) {
-                        songEntities += song.toEntity(creds)
-                    }
-
-                    val estimatedTotal = maxOf(estimatedByAlbums, previousSongCount)
-                    _syncState.value = NavidromeSyncState.Syncing(albumEntities.size, songEntities.size, estimatedTotal)
-                }
-
-                if (batch.size < 500) break
+                val page = api.getAlbumList(size = 500, offset = offset).response.albumList2?.album.orEmpty()
+                albums += page
+                _syncState.value = NavidromeSyncState.Syncing(albums.size, 0, estimatedTotal)
+                if (page.size < 500) break
                 offset += 500
             }
 
-            database.withTransaction {
-                navidromeSongDao.deleteAll()
-                navidromeAlbumDao.deleteAll()
-                navidromeSongDao.upsertAll(songEntities)
-                navidromeAlbumDao.upsertAll(albumEntities)
+            // Songs: search3 with an empty query pages through the whole library.
+            val songs = mutableListOf<SubsonicSong>()
+            offset = 0
+            while (true) {
+                val page = api.search(query = "", songCount = 500, albumCount = 0, artistCount = 0, songOffset = offset)
+                    .response.searchResult3?.song.orEmpty()
+                songs += page
+                _syncState.value = NavidromeSyncState.Syncing(albums.size, songs.size, estimatedTotal)
+                if (page.size < 500) break
+                offset += 500
+            }
+            // Servers that don't support the empty-query listing: fall back to album details.
+            if (songs.isEmpty() && albums.isNotEmpty()) {
+                albums.forEachIndexed { index, summary ->
+                    val detail = runCatching { api.getAlbum(summary.id).response.album }.getOrNull()
+                    songs += detail?.song.orEmpty()
+                    if (index % 20 == 0) _syncState.value = NavidromeSyncState.Syncing(index, songs.size, estimatedTotal)
+                }
             }
 
-            _syncState.value = NavidromeSyncState.Done(songEntities.size, albumEntities.size)
+            val existingSongs = navidromeSongDao.getAllSongsList().associateBy { it.navidromeId }
+            val newSongs = songs.distinctBy { it.id }.map { song ->
+                val entity = song.toEntity(creds)
+                // Keep the original "added" time when the server doesn't report one.
+                val old = existingSongs[entity.navidromeId]
+                if (song.created == null && old != null) entity.copy(cachedAt = old.cachedAt) else entity
+            }
+            val changedSongs = newSongs.filter { existingSongs[it.navidromeId] != it }
+            val removedSongs = existingSongs.keys - newSongs.mapTo(HashSet()) { it.navidromeId }
+
+            val songCountByAlbum = newSongs.groupingBy { it.albumId }.eachCount()
+            val existingAlbums = navidromeAlbumDao.getAllAlbumsList().associateBy { it.navidromeId }
+            val newAlbums = albums.distinctBy { it.id }.map { album ->
+                val entity = album.toEntity(creds)
+                val old = existingAlbums[entity.navidromeId]
+                entity.copy(
+                    songCount = album.songCount ?: songCountByAlbum[album.id] ?: 0,
+                    cachedAt = old?.cachedAt ?: entity.cachedAt,
+                )
+            }
+            val changedAlbums = newAlbums.filter { existingAlbums[it.navidromeId] != it }
+            val removedAlbums = existingAlbums.keys - newAlbums.mapTo(HashSet()) { it.navidromeId }
+
+            if (changedSongs.isNotEmpty() || removedSongs.isNotEmpty() ||
+                changedAlbums.isNotEmpty() || removedAlbums.isNotEmpty()
+            ) {
+                database.withTransaction {
+                    removedSongs.chunked(900).forEach { navidromeSongDao.deleteByIds(it) }
+                    removedAlbums.chunked(900).forEach { navidromeAlbumDao.deleteByIds(it) }
+                    changedSongs.chunked(500).forEach { navidromeSongDao.upsertAll(it) }
+                    changedAlbums.chunked(500).forEach { navidromeAlbumDao.upsertAll(it) }
+                }
+            }
+
+            refreshArtistCache()
+            prefs.setNavidromeSyncStamp(stamp)
+            _syncState.value = NavidromeSyncState.Done(newSongs.size, newAlbums.size)
             android.util.Log.i("NavidromeRepository",
-                "Sync complete — ${songEntities.size} songs, ${albumEntities.size} albums cached")
-            true
+                "Sync complete — ${newSongs.size} songs (${changedSongs.size} changed, ${removedSongs.size} removed), " +
+                    "${newAlbums.size} albums")
+            return true
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             _syncState.value = NavidromeSyncState.Error(e.message ?: "Sync failed")
             android.util.Log.e("NavidromeRepository", "syncLibrary failed: ${e.message}", e)
-            false
+            return false
         }
+    }
+
+    /** Artists from the on-disk cache: instant, and available offline. */
+    suspend fun cachedArtists(): List<Artist> = withContext(Dispatchers.IO) {
+        val creds = navidromeApiProvider.currentCredentials() ?: return@withContext emptyList()
+        val file = artistsFile
+        if (!file.exists()) return@withContext emptyList()
+        runCatching { artistsAdapter.fromJson(file.readText()) }.getOrNull().orEmpty().map { it.toDomain(creds) }
+    }
+
+    private suspend fun refreshArtistCache() {
+        val api = navidromeApiProvider.currentApi() ?: return
+        val artists = runCatching { api.getArtists().response.artists?.index?.flatMap { it.artist } }.getOrNull() ?: return
+        runCatching { artistsFile.writeText(artistsAdapter.toJson(artists)) }
     }
 
     suspend fun getAllArtists(): List<Artist> = withContext(Dispatchers.IO) {
@@ -227,42 +308,29 @@ class NavidromeRepository @Inject constructor(
 
 }
 
-private fun buildStreamUrl(
-    serverUrl: String,
-    username: String,
-    password: String,
-    songId: String,
-): String {
-    val salt  = UUID.randomUUID().toString().replace("-", "").take(12)
+// Token auth for URLs that get stored or cached (stream, download, cover art). The salt is
+// stable per server + account, so the same song/cover always has the same URL: syncs don't
+// rewrite every row with fresh salts and image/audio caches keep hitting across launches.
+// (API calls still get a fresh salt per request from NavidromeAuthInterceptor.)
+private fun authQuery(serverUrl: String, username: String, password: String): String {
+    val salt = MessageDigest.getInstance("SHA-256")
+        .digest("resonance|${serverUrl.trimEnd('/')}|$username".toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+        .take(12)
     val token = MessageDigest.getInstance("MD5")
         .digest("$password$salt".toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
-    return "${serverUrl.trimEnd('/')}/rest/stream" +
-            "?id=$songId&u=$username&t=$token&s=$salt&v=1.16.1&c=Resonance&f=json"
+    return "u=${Uri.encode(username)}&t=$token&s=$salt&v=1.16.1&c=Resonance&f=json"
 }
 
-private fun buildDownloadUrl(
-    serverUrl: String,
-    username: String,
-    password: String,
-    songId: String,
-): String {
-    val salt  = UUID.randomUUID().toString().replace("-", "").take(12)
-    val token = MessageDigest.getInstance("MD5")
-        .digest("$password$salt".toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
-    return "${serverUrl.trimEnd('/')}/rest/download" +
-            "?id=$songId&u=$username&t=$token&s=$salt&v=1.16.1&c=Resonance&f=json"
-}
+private fun buildStreamUrl(serverUrl: String, username: String, password: String, songId: String): String =
+    "${serverUrl.trimEnd('/')}/rest/stream?id=$songId&${authQuery(serverUrl, username, password)}"
 
-private fun coverArtUrl(creds: NavidromeApiProvider.Credentials, id: String): String {
-    val salt  = UUID.randomUUID().toString().replace("-", "").take(12)
-    val token = MessageDigest.getInstance("MD5")
-        .digest("${creds.password}$salt".toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
-    return "${creds.serverUrl.trimEnd('/')}/rest/getCoverArt" +
-            "?id=$id&u=${creds.username}&t=$token&s=$salt&v=1.16.1&c=Resonance&f=json"
-}
+private fun buildDownloadUrl(serverUrl: String, username: String, password: String, songId: String): String =
+    "${serverUrl.trimEnd('/')}/rest/download?id=$songId&${authQuery(serverUrl, username, password)}"
+
+private fun coverArtUrl(creds: NavidromeApiProvider.Credentials, id: String): String =
+    "${creds.serverUrl.trimEnd('/')}/rest/getCoverArt?id=$id&${authQuery(creds.serverUrl, creds.username, creds.password)}"
 
 // Subsonic/Navidrome IDs are opaque strings (usually UUIDs), but the shared Song/Album domain
 // models use a Long id to stay compatible with local MediaStore songs, so non-numeric ids need
@@ -280,6 +348,9 @@ internal fun stableLongId(s: String): Long {
     }
     return hash
 }
+
+private fun parseIsoMillis(iso: String?): Long? =
+    iso?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
 
 private fun SubsonicSong.toEntity(creds: NavidromeApiProvider.Credentials): NavidromeSongEntity {
     val streamUrl = buildStreamUrl(creds.serverUrl, creds.username, creds.password, id)
@@ -304,6 +375,9 @@ private fun SubsonicSong.toEntity(creds: NavidromeApiProvider.Credentials): Navi
         bitrate      = bitRate      ?: 0,
         size         = size         ?: 0L,
         playCount    = playCount    ?: 0L,
+        // cachedAt doubles as "date added" in the UI — use the server's, so "Recently added"
+        // reflects the library rather than the last sync.
+        cachedAt     = parseIsoMillis(created) ?: System.currentTimeMillis(),
     )
 }
 

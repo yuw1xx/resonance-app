@@ -89,15 +89,16 @@ class NavidromeSyncRepository @Inject constructor(
                 .map { it.id.toLongOrNull() ?: stableLongId(it.id) }
                 .toSet()
 
+            // One read of the liked set, then only the differences are written.
+            val liked = likedSongsDao.getAllLikedIds().toHashSet()
+            val now = System.currentTimeMillis()
             navidromeSongDao.getAllSongsList().forEach { entity ->
                 // A pending local action always wins over whatever the server currently says.
                 if (entity.numericId in pendingIds) return@forEach
                 val shouldBeLiked = entity.numericId in starred
-                val isLiked = likedSongsDao.isLiked(entity.numericId) > 0
+                val isLiked = entity.numericId in liked
                 when {
-                    shouldBeLiked && !isLiked -> likedSongsDao.likeSong(
-                        LikedSongEntity(songId = entity.numericId, likedAt = System.currentTimeMillis())
-                    )
+                    shouldBeLiked && !isLiked -> likedSongsDao.likeSong(LikedSongEntity(songId = entity.numericId, likedAt = now))
                     !shouldBeLiked && isLiked -> likedSongsDao.unlikeSong(entity.numericId)
                 }
             }
@@ -154,12 +155,16 @@ class NavidromeSyncRepository @Inject constructor(
                 val local = playlistDao.getPlaylistByNavidromeId(summary.id) ?: continue
                 val detail = runCatching { api.getPlaylist(summary.id).response.playlist }.getOrNull() ?: continue
 
-                playlistDao.clearPlaylist(local.id)
-                detail.entry.forEachIndexed { index, song ->
-                    val songId = song.id.toLongOrNull() ?: stableLongId(song.id)
-                    playlistDao.addSongToPlaylist(
-                        PlaylistSongCrossRef(playlistId = local.id, songId = songId, position = index)
-                    )
+                // Rewrite the local copy only when the server's track list actually differs.
+                val remoteIds = detail.entry.map { it.id.toLongOrNull() ?: stableLongId(it.id) }
+                val localIds = playlistDao.getPlaylistSongRefs(local.id).map { it.songId }
+                if (remoteIds != localIds) {
+                    playlistDao.clearPlaylist(local.id)
+                    remoteIds.forEachIndexed { index, songId ->
+                        playlistDao.addSongToPlaylist(
+                            PlaylistSongCrossRef(playlistId = local.id, songId = songId, position = index)
+                        )
+                    }
                 }
                 if (local.name != detail.name) {
                     playlistDao.updatePlaylist(local.copy(name = detail.name, dateModified = System.currentTimeMillis()))

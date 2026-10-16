@@ -10,12 +10,9 @@ interface NavidromeApi {
     @GET("rest/ping.view")
     suspend fun ping(): SubsonicResponse
 
-    @GET("rest/getSongsByGenre.view")
-    suspend fun getSongs(
-        @Query("musicFolderId") folderId: String? = null,
-        @Query("count") count: Int = 500,
-        @Query("offset") offset: Int = 0,
-    ): SubsonicResponse
+    /** Cheap change detection: Navidrome reports when the library was last scanned. */
+    @GET("rest/getScanStatus.view")
+    suspend fun getScanStatus(): SubsonicResponse
 
     @GET("rest/getAlbumList2.view")
     suspend fun getAlbumList(
@@ -45,6 +42,7 @@ interface NavidromeApi {
         @Query("songCount") songCount: Int = 100,
         @Query("albumCount") albumCount: Int = 20,
         @Query("artistCount") artistCount: Int = 20,
+        @Query("songOffset") songOffset: Int = 0,
     ): SubsonicResponse
 
     @GET("rest/scrobble.view")
@@ -107,6 +105,16 @@ data class SubsonicResponseBody(
     val playlist: SubsonicPlaylistWithSongs? = null,
     val searchResult3: SubsonicSearchResult? = null,
     val starred2: SubsonicStarred2? = null,
+    val scanStatus: SubsonicScanStatus? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class SubsonicScanStatus(
+    val scanning: Boolean = false,
+    val count: Long? = null,
+    val folderCount: Long? = null,
+    /** Navidrome extension (ISO-8601); absent on other Subsonic servers. */
+    val lastScan: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -142,6 +150,8 @@ data class SubsonicSong(
     val suffix: String? = null,
     val path: String? = null,
     val playCount: Long? = null,
+    /** ISO-8601 time the file was added to the server library. */
+    val created: String? = null,
 )
 
 @JsonClass(generateAdapter = true)

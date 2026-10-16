@@ -8,7 +8,6 @@ import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import dev.yuwixx.resonance.data.network.NavidromeApiProvider
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
-import dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
 import dev.yuwixx.resonance.data.worker.AutoScanManager
 import dev.yuwixx.resonance.data.worker.MixGeneratorManager
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +27,6 @@ class ResonanceApp : Application(), Configuration.Provider, coil.ImageLoaderFact
     @Inject lateinit var autoScanManager: AutoScanManager
     @Inject lateinit var mixGeneratorManager: MixGeneratorManager
     @Inject lateinit var navidromeApiProvider: NavidromeApiProvider
-    @Inject lateinit var navidromeSyncRepository: NavidromeSyncRepository
     @Inject lateinit var prefs: ResonancePreferences
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -43,11 +41,9 @@ class ResonanceApp : Application(), Configuration.Provider, coil.ImageLoaderFact
         autoScanManager.initialize()
         mixGeneratorManager.scheduleWeekly()
         applicationScope.launch {
+            // Only set up the client here; syncing (stars and playlists included) happens when
+            // the UI starts, not on every process start (widget, Android Auto, media buttons).
             navidromeApiProvider.initFromPrefs(prefs)
-            if (navidromeApiProvider.currentApi() != null) {
-                navidromeSyncRepository.pullStarredFromServer()
-                navidromeSyncRepository.pullPlaylistsFromServer()
-            }
         }
     }
 }

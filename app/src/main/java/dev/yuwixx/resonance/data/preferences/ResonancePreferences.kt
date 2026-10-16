@@ -70,6 +70,7 @@ class ResonancePreferences @Inject constructor(
 
         val MIN_TRACK_DURATION_MS = longPreferencesKey("min_track_duration_ms")
         val MEDIASTORE_SYNC_STAMP = stringPreferencesKey("mediastore_sync_stamp")
+        val NAVIDROME_SYNC_STAMP = stringPreferencesKey("navidrome_sync_stamp")
         val ARTIST_DELIMITER = stringPreferencesKey("artist_delimiter")
         val EXCLUDED_FOLDERS = stringSetPreferencesKey("excluded_folders")
         val INCLUDED_FOLDERS = stringSetPreferencesKey("included_folders")
@@ -233,6 +234,12 @@ class ResonancePreferences @Inject constructor(
     /** MediaStore generation + filter settings at the last completed library sync. */
     val mediaStoreSyncStamp: Flow<String?> = data.mapDistinct { it[MEDIASTORE_SYNC_STAMP] }
     suspend fun setMediaStoreSyncStamp(stamp: String) { ds.edit { it[MEDIASTORE_SYNC_STAMP] = stamp } }
+
+    /** Server, account and scan status at the last completed Navidrome sync. */
+    val navidromeSyncStamp: Flow<String?> = data.mapDistinct { it[NAVIDROME_SYNC_STAMP] }
+    suspend fun setNavidromeSyncStamp(stamp: String?) {
+        ds.edit { if (stamp == null) it.remove(NAVIDROME_SYNC_STAMP) else it[NAVIDROME_SYNC_STAMP] = stamp }
+    }
 
     val artistDelimiter: Flow<String> = data.mapDistinct { it[ARTIST_DELIMITER] ?: ",;/&" }
     suspend fun setArtistDelimiter(delim: String) { ds.edit { it[ARTIST_DELIMITER] = delim } }

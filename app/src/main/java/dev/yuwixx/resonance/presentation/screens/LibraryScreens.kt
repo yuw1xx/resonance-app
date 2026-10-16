@@ -77,7 +77,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SongsScreen(
     libraryViewModel: LibraryViewModel,
@@ -207,6 +207,19 @@ fun SongsScreen(
                 }
             }
             LocalLibrarySections.current?.invoke()
+            // Background sync with a cached library: a slim indicator, not a blocking view.
+            val syncing = navSyncState as? NavidromeSyncState.Syncing
+            if (syncing != null && songs.isNotEmpty()) {
+                val total = syncing.estimatedTotal
+                if (total > 0) {
+                    LinearWavyProgressIndicator(
+                        progress = { (syncing.songsDone.toFloat() / total).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                } else {
+                    LinearWavyProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+                }
+            }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -216,7 +229,9 @@ fun SongsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (navSyncState is NavidromeSyncState.Syncing) {
+            // The full-screen sync view is only for a first sync with nothing cached yet;
+            // otherwise the cached library stays usable with a slim progress bar on top.
+            if (navSyncState is NavidromeSyncState.Syncing && songs.isEmpty()) {
                 NavidromeSyncingView(navSyncState = navSyncState)
             } else if (songs.isEmpty()) {
                 EmptyLibraryView(onScan = { libraryViewModel.syncLibrary() })

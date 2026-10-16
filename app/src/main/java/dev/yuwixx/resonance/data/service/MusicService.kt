@@ -61,6 +61,7 @@ class MusicService : MediaLibraryService() {
     @Inject lateinit var navidromePreloader: NavidromePreloader
     @Inject lateinit var eqStateHolder: EqStateHolder
     @Inject lateinit var scrobbleTracker: ScrobbleTracker
+    @Inject lateinit var streamCache: androidx.media3.datasource.cache.SimpleCache
     @Inject @dev.yuwixx.resonance.di.ApplicationScope lateinit var applicationScope: CoroutineScope
 
     private lateinit var player: ExoPlayer
@@ -134,7 +135,21 @@ class MusicService : MediaLibraryService() {
             )
             .build()
 
+        // Network reads go through the stream cache; content:// and file:// are read directly.
+        val upstream = androidx.media3.datasource.DefaultDataSource.Factory(this)
+        val dataSourceFactory = StreamCachingDataSource.Factory(
+            cached = androidx.media3.datasource.cache.CacheDataSource.Factory()
+                .setCache(streamCache)
+                .setUpstreamDataSourceFactory(upstream)
+                .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
+            direct = upstream,
+        )
+
         player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(this)
+                    .setDataSourceFactory(dataSourceFactory)
+            )
             .setLoadControl(loadControl)
             .setAudioAttributes(
                 AudioAttributes.Builder()

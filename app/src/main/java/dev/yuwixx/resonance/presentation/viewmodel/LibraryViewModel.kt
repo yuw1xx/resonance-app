@@ -34,6 +34,7 @@ class LibraryViewModel @Inject constructor(
     val prefs: ResonancePreferences,
     private val artworkRepository: ArtworkRepository,
     private val navidromeRepository: NavidromeRepository,
+    private val navidromeSyncRepository: dev.yuwixx.resonance.data.repository.NavidromeSyncRepository,
     private val navidromeDownloadRepository: NavidromeDownloadRepository,
     private val mixGeneratorManager: MixGeneratorManager,
     private val mixRepository: MixRepository,
@@ -280,7 +281,8 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             val success = musicRepository.updateSongTags(songId, title, artist, albumArtist, album, genre, year, trackNumber, discNumber)
             if (!success) _tagEditError.value = "Couldn't save tags — the file couldn't be written"
-            syncLibrary(force = true)
+            // Tag edits only touch local files: rescan MediaStore, never the Navidrome library.
+            musicRepository.syncWithMediaStore(force = true)
             onResult(success)
         }
     }
@@ -295,7 +297,7 @@ class LibraryViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             val succeeded = musicRepository.batchUpdateSongTags(songIds, albumArtist, album, genre, year)
-            syncLibrary(force = true)
+            musicRepository.syncWithMediaStore(force = true)
             onComplete(succeeded, songIds.size)
         }
     }
@@ -312,9 +314,12 @@ class LibraryViewModel @Inject constructor(
                 MusicSource.NAVIDROME -> {
                     _isSyncing.value = true
                     try {
-                        navidromeRepository.syncLibrary()
-                        val artists = navidromeRepository.getAllArtists()
+                        navidromeRepository.syncLibrary(force)
+                        val artists = navidromeRepository.cachedArtists()
                         if (artists.isNotEmpty()) _navidromeArtists.value = artists
+                        // Stars and linked playlists aren't covered by the scan status.
+                        navidromeSyncRepository.pullStarredFromServer()
+                        navidromeSyncRepository.pullPlaylistsFromServer()
                     } finally {
                         _isSyncing.value = false
                     }
@@ -372,18 +377,13 @@ class LibraryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val source = prefs.musicSource.first()
+            // The cached library shows immediately; the sync below is a cheap "anything new?"
+            // check that only downloads/writes when the server or MediaStore actually changed.
             if (source == MusicSource.NAVIDROME) {
-                val hasCache = navidromeRepository.hasCachedData()
-                if (hasCache) {
-                    val artists = navidromeRepository.getAllArtists()
-                    if (artists.isNotEmpty()) _navidromeArtists.value = artists
-                    syncLibrary()
-                } else {
-                    syncLibrary()
-                }
-            } else {
-                syncLibrary()
+                val artists = navidromeRepository.cachedArtists()
+                if (artists.isNotEmpty()) _navidromeArtists.value = artists
             }
+            syncLibrary()
         }
         loadMostPlayed()
         allSongs.onEach { loadMostPlayed() }.launchIn(viewModelScope)

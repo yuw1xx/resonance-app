@@ -150,8 +150,8 @@ object StarAction {
 }
 
 // Offline-download tracking for Navidrome songs. Kept as its own table (not extra columns on
-// NavidromeSongEntity) because NavidromeRepository.syncLibrary() wipes and rebuilds
-// navidrome_songs wholesale on every sync — download state needs an independent lifecycle.
+// NavidromeSongEntity) because NavidromeRepository.syncLibrary() deletes rows for songs that
+// disappear from the server — download state needs an independent lifecycle.
 @Entity(tableName = "song_downloads")
 data class SongDownloadEntity(
     @PrimaryKey val songId: Long,

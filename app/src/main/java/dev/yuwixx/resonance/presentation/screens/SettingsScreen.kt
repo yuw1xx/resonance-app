@@ -926,7 +926,7 @@ private fun LibrarySection(libraryViewModel: LibraryViewModel, prefs: ResonanceP
 
     SectionCard(icon = Icons.Rounded.LibraryMusic, title = "Library", modifier = Modifier.padding(horizontal = 8.dp)) {
         ScanLibraryItem(isSyncing) {
-            libraryViewModel.syncLibrary()
+            libraryViewModel.syncLibrary(force = true)
         }
         SettingsSliderItem(
             title = "Minimum Track Duration",
@@ -2514,7 +2514,8 @@ private fun NavidromeSetupScreen(
     var showSyncPage by remember { mutableStateOf(false) }
 
     Dialog(
-        onDismissRequest = { if (syncState !is NavidromeSyncState.Syncing) onDismiss() },
+        // The sync runs in the ViewModel, so closing the dialog doesn't interrupt it.
+        onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
