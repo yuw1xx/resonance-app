@@ -1,8 +1,5 @@
 package dev.yuwixx.resonance.presentation.components
 
-import android.annotation.SuppressLint
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -11,13 +8,11 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.CornerRadius
@@ -30,7 +25,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
@@ -53,7 +47,6 @@ import coil.compose.AsyncImagePainter
 import dev.yuwixx.resonance.data.model.MixType
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.model.WaveformData
-import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 import kotlin.math.*
 import kotlin.math.pow
 import kotlin.random.Random
@@ -106,9 +99,7 @@ fun MixArtwork(
 }
 internal val EaseInOutSine = CubicBezierEasing(0.37f, 0f, 0.63f, 1f)
 
-/** Shared "icon + title + optional trailing action" header used to introduce a section of
- *  content (a horizontal-scroll row, a settings group, a card). One look for this concept
- *  across the whole app instead of every screen inventing its own. */
+/** Icon, title and an optional trailing action above a section of content. */
 @Composable
 fun AppSectionHeader(
     title: String,
@@ -140,9 +131,7 @@ fun AppSectionHeader(
     }
 }
 
-/** Shared tonal card wrapping a labeled section of related controls — the grouping unit for
- *  "several controls that belong together" (used by Resonance Share's Nearby/Internet Link
- *  sections, and retrofitted onto Settings/Equalizer to replace ungrouped flat lists). */
+/** Tonal card around a labeled group of related controls. */
 @Composable
 fun SectionCard(
     icon: ImageVector?,
@@ -170,9 +159,7 @@ fun SectionCard(
     }
 }
 
-/** Divider between two logical groups sharing one [SectionCard] — use with [SectionSubHeader]
- *  to join related sub-sections into a single continuous card instead of stacking separate
- *  cards with a gap between them. */
+/** Divider between two groups in one [SectionCard]; use with [SectionSubHeader]. */
 @Composable
 fun SectionDivider(modifier: Modifier = Modifier) {
     HorizontalDivider(
@@ -193,9 +180,8 @@ fun SectionSubHeader(title: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** Big, centered, bold screen title meant to be the first item in a scrolling list — it
- *  scrolls away with the content instead of staying pinned behind a filled app-bar
- *  background. Pair with a transparent TopAppBar holding just the actions/back button. */
+/** Large title as the first item of a list, so it scrolls away with the content. Pair it with
+ *  a transparent TopAppBar for the actions. */
 @Composable
 fun BigScreenTitle(title: String, modifier: Modifier = Modifier) {
     Text(
@@ -235,18 +221,10 @@ data class AppearanceConfig(
 
 val LocalAppearanceConfig = compositionLocalOf { AppearanceConfig() }
 
-// ─── Shared motion primitives ───
-// The house animation vocabulary (Emphasized*-eased tweens, spring press/pop feedback, a
-// staggered list-entrance cascade) started as bespoke code at individual call sites; these
-// three wrap the same specs so every screen shares one implementation instead of copies that
-// can drift apart.
+// Shared motion helpers, so every screen uses the same specs.
 
-/** Swaps between discrete states (an icon, a status row, a connection-state card — anything
- *  representing "what's happening right now") with a spring pop-in + fade for the incoming
- *  state and a quick fade+scale-out for the outgoing one. This is the exact spec already used
- *  for the mini player's play/pause icon (`player/MiniPlayerBar.kt`) and `SongCard`'s
- *  selection checkmark, promoted here so every other status swap in the app (sync spinner→
- *  check/error, download state, connection state, dialog phase icons) uses the same motion. */
+/** Swaps status content (an icon, a status row, a connection card): the new state pops in with
+ *  a spring, the old one fades and shrinks out. Same motion as the play/pause icon. */
 @Composable
 fun <T> AnimatedStateSwap(
     targetState: T,
@@ -270,11 +248,7 @@ fun <T> AnimatedStateSwap(
     ) { state -> content(state) }
 }
 
-/** Wraps a "prompt vs. real content" boolean swap (permission not-yet-granted vs. granted,
- *  loading vs. loaded) in a fade+slide transition instead of an instant cut. Named for its
- *  original use — the three near-identical permission-gate composables (`Permissions.kt`,
- *  `ReceiveSheet.kt`, `ShareSheet.kt`) that all hard-swapped between a request prompt and the
- *  real screen with zero transition. */
+/** Fades and slides between a prompt (such as a permission request) and the real content. */
 @Composable
 fun AnimatedPermissionGate(
     granted: Boolean,
@@ -320,9 +294,8 @@ fun Modifier.staggeredEntrance(index: Int, capMs: Int = 320): Modifier {
     }
 }
 
-/** Playback progress (0..1) as an animated State that is only ever *read* inside draw
- *  lambdas — position ticks then invalidate a single draw pass instead of recomposing the whole
- *  seekbar (and its parent) several times a second. */
+/** Playback progress (0..1) as an animated State. Read it only while drawing, so position
+ *  ticks redraw the seekbar instead of recomposing it. */
 @Composable
 private fun rememberAnimatedProgress(position: State<Long>, durationMs: Long): State<Float> {
     val progress = remember { Animatable(0f) }
@@ -414,17 +387,13 @@ fun MaterialYou3Seekbar(
     var isDragging by remember { mutableStateOf(false) }
     val dragProgress = remember { mutableFloatStateOf(0f) }
 
-    // A thin track reads as a plain rectangle no matter its corner radius (8dp tall with a 4dp
-    // radius is imperceptible as "rounded" at normal viewing distance) — 14dp is thick enough
-    // for the pill shape to actually be visible, matching the Android 13+ media-notification
-    // seekbar this style is meant to evoke.
+    // Thick enough for the rounded ends to show, like the Android 13 media notification seekbar.
     val activeHeight = animateDpAsState(
         targetValue = if (isDragging) 22.dp else 14.dp,
         animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
         label = "m3_height"
     )
-    // Always visible, not just while dragging — on a track this thick, a bare color transition
-    // alone doesn't read as "there's a handle here."
+    // Always shown: on a track this thick, the color change alone doesn't read as a handle.
     val thumbHeight = animateDpAsState(
         targetValue = if (isDragging) 32.dp else 22.dp,
         animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
@@ -449,9 +418,7 @@ fun MaterialYou3Seekbar(
         val cy = size.height / 2f
         val splitX = displayProgress * width
         val thumbWidth = 4.dp.toPx()
-        // A small gap around the thumb keeps the played/remaining segments from visually
-        // merging into it — another Android 13+ media-seekbar trait that helps the handle read
-        // as a distinct, grabbable element instead of just part of the track.
+        // A gap on both sides of the thumb so it reads as a separate handle.
         val gap = 6.dp.toPx()
         val playedEnd = (splitX - thumbWidth / 2f - gap).coerceAtLeast(0f)
         val remainingStart = (splitX + thumbWidth / 2f + gap).coerceAtMost(width)
@@ -504,10 +471,8 @@ fun WaveformSeekbar(
     val currentDuration by rememberUpdatedState(durationMs)
     val hapticsEnabled by rememberUpdatedState(config.hapticEnabled)
 
-    // Both animated values are read only inside the draw block, so the breathing effect costs
-    // a redraw per frame instead of a recomposition per frame.
-    // Only animates while playing — an infinite transition would redraw every frame even
-    // when paused (where its effect is multiplied away).
+    // Read only while drawing, so breathing costs a redraw per frame, not a recomposition. It runs
+    // only while playing; paused, it would redraw for nothing.
     val breathe = remember { Animatable(1f) }
     LaunchedEffect(isPlaying) {
         if (!isPlaying) {
@@ -754,9 +719,7 @@ fun ArtworkImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 16.dp,
-    // Invoked once, lazily, only if the primary `uri` fails to load (e.g. no embedded art) —
-    // lets a caller resolve a fallback image URL (Spotify search, etc.) without fetching it
-    // for songs that already have real artwork.
+    // Called once if `uri` fails to load, to look up a fallback image URL.
     onArtworkMissing: (suspend () -> String?)? = null,
 ) {
     var primaryFailed by remember(uri) { mutableStateOf(false) }
@@ -789,8 +752,7 @@ fun ArtworkImage(
     }
 }
 
-/** Whether audio is actually playing (not just "this is the current song"), so decorative
- *  playback animations can stop while paused. Provided by the nav graph. */
+/** Whether audio is playing, so decorative animations can stop while paused. */
 val LocalPlaybackActive = compositionLocalOf { true }
 
 @Composable
@@ -856,8 +818,14 @@ fun formatDuration(ms: Long): String {
     }
 }
 
-// "2h 15m" style, for cumulative listening totals — distinct from formatDuration's "3:45"
-// track-position style above.
+fun formatFileSize(bytes: Long): String = when {
+    bytes >= 1_073_741_824L -> "%.2f GB".format(bytes / 1_073_741_824.0)
+    bytes >= 1_048_576L -> "%.1f MB".format(bytes / 1_048_576.0)
+    bytes >= 1_024L -> "%.0f KB".format(bytes / 1_024.0)
+    else -> "$bytes B"
+}
+
+// "2h 15m", for listening totals.
 fun formatListenDuration(ms: Long): String {
     if (ms <= 0) return "0m"
     val totalMinutes = ms / 60000
@@ -866,8 +834,7 @@ fun formatListenDuration(ms: Long): String {
     return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
 }
 
-// Codec label derived from mimeType, shared by the player screen's format chip, the song
-// detail info card, and the statistics format-breakdown chart.
+// Codec label from a MIME type.
 fun audioFormatLabel(mimeType: String): String = when {
     mimeType.contains("flac", ignoreCase = true) -> "FLAC"
     mimeType.contains("opus", ignoreCase = true) -> "Opus"
@@ -876,9 +843,7 @@ fun audioFormatLabel(mimeType: String): String = when {
     else -> "MP3"
 }
 
-// Renders each artist as its own clickable segment (e.g. "ArtistA, ArtistB" from a raw
-// "ArtistA/ArtistB" tag) instead of one Text with a single click target resolving to only the
-// first artist — see Song.artists/displayArtist.
+// Each artist is its own tap target, so "A, B" from an "A/B" tag can open either artist.
 @Composable
 fun MultiArtistText(
     artists: List<String>,
@@ -888,13 +853,9 @@ fun MultiArtistText(
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     maxLines: Int = 1,
 ) {
-    // Memoized on (artists, onArtistClick) — this sits inside the Player's PlaybackControls,
-    // which recomposes continuously as playback position ticks (10x/sec); without this, the
-    // AnnotatedString + LinkAnnotation objects below were being rebuilt from scratch on every
-    // one of those recompositions even though the artist list itself changes only on song change.
+    // Remembered because the player recomposes often while the artist list rarely changes.
     val text = remember(artists, onArtistClick) {
-        // Explicit no-op styles — LinkAnnotation.Clickable defaults to the usual blue/underlined
-        // hyperlink look, but these should read as plain text that merely happens to be tappable.
+        // Plain styles: without them, LinkAnnotation draws blue underlined links.
         val linkStyles = TextLinkStyles(style = SpanStyle(color = Color.Unspecified, textDecoration = TextDecoration.None))
         buildAnnotatedString {
             artists.forEachIndexed { i, artist ->
@@ -960,13 +921,13 @@ fun ConfettiOverlay(modifier: Modifier = Modifier) {
 
     Canvas(modifier = modifier.fillMaxSize()) {
         pieces.forEach { p ->
-            // accumulated never decreases — rotation is continuous across cycles
+            // Only ever grows, so rotation stays continuous across cycles.
             val accumulated = p.yOffset + progress * p.speed
             val rawY = accumulated % 1.0f
             val half = p.sizeDp.dp.toPx() / 2f
             val cx = (p.x + sin(accumulated * PI.toFloat() * 1.4f) * 0.028f) * size.width
             val cy = rawY * (size.height + half * 2f)
-            // fade in over top 6% of screen to hide the wrap-around
+            // Fade in over the top 6% of the screen to hide the wrap-around.
             val alpha = (rawY / 0.06f).coerceIn(0f, 0.9f)
 
             withTransform({

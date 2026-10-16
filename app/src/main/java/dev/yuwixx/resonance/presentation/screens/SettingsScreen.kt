@@ -1,5 +1,3 @@
-// Multi-level settings UI: a top-level menu of categories that each drill into their own
-// page (Appearance, Playback, Audio, Library, Navidrome, Last.fm, History, Data, About, …).
 package dev.yuwixx.resonance.presentation.screens
 
 import android.net.Uri
@@ -12,17 +10,14 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Login
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -58,11 +53,12 @@ import dev.yuwixx.resonance.data.repository.LastFmAuthState
 import dev.yuwixx.resonance.data.repository.MalojaRepository
 import dev.yuwixx.resonance.data.repository.NavidromeConnectionState
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
-import dev.yuwixx.resonance.presentation.components.BigScreenTitle
 import dev.yuwixx.resonance.presentation.components.SectionCard
 import dev.yuwixx.resonance.presentation.components.SectionDivider
 import dev.yuwixx.resonance.presentation.components.SectionSubHeader
+import dev.yuwixx.resonance.presentation.components.formatFileSize
 import dev.yuwixx.resonance.presentation.navigation.navItems
 import dev.yuwixx.resonance.presentation.viewmodel.BackupUiState
 import dev.yuwixx.resonance.presentation.viewmodel.BackupViewModel
@@ -260,11 +256,8 @@ fun SettingsScreen(
     }
 }
 
-// ─── Per-category sections, each owning only the state it needs ───
-// Extracted so toggling a setting on one page only recomposes that page's own section
-// instead of the whole SettingsScreen (previously ~99 collectAsState() reads sat at the top
-// of one big composable, so any single change invalidated all of them plus the full
-// LazyColumn/when(category) construction, regardless of which category was even visible).
+// Each settings section collects only the preferences it shows, so a change recomposes just
+// that section.
 
 @Composable
 private fun MainSection(
@@ -1223,10 +1216,7 @@ private fun OnlineServicesSettingsSection(
         )
     }
 
-    // No outer group label here (unlike the Main screen's category groups) — LastFmSection/
-    // MalojaSection each already self-identify via their own branded pill badge, so a floating
-    // "Last.fm Scrobbling" text above would just duplicate that, and every other sub-section on
-    // this screen already carries its own title inside a SectionCard instead of a separate label.
+    // No group label: each section shows its own branded badge.
     Spacer(Modifier.height(8.dp))
     LastFmSection(
         authState = lastFmAuthState,
@@ -2465,7 +2455,7 @@ private fun DownloadsSection(
             headlineContent = { Text("Storage Used", fontWeight = FontWeight.Medium) },
             supportingContent = {
                 Text(
-                    "$downloadedSongCount song${if (downloadedSongCount == 1) "" else "s"} · ${formatDownloadSize(storageUsedBytes)}",
+                    "$downloadedSongCount song${if (downloadedSongCount == 1) "" else "s"} · ${formatFileSize(storageUsedBytes)}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             },
@@ -2497,13 +2487,6 @@ private fun DownloadsSection(
             dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } },
         )
     }
-}
-
-private fun formatDownloadSize(bytes: Long): String = when {
-    bytes >= 1_073_741_824L -> "%.2f GB".format(bytes / 1_073_741_824.0)
-    bytes >= 1_048_576L -> "%.1f MB".format(bytes / 1_048_576.0)
-    bytes >= 1_024L -> "%.0f KB".format(bytes / 1_024.0)
-    else -> "$bytes B"
 }
 
 @Composable
@@ -2564,8 +2547,8 @@ private fun NavidromeSetupScreen(
     onSave: (String, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // Flip immediately when user confirms — don't derive from syncState (which resets to Idle
-    // momentarily before the new sync starts, causing the page to flash back to config).
+    // Set on confirm rather than derived from syncState, which is briefly Idle before the sync
+    // starts and would flash the config page.
     var showSyncPage by remember { mutableStateOf(false) }
 
     Dialog(
@@ -2717,7 +2700,7 @@ private fun NavidromeConfigPage(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
         ) {
             TextButton(onClick = onDismiss) { Text("Cancel") }
-            // For existing connections with blank password: skip test — ViewModel uses stored password.
+            // Blank password on an existing connection: the stored one is used, so skip the test.
             val canSaveDirect = isEditing && password.isBlank() && serverUrl.isNotBlank() && username.isNotBlank()
             if (connectionState is NavidromeConnectionState.Connected || canSaveDirect) {
                 Button(onClick = { onSave(serverUrl, username, password) }) {
@@ -3150,7 +3133,7 @@ private fun PlaylistFolderSyncCard(libraryViewModel: LibraryViewModel, prefs: Re
     ) { uri -> if (uri != null) libraryViewModel.setPlaylistSyncFolder(uri) }
 
     val folderName = remember(folder) {
-        folder?.let { runCatching { DocumentFile.fromTreeUri(context, Uri.parse(it))?.name }.getOrNull() }
+        folder?.let { runCatchingCancellable { DocumentFile.fromTreeUri(context, Uri.parse(it))?.name }.getOrNull() }
     }
 
     SectionCard(icon = Icons.Rounded.FolderOpen, title = "Playlist Folder Sync", modifier = Modifier.padding(horizontal = 8.dp)) {

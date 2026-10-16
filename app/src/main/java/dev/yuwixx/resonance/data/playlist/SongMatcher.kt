@@ -1,6 +1,3 @@
-// Resolves playlist entries (M3U lines, backup records) to songs in the library. Playlists
-// made on another device or a PC rarely contain paths that exist verbatim here, so matching
-// falls through progressively looser strategies.
 package dev.yuwixx.resonance.data.playlist
 
 import java.text.Normalizer
@@ -17,6 +14,10 @@ data class MatchCandidate(
     val durationMs: Long,
 )
 
+/**
+ * Matches playlist entries to library songs. Paths from another device rarely exist here, so
+ * matching falls back to progressively looser strategies.
+ */
 class SongMatcher(candidates: List<MatchCandidate>) {
 
     enum class Method { EXACT_PATH, STORAGE_PATH, PATH_SUFFIX, FILE_NAME, TAGS }

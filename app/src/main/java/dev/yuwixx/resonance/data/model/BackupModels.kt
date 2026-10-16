@@ -1,4 +1,3 @@
-// JSON shape for the Settings > Data > Export/Import Backup feature (see BackupManager).
 package dev.yuwixx.resonance.data.model
 
 import com.squareup.moshi.JsonClass
@@ -20,12 +19,8 @@ data class BackupPlaylistEntry(
     val smartRules: SmartRules? = null,
 )
 
-// A generic DataStore preference snapshot — key/type/value rather than one field per setting —
-// so every current and future preference round-trips through backup without needing to be
-// hand-enumerated here. Both export and import are filtered against
-// ResonancePreferences.BACKUP_EXCLUDED_KEYS (credentials, tokens, server URLs, device identity)
-// regardless of what a backup file claims, so this being generic doesn't widen what's actually
-// able to leave or come back into the app.
+// Generic key/type/value so every preference is backed up without listing them here. Both
+// directions skip ResonancePreferences.BACKUP_EXCLUDED_KEYS.
 @JsonClass(generateAdapter = true)
 data class BackupPreferenceEntry(
     val key: String,
@@ -34,9 +29,7 @@ data class BackupPreferenceEntry(
     val values: List<String>? = null,
 )
 
-// Listening history is keyed by song identity (path, falling back to title+artist+album), not
-// the local songId — same reasoning as BackupSongEntry: the DB row id isn't stable across a
-// rescan or a different device, but the song's identifying fields are.
+// Keyed by path, or title, artist and album, because song IDs differ between devices.
 @JsonClass(generateAdapter = true)
 data class BackupHistoryEntry(
     val song: BackupSongEntry,

@@ -17,7 +17,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -270,7 +269,7 @@ private fun ShareMain(
     val servingState = transferState as? ShareTransferManager.TransferState.Serving
     val uploadingState = transferState as? ShareTransferManager.TransferState.Uploading
     val transferErrorState = transferState as? ShareTransferManager.TransferState.Error
-    // NoWifi has its own dedicated dialog (NoWifiDialog below) — don't double up on it here.
+    // NoWifi has its own dialog below.
     val showQrDialog = readyState != null || servingState != null || uploadingState != null || transferErrorState != null
 
     if (showQrDialog) QrTransferDialog(
@@ -304,7 +303,13 @@ private fun ShareMain(
         modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(modifier = Modifier.padding(top = 12.dp, bottom = 8.dp).size(width = 40.dp, height = 4.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)))
+        Box(
+            modifier = Modifier
+                .padding(top = 12.dp, bottom = 8.dp)
+                .size(width = 40.dp, height = 4.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+        )
 
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.Sensors, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -318,10 +323,8 @@ private fun ShareMain(
 
         Spacer(Modifier.height(4.dp))
 
-        // What you're sharing, up front — before how you're sharing it.
-        // Target on the song list itself (not a derived isMulti boolean) so the exiting content
-        // during a crossfade keeps rendering the snapshot it started with, instead of re-reading
-        // the live selection and briefly showing "Choose a song…" mid-transition.
+        // What is being shared comes first. Keyed on the song list so the outgoing content keeps
+        // its own snapshot during the crossfade.
         AnimatedContent(
             targetState = selectedSongs,
             transitionSpec = { fadeIn(tween(280, easing = EmphasizedDecelerate)) togetherWith fadeOut(tween(180)) },
@@ -713,9 +716,7 @@ private fun DeviceBubble(
         label = "bubble_scale",
     )
 
-    // Composes with `scale` above rather than replacing it — this one only ever fires once, on
-    // this bubble's first appearance (a newly-discovered device popping into the radar), while
-    // `scale` keeps handling the connect-state pulse for the rest of the bubble's lifetime.
+    // Pop-in when a device first appears; `scale` above handles the connect pulse.
     var appeared by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { appeared = true }
     val entranceScale by animateFloatAsState(

@@ -10,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
@@ -440,9 +439,7 @@ private fun NavidromeStep(
     var testedHere by rememberSaveable { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
 
-    // Flip immediately when the connection succeeds — don't derive from syncState (which
-    // starts at Idle before the new sync begins), same reasoning as NavidromeSetupScreen's
-    // showSyncPage in SettingsScreen.kt.
+    // Set when the connection succeeds rather than derived from syncState, which starts Idle.
     var showSyncDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(connectionState) {
@@ -714,7 +711,11 @@ private fun LastFmStep(
                             shape = MaterialTheme.shapes.medium,
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f))
                         ) {
-                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
                                 Icon(Icons.Rounded.Error, null, tint = MaterialTheme.colorScheme.error)
                                 Text(state.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                             }

@@ -9,6 +9,7 @@ import dev.yuwixx.resonance.data.network.LrclibResponse
 import dev.yuwixx.resonance.data.network.NavidromeApiProvider
 import dev.yuwixx.resonance.data.network.ok
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import dev.yuwixx.resonance.domain.usecase.LrcParser
 import dev.yuwixx.resonance.domain.usecase.TagEditor
 import retrofit2.HttpException
@@ -96,7 +97,7 @@ class LyricsRepository @Inject constructor(
         if (path != null) {
             val sidecar = File(path.substringBeforeLast('.') + ".lrc")
             if (sidecar.canRead()) {
-                runCatching { sidecar.readText() }.getOrNull()?.takeIf { it.isNotBlank() }
+                runCatchingCancellable { sidecar.readText() }.getOrNull()?.takeIf { it.isNotBlank() }
                     ?.let { return it to SOURCE_SIDECAR }
             }
         }
@@ -105,7 +106,7 @@ class LyricsRepository @Inject constructor(
 
     private suspend fun navidromeLyrics(id: String, artist: String, title: String): String? {
         val api = navidromeApiProvider.currentApi() ?: return null
-        runCatching { api.getLyricsBySongId(id).ok.lyricsList?.structuredLyrics }.getOrNull()
+        runCatchingCancellable { api.getLyricsBySongId(id).ok.lyricsList?.structuredLyrics }.getOrNull()
             ?.let { list ->
                 val best = list.firstOrNull { it.synced && it.line.isNotEmpty() } ?: list.firstOrNull { it.line.isNotEmpty() }
                 if (best != null) {
@@ -118,7 +119,7 @@ class LyricsRepository @Inject constructor(
                     } else best.line.joinToString("\n") { it.value }
                 }
             }
-        return runCatching { api.getLyrics(artist, title).ok.lyrics?.value }.getOrNull()?.takeIf { it.isNotBlank() }
+        return runCatchingCancellable { api.getLyrics(artist, title).ok.lyrics?.value }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun lrclibExact(title: String, artist: String, album: String, durationMs: Long): LrclibResponse? =
@@ -172,9 +173,7 @@ class LyricsRepository @Inject constructor(
         return LyricsResult.NotFound
     }
 
-    // Lets the user pick a different match when the auto-fetched lyrics are missing or out of
-    // sync — LRCLIB's search is fuzzy, so this can surface a better-timed submission for the
-    // same track that the exact-match /api/get lookup in getLyrics() didn't find.
+    // LRCLIB's fuzzy search, for picking a better match than the automatic lookup found.
     suspend fun searchLyrics(trackName: String, artistName: String): List<LrclibResponse> =
         withContext(Dispatchers.IO) {
             try {

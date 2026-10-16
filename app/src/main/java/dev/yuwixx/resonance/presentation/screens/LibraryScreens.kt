@@ -4,10 +4,6 @@
 // AlbumDetail, ArtistDetail, PlaylistDetail, Queue, and the TagEditor screen.
 package dev.yuwixx.resonance.presentation.screens
 
-import android.annotation.SuppressLint
-import android.content.Context
-import android.content.Intent
-import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,9 +12,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
@@ -29,7 +23,6 @@ import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -48,7 +41,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -65,13 +57,11 @@ import dev.yuwixx.resonance.data.database.entity.DownloadState
 import dev.yuwixx.resonance.data.database.entity.SongDownloadEntity
 import dev.yuwixx.resonance.data.model.*
 import dev.yuwixx.resonance.data.model.RepeatMode as AppRepeatMode
-import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
 import dev.yuwixx.resonance.presentation.components.*
 import dev.yuwixx.resonance.presentation.components.LazyColumnWithScrollbar
 import dev.yuwixx.resonance.presentation.components.LazyGridWithScrollbar
 import dev.yuwixx.resonance.presentation.components.LocalAppearanceConfig
-import dev.yuwixx.resonance.presentation.navigation.Screen
 import dev.yuwixx.resonance.presentation.screens.library.LibraryTitle
 import dev.yuwixx.resonance.presentation.screens.library.LocalLibrarySections
 import dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoState
@@ -79,7 +69,6 @@ import dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.ShareViewModel
-import dev.yuwixx.resonance.ui.theme.PresetColors
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -1355,18 +1344,15 @@ fun PlaylistDetailScreen(
     var showOverflowMenu  by remember { mutableStateOf(false) }
     var showSmartEditor   by remember { mutableStateOf(false) }
 
-    // Manual drag-to-reorder only makes sense under Natural order — any other sort re-derives
-    // playlistSongs from a comparator (above) that would immediately override a manual drag.
-    // Smart playlists and generated mixes are read-only: their songs come from rules or listening.
+    // Dragging only works in natural order; any other sort would undo it right away. Smart
+    // playlists and mixes are read-only.
     val editable = playlist?.isReadOnly != true
     val canReorder = editable && sortOrder == SortOrder.NATURAL
     val localOrder = remember { mutableStateListOf<Song>() }
     var draggedSongId by remember { mutableStateOf<Long?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    // Once a drag ends/cancels, the row springs back to translationY=0 from wherever it was
-    // instead of snapping instantly — settlingSongId/settleOffset take over rendering for just
-    // that one row until the spring finishes (dragOffsetY itself resets immediately so the next
-    // drag starts clean).
+    // After a drag, the dropped row springs back into place. settleOffset animates that row
+    // while dragOffsetY is already reset for the next drag.
     var settlingSongId by remember { mutableStateOf<Long?>(null) }
     val settleSpec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
     val settleOffset = remember { Animatable(0f) }
@@ -1379,11 +1365,8 @@ fun PlaylistDetailScreen(
         }
     }
 
-    // Auto-scrolls the list while a drag holds near the top/bottom edge of the viewport — the
-    // drag gesture itself only fires onDrag callbacks on pointer movement, so this runs as its
-    // own poll loop (independent of onDrag) to keep scrolling even while the finger is held
-    // still against an edge. Restarts whenever draggedSongId changes and exits on its own once
-    // dragging ends (the while condition below re-checks the latest value each tick).
+    // Scrolls while a dragged row is held near the top or bottom edge. onDrag only fires on
+    // movement, so this loop keeps scrolling while the finger rests at the edge.
     LaunchedEffect(draggedSongId) {
         val id = draggedSongId ?: return@LaunchedEffect
         while (isActive && draggedSongId == id) {
@@ -1979,9 +1962,7 @@ fun CreatePlaylistDialog(
     )
 }
 
-// Batch tag edit — each field is independently opt-in (blank = leave every selected song's
-// existing value alone) since, unlike single-song editing, there's no single "current value" to
-// prefill a shared field with across a multi-song selection.
+// Batch tag edit. A blank field leaves that tag unchanged on every selected song.
 @Composable
 fun BatchTagEditDialog(
     songCount: Int,
@@ -2985,10 +2966,10 @@ fun TagEditorScreen(
                 ) {
                     TagInfoRow("Path",        song.path)
                     TagInfoRow("Format",      song.mimeType.substringAfterLast('/').uppercase())
-                    TagInfoRow("Duration",    formatTagDuration(song.duration))
+                    TagInfoRow("Duration",    formatDuration(song.duration))
                     TagInfoRow("Bitrate",     if (song.bitrate > 0) "${song.bitrate} kbps" else "—")
                     TagInfoRow("Sample Rate", if (song.sampleRate > 0) "${song.sampleRate} Hz" else "—")
-                    TagInfoRow("File Size",   formatTagFileSize(song.size))
+                    TagInfoRow("File Size",   formatFileSize(song.size))
                 }
             }
 
@@ -3017,18 +2998,4 @@ private fun TagInfoRow(label: String, value: String) {
             overflow = TextOverflow.Ellipsis,
         )
     }
-}
-
-private fun formatTagDuration(ms: Long): String {
-    val total = ms / 1000
-    val h = total / 3600
-    val m = (total % 3600) / 60
-    val s = total % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
-}
-
-private fun formatTagFileSize(bytes: Long): String = when {
-    bytes >= 1_048_576 -> "%.1f MB".format(bytes / 1_048_576.0)
-    bytes >= 1_024 -> "%.1f KB".format(bytes / 1_024.0)
-    else -> "$bytes B"
 }

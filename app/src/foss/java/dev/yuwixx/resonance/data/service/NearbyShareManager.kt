@@ -1,9 +1,3 @@
-// FOSS-flavor stub: Nearby Connections requires Google Play Services, unavailable in this
-// build. Keeps the exact public API of the gms-flavor NearbyShareManager (including the
-// NearbyState/NearbyDevice shapes) so ShareViewModel and ShareSheet compile unchanged.
-// startScanning() reports GpsUnavailable — a state the shared UI already handles gracefully
-// for GrapheneOS users ("QR Code works without Google Play Services"), so it applies here too
-// without needing any new UI.
 package dev.yuwixx.resonance.data.service
 
 import android.app.Activity
@@ -19,6 +13,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/**
+ * Nearby needs Play Services, so this foss version only reports GpsUnavailable, which the share
+ * sheet already handles.
+ */
 @Singleton
 class NearbyShareManager @Inject constructor(
     @ApplicationContext private val context: Context,

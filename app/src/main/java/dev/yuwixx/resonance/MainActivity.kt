@@ -1,5 +1,3 @@
-// Single-activity host: sets up the theme, handles incoming audio URIs (share-to-play),
-// drives the in-app update flow, and renders ResonanceNavGraph inside ResonanceTheme.
 package dev.yuwixx.resonance
 
 import android.content.Intent
@@ -7,14 +5,10 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.text.style.StrikethroughSpan
-import android.text.style.StyleSpan
-import android.text.style.URLSpan
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -80,8 +74,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        // Fully transparent system bars; Compose draws behind them and ResonanceTheme picks the
-        // icon colors. No contrast scrim over 3-button navigation — the bottom bar is opaque.
+        // Transparent system bars; ResonanceTheme picks the icon colors. No scrim behind 3-button
+        // navigation, since the bottom bar is opaque.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),

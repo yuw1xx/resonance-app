@@ -1,6 +1,3 @@
-// Drives the review-before-write metadata enrichment flow: Idle -> Scanning -> Reviewing ->
-// Applying -> Done. Nothing reaches TagEditor.writeTags until the user explicitly approves it
-// in the Reviewing state.
 package dev.yuwixx.resonance.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
@@ -25,6 +22,7 @@ sealed class EnrichmentUiState {
     data class Done(val updated: Int, val failed: Int, val skipped: Int) : EnrichmentUiState()
 }
 
+/** Scan, review, apply. Nothing is written until the user approves it in the review step. */
 @HiltViewModel
 class MetadataEnrichmentViewModel @Inject constructor(
     private val musicRepository: MusicRepository,

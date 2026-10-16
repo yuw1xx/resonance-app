@@ -1,8 +1,6 @@
-// Extracted from Components.kt so this — the only piece of the shared UI that touches
-// androidx.mediarouter / com.google.android.gms.cast — lives in the gms flavor's source set.
-// The foss flavor provides its own no-op CastButton() with the same signature.
 package dev.yuwixx.resonance.presentation.components
 
+import android.util.Log
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -46,6 +44,10 @@ import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
 import com.google.android.gms.cast.framework.CastContext
 
+/**
+ * The only shared UI that touches Cast, so it lives in the gms source set. The foss build has a
+ * no-op version with the same signature.
+ */
 @Composable
 fun CastButton(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -87,8 +89,11 @@ fun CastButton(modifier: Modifier = Modifier) {
             router = router,
             castSelector = castSelector,
             onDisconnect = {
-                try { CastContext.getSharedInstance(context).sessionManager.endCurrentSession(true) }
-                catch (_: Exception) {}
+                try {
+                    CastContext.getSharedInstance(context).sessionManager.endCurrentSession(true)
+                } catch (e: Exception) {
+                    Log.w("CastUi", "Couldn't end the Cast session", e)
+                }
             },
             onDismiss = { showSheet = false },
         )

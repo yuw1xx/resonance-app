@@ -1,6 +1,3 @@
-// Backs SongDetailScreen: looks up a song by id, its lyrics, and its per-song listening stats
-// (play count + total time listened) — independent of PlayerViewModel/the active playback
-// session so the page works correctly even for a song that isn't currently playing.
 package dev.yuwixx.resonance.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
@@ -20,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/** Independent of the player, so the page also works for songs that aren't playing. */
 @HiltViewModel
 class SongDetailViewModel @Inject constructor(
     private val musicRepository: MusicRepository,

@@ -1,5 +1,3 @@
-// Manages peer-to-peer song sharing via Google Nearby Connections (P2P_STAR strategy).
-// Handles discovery, connection, metadata exchange (META||| protocol), and file transfer progress.
 package dev.yuwixx.resonance.data.service
 
 import android.app.Activity
@@ -10,7 +8,6 @@ import android.location.LocationManager
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
-import android.os.Environment
 import android.provider.OpenableColumns
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -123,8 +120,6 @@ class NearbyShareManager @Inject constructor(
     private var incomingFilePayloadId: Long? = null
     private var incomingPendingPayload: Payload? = null
     private var incomingPendingSender: String = ""
-
-    // ─── Scanning / Connection ───
 
     fun startScanning(activity: Activity? = null) {
         if (_state.value != NearbyState.Idle) return
@@ -291,9 +286,7 @@ class NearbyShareManager @Inject constructor(
         data class Failure(val message: String) : DiagnosticResult()
     }
 
-    // Kept on the manager (rather than inline in ShareViewModel) so it's the one place per
-    // flavor that touches GMS-specific availability APIs — the foss flavor's stub always
-    // returns Failure without ever referencing GoogleApiAvailability/ConnectionResult.
+    // Here rather than in ShareViewModel so only the gms flavor references Play Services.
     fun checkAvailability(): DiagnosticResult {
         val grapheneHint = if (isGrapheneOs) {
             "\n\nGrapheneOS detected — Sandboxed Google Play Services needs extra permissions:\n" +
@@ -334,8 +327,6 @@ class NearbyShareManager @Inject constructor(
         incomingPendingPayload = null
         incomingPendingSender = ""
     }
-
-    // ─── Nearby Callbacks ───
 
     private val endpointDiscovery = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {

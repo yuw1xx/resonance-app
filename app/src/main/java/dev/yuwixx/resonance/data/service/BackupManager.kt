@@ -1,6 +1,3 @@
-// Settings > Data > Export/Import Backup: playlists, liked songs, listening history, and
-// non-sensitive app preferences as one portable JSON file (see BackupModels.kt for the JSON
-// shape).
 package dev.yuwixx.resonance.data.service
 
 import android.content.Context
@@ -24,6 +21,7 @@ import dev.yuwixx.resonance.data.model.BackupPlaylistEntry
 import dev.yuwixx.resonance.data.model.BackupSongEntry
 import dev.yuwixx.resonance.data.playlist.SmartRules
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -68,7 +66,7 @@ class BackupManager @Inject constructor(
                 .filter { !it.isReadOnly } // excludes auto-generated Smart Mixes (isMix implies isReadOnly)
                 .map { playlist ->
                     smartRules[playlist.id]?.let { json ->
-                        val rules = runCatching { rulesAdapter.fromJson(json) }.getOrNull()
+                        val rules = runCatchingCancellable { rulesAdapter.fromJson(json) }.getOrNull()
                         if (rules != null) return@map BackupPlaylistEntry(name = playlist.name, songs = emptyList(), smartRules = rules)
                     }
                     val songs = playlistDao.getPlaylistSongRefs(playlist.id)
@@ -114,17 +112,14 @@ class BackupManager @Inject constructor(
             val backup = adapter.fromJson(json)
                 ?: return@withContext RestoreResult.Error("Invalid backup format")
 
-            // v2 backups (no listening history field — Moshi defaults it to empty) still restore
-            // fine; only reject versions this app genuinely doesn't understand.
+            // v2 backups have no history field (it defaults to empty) and still restore.
             if (backup.version !in 2..3) {
                 return@withContext RestoreResult.Error(
                     "Unsupported backup version ${backup.version} — please re-export from a current version of the app"
                 )
             }
 
-            // Path match first (fast, exact — works when restoring to the same device/file
-            // layout); falls back to title+artist+album for songs whose path moved, e.g. after
-            // switching phones or reorganizing the music folder.
+            // Match by path first, then by title, artist and album for files that moved.
             val contentIndex = buildContentIndex()
 
             var likedRestored = 0
@@ -145,10 +140,7 @@ class BackupManager @Inject constructor(
                 val existing = playlistDao.getPlaylistByName(pb.name)
                 val playlistId = existing?.id
                     ?: playlistDao.insertPlaylist(PlaylistEntity(name = pb.name, artworkUri = null))
-                // Re-importing the same backup (or any backup containing a playlist the user
-                // already has) would otherwise create a duplicate playlist every time. Reusing
-                // the existing row and replacing its song list makes a repeat import a no-op
-                // instead of piling up duplicates.
+                // Reuse a playlist with the same name, so importing twice doesn't duplicate it.
                 if (existing != null) playlistDao.clearPlaylist(playlistId)
                 pb.smartRules?.let { rules ->
                     smartPlaylistDao.upsert(
@@ -173,10 +165,8 @@ class BackupManager @Inject constructor(
 
             val settingsRestored = prefs.importBackupPreferences(backup.settings)
 
-            // Unlike liked songs/playlists (idempotent state), history is an append-only event
-            // log with no natural conflict key at the DB level — re-importing the same backup
-            // twice would otherwise double every play count. Dedup against what's already
-            // there using (songId, listenedAt) as the identity of a single listen event.
+            // Skip listens already present (same song and time), so importing twice doesn't
+            // double play counts.
             val existingHistoryKeys = historyDao.getAllHistory().mapTo(HashSet()) { it.songId to it.listenedAt }
             var historyRestored = 0
             var historySkipped = 0

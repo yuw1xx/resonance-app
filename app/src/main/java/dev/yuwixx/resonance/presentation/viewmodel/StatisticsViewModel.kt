@@ -81,13 +81,12 @@ class StatisticsViewModel @Inject constructor(
         val dailyTrend = historyDao.getDailyTotals(from, to)
         val dayOfWeekActivity = historyDao.getPlaysByDayOfWeek(from, to)
 
-        // Top songs — batch fetch, no N+1
+        // Top songs in one batched query.
         val topIds = historyDao.getTopSongIds(from, to, 10)
         val songMap = songDao.getSongsByIds(topIds.map { it.songId }).associateBy { it.id }
         val topSongs = topIds.mapNotNull { entry -> songMap[entry.songId]?.let { it to entry.playCount } }
 
-        // Top artists / albums / genre / format breakdown — all sampled from the same top-100
-        // batch fetch (no N+1), same approach the original Top Artists computation already used.
+        // Artists, albums, genres and formats all come from the same top-100 batch.
         val allTopIds = historyDao.getTopSongIds(from, to, 100)
         val allSongsForArtists = songDao.getSongsByIds(allTopIds.map { it.songId }).associateBy { it.id }
         val playCounts = allTopIds.associate { it.songId to it.playCount }

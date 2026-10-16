@@ -1,8 +1,9 @@
-// Custom MediaSession commands and session-extras keys shared by MusicService and its
-// controllers (PlayerViewModel). State that must outlive the UI — the sleep timer — lives in
-// the service and is mirrored to controllers through session extras.
 package dev.yuwixx.resonance.data.service
 
+/**
+ * Custom session commands and extras shared by MusicService and its controllers. The sleep timer
+ * lives in the service and reaches controllers through session extras.
+ */
 object SessionProtocol {
     const val CMD_SLEEP_SET = "dev.yuwixx.resonance.SLEEP_SET"
     const val CMD_SLEEP_CANCEL = "dev.yuwixx.resonance.SLEEP_CANCEL"

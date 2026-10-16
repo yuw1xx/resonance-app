@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.data.service
 
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import java.io.File
 import java.io.IOException
 import java.net.ServerSocket
@@ -58,7 +59,7 @@ class LocalFileServer @Inject constructor() {
                 if (e is CancellationException) throw e
             } finally {
                 // Only this share's socket: a newer serve() may already have its own.
-                runCatching { socket.close() }
+                runCatchingCancellable { socket.close() }
                 if (serverSocket === socket) serverSocket = null
             }
         }

@@ -1,5 +1,3 @@
-// Defines all navigation routes, the bottom navigation bar (with mini-player above it),
-// and wires every composable destination to its screen composable.
 package dev.yuwixx.resonance.presentation.navigation
 
 import android.net.Uri
@@ -146,7 +144,12 @@ fun ResonanceNavGraph(
     val showBitrateInfo by libraryViewModel.prefs.showBitrateInfo.collectAsStateWithLifecycle(initialValue = false)
     val lyricsFontFamily by libraryViewModel.prefs.lyricsFontFamily.collectAsStateWithLifecycle(initialValue = "DEFAULT")
 
-    val appearanceConfig = remember(compactList, showDuration, artworkShape, lyricAlign, seekbarClr, tintedNav, floatingNav, navLabelVis, playlistCols, showAlbumInList, listArtworkSize, showRemainingTime, showNextSongInPlayer, lyricsLineSpacing, miniPlayerShowProgress, miniPlayerShowSkipBtn, showEqualizerInPlayer, hapticEnabled, showBitrateInfo, lyricsFontFamily) {
+    val appearanceConfig = remember(
+        compactList, showDuration, artworkShape, lyricAlign, seekbarClr, tintedNav, floatingNav,
+        navLabelVis, playlistCols, showAlbumInList, listArtworkSize, showRemainingTime,
+        showNextSongInPlayer, lyricsLineSpacing, miniPlayerShowProgress, miniPlayerShowSkipBtn,
+        showEqualizerInPlayer, hapticEnabled, showBitrateInfo, lyricsFontFamily,
+    ) {
         AppearanceConfig(
             compactListMode = compactList,
             showDurationInList = showDuration,
@@ -179,7 +182,7 @@ fun ResonanceNavGraph(
     val isSetupRoute = currentRoute == Screen.Setup.route
     val imeVisible = WindowInsets.isImeVisible
 
-    // The Now Playing sheet replaces the old `player` route: "open the player" expands it.
+    // "Open the player" expands the Now Playing sheet.
     val sheetState = rememberPlayerSheetState()
     val miniMetrics = remember(miniPlayerStyle, miniPlayerShowProgress) {
         MiniPlayerMetrics.forStyle(miniPlayerStyle, showProgress = miniPlayerShowProgress)

@@ -1,17 +1,13 @@
-// Parses LRC-format time-synced lyrics (optionally with word-level <mm:ss.xx> karaoke timing)
-// into LyricLine models. Pulled out as a standalone, dependency-free object (rather than a
-// LyricsRepository method) so it's directly unit-testable without needing to construct
-// LyricsRepository's full DI graph.
-//
-// Handles what real-world LRC files contain: several timestamps on one line (repeated
-// choruses), [m:ss] / [mm:ss.x] / [mm:ss.xxx] / 3-digit minutes, the [offset:] tag, empty
-// timestamp lines (instrumental breaks), two lines with the same timestamp (the second is
-// treated as a translation), and enhanced word timings with the original spacing kept.
 package dev.yuwixx.resonance.domain.usecase
 
 import dev.yuwixx.resonance.data.model.LyricLine
 import dev.yuwixx.resonance.data.model.WordTiming
 
+/**
+ * Parses LRC lyrics, including enhanced word timings. Handles several timestamps on one line,
+ * [offset:], empty lines for instrumental breaks, and a second line with the same timestamp as
+ * a translation.
+ */
 object LrcParser {
     private val timeTag = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
     private val wordTag = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")

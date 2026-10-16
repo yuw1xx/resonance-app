@@ -1,7 +1,6 @@
 package dev.yuwixx.resonance.domain.usecase
 
 import android.util.Log
-import dev.yuwixx.resonance.data.model.Song
 import org.jaudiotagger.audio.AudioFileIO
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -23,18 +22,13 @@ class ReplayGainProcessor @Inject constructor() {
         val albumPeak: Float?,
     )
 
-    // Lazily-populated cache of tag-read ReplayGain values, keyed by song id. Unbounded is fine
-    // here — entries are just two floats, not the large arrays WaveformExtractor's bounded cache
-    // protects against.
+    // ReplayGain values by song ID. Unbounded, since each entry is two floats.
     private val tagCache = ConcurrentHashMap<Long, Pair<Float?, Float?>>()
 
     fun peekCachedGain(songId: Long): Pair<Float?, Float?>? = tagCache[songId]
 
-    // Reads REPLAYGAIN_TRACK_GAIN/REPLAYGAIN_ALBUM_GAIN tags via jaudiotagger (the same library
-    // already used for tag editing in MusicRepository.updateSongTags) and caches the result.
-    // Deliberately not run during bulk library sync — opening every file to read tags would slow
-    // down scans of large libraries — so this is called lazily, in the background, right before
-    // a song is queued for playback.
+    // Reads the ReplayGain tags of one file. Called when a song is queued rather than during the
+    // library scan, which would have to open every file.
     suspend fun readAndCacheGain(songId: Long, path: String): Pair<Float?, Float?>? =
         withContext(Dispatchers.IO) {
             tagCache[songId]?.let { return@withContext it }

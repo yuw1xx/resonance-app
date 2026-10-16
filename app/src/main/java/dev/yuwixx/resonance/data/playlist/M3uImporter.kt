@@ -1,5 +1,3 @@
-// Imports .m3u/.m3u8 files (picked via SAF, or found by folder sync) into playlists, and
-// exports playlists back out. Matching against the library is done by SongMatcher.
 package dev.yuwixx.resonance.data.playlist
 
 import android.content.Context
@@ -14,11 +12,12 @@ import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.model.Playlist
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.PlaylistRepository
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
-import javax.inject.Singleton
 
 @Singleton
 class M3uImporter @Inject constructor(
@@ -51,7 +50,7 @@ class M3uImporter @Inject constructor(
      *  about conflicts once before importing. */
     suspend fun preview(uris: List<Uri>): List<Preview> = withContext(Dispatchers.IO) {
         uris.map { uri ->
-            val name = runCatching { readPlaylist(uri).name }.getOrNull() ?: displayNameStem(uri)
+            val name = runCatchingCancellable { readPlaylist(uri).name }.getOrNull() ?: displayNameStem(uri)
             Preview(uri, name, playlistDao.getPlaylistByName(name)?.id)
         }
     }
@@ -101,8 +100,6 @@ class M3uImporter @Inject constructor(
         stream.use { it.write(text.toByteArray(Charsets.UTF_8)) }
     }
 
-    // ─── internals ───
-
     private data class Resolved(val songIds: List<Long>, val unmatched: List<String>, val skippedRemote: Int)
 
     private suspend fun resolveEntries(parsed: M3uPlaylist, baseDir: String?): Resolved {
@@ -147,7 +144,7 @@ class M3uImporter @Inject constructor(
     }
 
     fun displayNameStem(uri: Uri): String {
-        val display = runCatching {
+        val display = runCatchingCancellable {
             context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
                 ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
         }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Imported playlist"
@@ -161,7 +158,7 @@ class M3uImporter @Inject constructor(
 
     fun documentPath(uri: Uri): String? {
         if (uri.authority != EXTERNAL_STORAGE_AUTHORITY) return null
-        val docId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull() ?: return null
+        val docId = runCatchingCancellable { DocumentsContract.getDocumentId(uri) }.getOrNull() ?: return null
         val volume = docId.substringBefore(':')
         val relative = docId.substringAfter(':', "")
         val root = if (volume.equals("primary", ignoreCase = true)) "/storage/emulated/0" else "/storage/$volume"

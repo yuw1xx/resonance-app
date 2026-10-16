@@ -1,6 +1,3 @@
-// The Library tab: Songs, Albums, Artists, Liked and (local source) Folders behind one
-// navigation destination. Each section keeps its own screen and top-bar actions; the host
-// provides a row of connected toggle buttons that those screens draw under their top bar.
 package dev.yuwixx.resonance.presentation.screens.library
 
 import androidx.compose.animation.AnimatedContent
@@ -63,6 +60,10 @@ fun LibraryTitle() {
     if (LocalLibrarySections.current != null) Text("Library")
 }
 
+/**
+ * The Library tab. Each section keeps its own screen and top bar; this host supplies the section
+ * switcher they draw under it.
+ */
 @Composable
 fun LibraryScreen(
     showFolders: Boolean,

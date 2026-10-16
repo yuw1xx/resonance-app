@@ -37,8 +37,7 @@ val PresetColors = listOf(
     Color(0xFF006D3B),
 )
 
-/** How a seed color is spread into a full scheme — the same choices Android's wallpaper
- *  picker offers. */
+/** How a seed color spreads into a full scheme; the same choices as Android's wallpaper picker. */
 enum class PaletteStyle(val label: String) {
     TONAL_SPOT("Tonal"),
     VIBRANT("Vibrant"),
@@ -53,9 +52,7 @@ enum class PaletteStyle(val label: String) {
 
 private val dynamicColors = MaterialDynamicColors()
 
-/** Builds a complete Material 3 scheme (every surface-container and fixed role) from one seed
- *  using the Material Color Utilities — replaces the old hand-made schemes that tinted
- *  containers with the seed at partial alpha, which made them translucent and low-contrast. */
+/** Builds a full Material 3 scheme, every container and fixed role included, from one seed. */
 fun seedColorScheme(seed: Color, dark: Boolean, style: PaletteStyle = PaletteStyle.TONAL_SPOT): ColorScheme {
     val hct = Hct.fromInt(seed.toArgb())
     val spec = ColorSpec.SpecVersion.SPEC_2025
@@ -139,9 +136,7 @@ fun ColorScheme.toAmoled(): ColorScheme = copy(
     surfaceBright = lerp(surfaceBright, Color.Black, 0.3f),
 )
 
-/** The app's shape scale, driven by the Appearance → Corner radius setting (default 28 → the
- *  M3 Expressive defaults). Everything uses MaterialTheme.shapes, so one slider rounds the
- *  whole app consistently. */
+/** Shape scale from the Corner radius setting; 28 gives the M3 Expressive defaults. */
 fun resonanceShapes(cornerRadius: Int): Shapes {
     val f = (cornerRadius / 28f).coerceIn(0f, 2f)
     fun r(base: Int) = RoundedCornerShape((base * f).dp)

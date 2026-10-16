@@ -1,6 +1,3 @@
-// Expanded Now Playing content shown inside the PlayerSheet: artwork panel, playback controls,
-// lyrics overlay, queue sheet, sleep timer dialog, song options sheet, and the blurred
-// artwork background.
 package dev.yuwixx.resonance.presentation.screens
 
 import android.content.ClipData
@@ -11,7 +8,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.animation.core.RepeatMode as AnimationRepeatMode
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -89,9 +85,8 @@ fun PlayerScreen(
     val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
     val isPlaying by playerViewModel.isPlaying.collectAsStateWithLifecycle()
 
-    // Not `by` — this obtains the State<Long> reference without reading `.value` here, so
-    // PlayerScreen's own (large) recompose scope isn't subscribed to every ~100ms position tick.
-    // Only SeekBarAndTimeLabels (the one place that actually needs live position) reads `.value`.
+    // Kept as a State and read only in SeekBarAndTimeLabels, so position ticks don't recompose
+    // the whole screen.
     val positionMsState = playerViewModel.positionMs.collectAsStateWithLifecycle()
 
     val durationMs by playerViewModel.durationMs.collectAsStateWithLifecycle()
@@ -298,8 +293,6 @@ fun PlayerScreen(
     }
 }
 
-// ─── Sub-components ───
-
 @Composable
 private fun BouncyIconButton(
     onClick: () -> Unit,
@@ -494,13 +487,10 @@ private fun PlaybackControls(
     onArtistClick: (String) -> Unit = {},
     onSongClick: () -> Unit = {},
 ) {
-    // Deliberately does not read `position.value` anywhere in this function — that's scoped to
-    // SeekBarAndTimeLabels below, so the buttons/animations/song-info here don't recompose on
-    // every ~100ms position tick during playback.
+    // Doesn't read position.value; only SeekBarAndTimeLabels does.
     val config = LocalAppearanceConfig.current
-    // The user's Seekbar Colour setting picks which palette channel to prefer once artwork
-    // is available; without artwork (or on extraction failure) it falls back to the
-    // equivalent fixed theme color, exactly as before.
+    // The Seekbar Colour setting picks the artwork palette channel; without artwork the
+    // matching theme color is used.
     val seekbarPlayedColor by animateColorAsState(
         targetValue = when (config.seekbarColor) {
             "SECONDARY" -> artworkColors?.muted ?: MaterialTheme.colorScheme.secondary
@@ -650,9 +640,8 @@ private fun PlaybackControls(
     }
 }
 
-/** Shuffle · previous · play/pause · next · repeat, in M3 Expressive style: the play button
- *  morphs between a slowly rotating cookie (playing) and a rounded square (paused), and every
- *  button squishes on press via the expressive shape-morphing icon buttons. */
+/** Shuffle, previous, play/pause, next and repeat. The play button morphs between a slowly
+ *  rotating cookie while playing and a rounded square while paused. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun TransportControls(
@@ -778,9 +767,7 @@ private fun TransportControls(
     }
 }
 
-// The one place in the Now Playing screen that reads live playback position — pulled out of
-// PlaybackControls so the buttons/animations/song-info there don't recompose on every ~100ms
-// position tick during playback; only this composable does.
+// The only part of the player that reads the live position, so only it recomposes on ticks.
 @Composable
 private fun SeekBarAndTimeLabels(
     position: State<Long>,
@@ -960,13 +947,13 @@ private fun PlayerOptionsSheet(
         AnimatedContent(
             targetState = page,
             transitionSpec = {
-                if (targetState == OptionsPage.Main) {
-                    (fadeIn(tween(490, easing = EmphasizedDecelerate)) + slideInHorizontally(tween(560, easing = EmphasizedDecelerate)) { -it / 2 })
-                        .togetherWith(fadeOut(tween(350, easing = EmphasizedAccelerate)) + slideOutHorizontally(tween(420, easing = EmphasizedAccelerate)) { it / 2 })
-                } else {
-                    (fadeIn(tween(490, easing = EmphasizedDecelerate)) + slideInHorizontally(tween(560, easing = EmphasizedDecelerate)) { it / 2 })
-                        .togetherWith(fadeOut(tween(350, easing = EmphasizedAccelerate)) + slideOutHorizontally(tween(420, easing = EmphasizedAccelerate)) { -it / 2 })
-                }
+                // Back to the main page slides in from the left, sub-pages from the right.
+                val direction = if (targetState == OptionsPage.Main) -1 else 1
+                val enter = fadeIn(tween(490, easing = EmphasizedDecelerate)) +
+                    slideInHorizontally(tween(560, easing = EmphasizedDecelerate)) { direction * it / 2 }
+                val exit = fadeOut(tween(350, easing = EmphasizedAccelerate)) +
+                    slideOutHorizontally(tween(420, easing = EmphasizedAccelerate)) { -direction * it / 2 }
+                enter togetherWith exit
             },
             label = "options_page",
         ) { currentPage ->
@@ -1342,8 +1329,8 @@ private fun SheetInfoPage(
                 else "Track ${song.trackNumber}"
                 SongInfoRow("Track", track)
             }
-            SongInfoRow("Duration", formatDurationLong(song.duration))
-            SongInfoRow("File size", formatFileSize(song.size))
+            SongInfoRow("Duration", formatDuration(song.duration))
+            SongInfoRow("File size", if (song.size > 0) formatFileSize(song.size) else "—")
             if (song.bitrate > 0)
                 SongInfoRow("Bitrate", "${song.bitrate} kbps")
             if (song.sampleRate > 0)
@@ -1402,10 +1389,8 @@ private fun DynamicBackground(
     val context = LocalContext.current
     val motion = MaterialTheme.motionScheme
 
-    // The blur runs on a quarter-resolution layer that's then scaled up 4x: visually identical
-    // for a heavy blur, ~16x fewer pixels for RenderEffect to process, and the source image is
-    // decoded tiny. Below API 31 Modifier.blur is a no-op, so a strongly scaled-up thumbnail
-    // gives a soft, blur-like wash instead.
+    // Blurs a quarter-size layer scaled up 4x: it looks the same and has 16x fewer pixels to
+    // process. Below API 31 there's no blur, and the scaled-up thumbnail stands in for it.
     BoxWithConstraints(Modifier.fillMaxSize().background(surface)) {
         val factor = 4
         val layerW = maxWidth / factor
@@ -1438,8 +1423,6 @@ private fun DynamicBackground(
         }
     }
 }
-
-// ─── Lyrics Overlay ───
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -1555,9 +1538,8 @@ fun LyricsOverlay(
                                 "MONOSPACE" -> FontFamily.Monospace
                                 else -> null
                             }
-                            // One style for every line: the active line is emphasised with a
-                            // graphicsLayer scale + color, so a line change never re-measures
-                            // or re-flows the list (switching text styles used to do both).
+                            // One text style for every line; the active line is scaled and
+                            // tinted in graphicsLayer, so a line change never re-measures.
                             val baseStyle = MaterialTheme.typography.headlineSmall
                             val lineStyle = remember(baseStyle, fontScale, lyricsFontFamily) {
                                 baseStyle.copy(
@@ -1742,21 +1724,6 @@ private fun LyricsMessage(
             FilledTonalButton(onClick = onAction) { Text(action) }
         }
     }
-}
-
-// ─── Formatting Helpers ───
-
-private fun formatDurationLong(ms: Long): String {
-    val s = ms / 1000
-    val h = s / 3600; val m = (s % 3600) / 60; val sec = s % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
-}
-
-private fun formatFileSize(bytes: Long): String {
-    if (bytes <= 0) return "—"
-    val df = DecimalFormat("#.##")
-    val mb = bytes / 1_048_576.0
-    return if (mb >= 1.0) "${df.format(mb)} MB" else "${df.format(bytes / 1024.0)} KB"
 }
 
 private fun formatSampleRate(hz: Int): String =

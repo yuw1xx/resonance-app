@@ -1,6 +1,3 @@
-// Small hand-drawn Canvas chart primitives shared by the Statistics screen — kept dependency-free
-// (no charting library) to match the rest of the app's hand-rolled gesture/Canvas components
-// (WaveformSeekbar, MaterialYou3Seekbar).
 package dev.yuwixx.resonance.presentation.components
 
 import androidx.compose.animation.core.Animatable
@@ -35,9 +32,7 @@ fun BarChart(
     labels: List<String> = emptyList(),
 ) {
     val maxValue = (values.maxOrNull() ?: 1f).coerceAtLeast(1f)
-    // One animated 0→1 sweep drives every bar; each bar samples it with an index-based offset
-    // so bars grow in a left-to-right cascade rather than all at once, without needing a
-    // separate animation object per bar (list length varies with the selected stats period).
+    // One 0..1 sweep drives all bars; each bar is offset by its index so they grow left to right.
     val reveal = remember { Animatable(0f) }
     LaunchedEffect(values) {
         reveal.snapTo(0f)
@@ -82,13 +77,10 @@ fun LineChart(
     if (points.isEmpty()) return
     val fillColor = lineColor.copy(alpha = 0.15f)
     val maxValue = (points.maxOrNull() ?: 1f).coerceAtLeast(1f)
-    // Reused across every redraw instead of allocated fresh each time — reset() rebuilds the
-    // same geometry every draw, just without a new Path allocation per frame.
+    // Reused between draws to avoid allocating a Path per frame.
     val path = remember { Path() }
     val fillPath = remember { Path() }
-    // Draws in left-to-right via a clip that grows with `reveal`, rather than trimming the path
-    // geometry itself — simpler than a PathMeasure-based trim and gives the same "line drawing
-    // in" effect.
+    // A clip that grows with `reveal` draws the line in from the left.
     val reveal = remember { Animatable(0f) }
     LaunchedEffect(points) {
         reveal.snapTo(0f)

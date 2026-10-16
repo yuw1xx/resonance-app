@@ -1,5 +1,3 @@
-// Hilt dependency injection modules: database DAOs, Retrofit network clients,
-// Coil image loader, and the Navidrome API provider.
 package dev.yuwixx.resonance.di
 
 import android.content.Context
@@ -105,18 +103,14 @@ object NetworkModule {
         Retrofit.Builder().baseUrl("https://api.github.com/")
             .client(okHttp).addConverterFactory(MoshiConverterFactory.create(moshi)).build()
 
-    // A dedicated, shorter-timeout client — lyrics lookups happen on every song change and
-    // should fail fast rather than block the player for up to 30s (15s connect + 15s read) on
-    // the shared client if LRCLIB is slow or unreachable.
+    // Shorter timeouts: lyrics are looked up on every song change and should fail fast.
     @Singleton @Provides @Named("lrclib")
     fun provideLrclibRetrofit(okHttp: OkHttpClient, moshi: Moshi): Retrofit {
         // Derived from the shared client: same connection pool and threads, own timeouts.
         val client = okHttp.newBuilder()
             .connectTimeout(6, TimeUnit.SECONDS)
             .readTimeout(8, TimeUnit.SECONDS)
-            // Cloudflare in front of lrclib.net returns a 520 for requests with OkHttp's default
-            // User-Agent (confirmed: identical request succeeds with any other UA) — give it a
-            // descriptive one, same as the MusicBrainzInterceptor does for musicbrainz.org.
+            // lrclib.net's Cloudflare answers 520 to OkHttp's default User-Agent.
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .header("User-Agent", "Resonance/${BuildConfig.VERSION_NAME} (+https://github.com/yuw1xx/resonance-app)")
@@ -198,10 +192,8 @@ object NetworkModule {
     fun provideDiscogsApi(@Named("discogs") retrofit: Retrofit): DiscogsApi =
         retrofit.create(DiscogsApi::class.java)
 
-    // MusicBrainz's usage policy caps unauthenticated traffic at ~1 request/second; Discogs'
-    // unauthenticated tier is a looser 60/min, but reusing the same conservative interval keeps
-    // this simple and avoids needing to special-case authenticated vs. unauthenticated Discogs
-    // tokens.
+    // MusicBrainz allows about one request a second. Discogs allows more, but the same limit
+    // keeps it simple.
     @Singleton @Provides @Named("musicbrainz-limiter")
     fun provideMusicBrainzRateLimiter(): ApiRateLimiter = ApiRateLimiter(minIntervalMs = 1100L)
 

@@ -1,7 +1,3 @@
-// The Now Playing sheet: a mini player docked above the navigation bar that drags open into the
-// full player. Drag progress (0 = collapsed, 1 = expanded) drives every transition — nav bar
-// slide-out, background/shape, mini↔full crossfade and the artwork morph — from the draw and
-// placement phases only, so dragging never recomposes the player.
 package dev.yuwixx.resonance.presentation.player
 
 import android.net.Uri
@@ -30,8 +26,6 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -64,8 +58,8 @@ class PlayerSheetState(initialValue: PlayerSheetValue) {
     /** 0 = mini player, 1 = full player. Read it from draw/layout lambdas, not composition. */
     val progress: Float
         get() {
-            // Before the sheet is laid out (or while it's hidden) there are no anchors and
-            // progress() reports 1 — fall back to the settled value instead.
+            // Without anchors (not laid out yet, or hidden) progress() reports 1, so use the
+            // settled value.
             val settled = if (draggable.currentValue == PlayerSheetValue.Expanded) 1f else 0f
             if (draggable.anchors.size < 2) return settled
             val p = draggable.progress(PlayerSheetValue.Collapsed, PlayerSheetValue.Expanded)
@@ -97,7 +91,7 @@ fun rememberPlayerSheetState(): PlayerSheetState {
     return state
 }
 
-/** Size/inset of the collapsed mini player for each Appearance → Mini player style. */
+/** Size and inset of the collapsed mini player for each mini player style. */
 @Immutable
 data class MiniPlayerMetrics(val contentHeight: Dp, val horizontalInset: Dp, val verticalInset: Dp, val corner: Dp) {
     val totalHeight: Dp get() = contentHeight + verticalInset * 2
@@ -146,9 +140,8 @@ class ArtworkMorph internal constructor(internal val progress: () -> Float) {
 
 val LocalArtworkMorph = staticCompositionLocalOf<ArtworkMorph?> { null }
 
-/** Clip outline for the sheet: inset on the sides and top (the card/floating mini player),
- *  ending [bottomPx] above the layer's bottom edge so it never paints under the navigation
- *  bar, with corners that square off as the sheet fills the screen. */
+/** Clip outline for the sheet. It ends [bottomPx] above the bottom edge so it never draws under
+ *  the navigation bar, and its corners square off as the sheet fills the screen. */
 private class SheetShape(
     private val insetPx: Float,
     private val topPx: Float,
@@ -168,6 +161,10 @@ private class SheetShape(
     }
 }
 
+/**
+ * Mini player that drags open into the full player. Drag progress drives every transition in the
+ * draw and placement phases, so dragging never recomposes the player.
+ */
 @Composable
 fun PlayerSheet(
     state: PlayerSheetState,

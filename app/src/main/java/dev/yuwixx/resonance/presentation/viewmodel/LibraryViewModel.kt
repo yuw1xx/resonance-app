@@ -1,8 +1,7 @@
-// ViewModel for all library data: songs, albums, artists, playlists, search, and MediaStore/Navidrome sync.
-// Switches data sources transparently between LOCAL and NAVIDROME based on the active preference.
 package dev.yuwixx.resonance.presentation.viewmodel
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,11 +24,11 @@ import dev.yuwixx.resonance.data.repository.NavidromeRepository
 import dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
 import dev.yuwixx.resonance.data.repository.PlaylistRepository
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import dev.yuwixx.resonance.data.worker.MixGeneratorManager
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -48,8 +47,6 @@ class LibraryViewModel @Inject constructor(
     private val mixRepository: MixRepository,
     private val m3uImporter: M3uImporter,
 ) : ViewModel() {
-
-    // ─── M3U import / export ───
 
     sealed interface M3uImportState {
         data object Idle : M3uImportState
@@ -148,8 +145,7 @@ class LibraryViewModel @Inject constructor(
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
-    // Same pattern as PlayerViewModel.smartQueueError — a transient, ViewModel-driven error the
-    // UI surfaces once (e.g. via a snackbar) then clears.
+    // Shown once by the UI, then cleared.
 
     val navSyncState: StateFlow<NavidromeSyncState> = navidromeRepository.syncState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NavidromeSyncState.Idle)
@@ -200,8 +196,6 @@ class LibraryViewModel @Inject constructor(
     fun createPlaylist(name: String) {
         viewModelScope.launch { playlistRepository.createPlaylist(name) }
     }
-
-    // ─── M3U folder sync ───
 
     fun setPlaylistSyncFolder(uri: Uri?) {
         viewModelScope.launch { playlistFolderSync.setFolder(uri) }
@@ -370,8 +364,13 @@ class LibraryViewModel @Inject constructor(
 
     fun refreshMixes() {
         viewModelScope.launch {
-            try { mixRepository.generateAndPersistMixes() }
-            catch (_: Exception) {}
+            try {
+                mixRepository.generateAndPersistMixes()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("LibraryViewModel", "Mix refresh failed", e)
+            }
         }
     }
 
@@ -386,7 +385,7 @@ class LibraryViewModel @Inject constructor(
             }
             syncLibrary()
             // Pick up playlist files changed elsewhere (PC, Syncthing…) since the last run.
-            if (prefs.playlistSyncFolder.first() != null) runCatching { playlistFolderSync.syncNow() }
+            if (prefs.playlistSyncFolder.first() != null) runCatchingCancellable { playlistFolderSync.syncNow() }
         }
         loadMostPlayed()
         allSongs.onEach { loadMostPlayed() }.launchIn(viewModelScope)

@@ -1,5 +1,3 @@
-// Sends http(s) reads through the stream cache and everything else (content://, file://)
-// straight to the device, so local files are never copied into the cache.
 package dev.yuwixx.resonance.data.service
 
 import android.net.Uri
@@ -9,6 +7,10 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 
+/**
+ * Sends http(s) reads through the stream cache and local reads straight to the device, so local
+ * files never end up in the cache.
+ */
 @OptIn(UnstableApi::class)
 class StreamCachingDataSource private constructor(
     private val cached: DataSource,

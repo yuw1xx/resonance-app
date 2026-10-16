@@ -1,7 +1,3 @@
-// Combines MusicBrainz (formed/dissolved year, type, tags), Last.fm (bio text, tags), and
-// optionally Discogs (members, profile — only when the user has supplied a personal API token
-// in Settings) into one ArtistInfo domain model for the artist info bottom sheet and, indirectly,
-// the metadata enrichment scan's genre proposals.
 package dev.yuwixx.resonance.data.repository
 
 import kotlinx.coroutines.CancellationException
@@ -31,6 +27,7 @@ data class ArtistInfo(
     val sourceAttribution: List<String>,
 )
 
+/** Artist info from MusicBrainz, Last.fm and, when the user has set a token, Discogs. */
 @Singleton
 class ArtistInfoRepository @Inject constructor(
     private val musicBrainzApi: MusicBrainzApi,
@@ -104,8 +101,7 @@ class ArtistInfoRepository @Inject constructor(
         val apiKey = lastFmRepository.getApiKey()
         val response = lastFmApi.getArtistInfo(artist = artistName, apiKey = apiKey)
         val artist = response.artist ?: return null
-        // Last.fm bios end with a Creative Commons attribution link ("<a href=...>Read more on
-        // Last.fm</a>") that reads oddly rendered as plain text — strip it off.
+        // Strip the "Read more on Last.fm" link at the end of every bio.
         val bio = artist.bio?.summary
             ?.substringBefore("<a href")
             ?.trim()

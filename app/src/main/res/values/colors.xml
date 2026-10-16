@@ -3,6 +3,4 @@
     <!-- Surface of the default (brand-seeded) light scheme. -->
     <color name="window_background">#FFFEF7FF</color>
     <color name="splash_icon_background">#FFEADDFF</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
 </resources>

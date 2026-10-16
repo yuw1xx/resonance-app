@@ -80,9 +80,8 @@ interface LastFmApi {
         @Query("format") format: String = "json",
     ): LastFmUserInfoResponse
 
-    // Unauthenticated, read-only — works with the app's default API key even for users who
-    // haven't logged into Last.fm scrobbling. Used to enrich the artist info window (bio, tags)
-    // and the metadata enrichment scan (genre tags).
+    // Needs only the API key, so it works without a Last.fm login. Used for artist info and
+    // genre suggestions.
     @GET("2.0/")
     suspend fun getArtistInfo(
         @Query("method") method: String = "artist.getInfo",

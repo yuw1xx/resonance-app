@@ -27,7 +27,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -99,7 +98,7 @@ data class ReceiveParams(
     }
 }
 
-/** Params for a `mode=remote-multi` link — a manifest token resolving to a list of songs. */
+/** Params for a `mode=remote-multi` link: a manifest token that resolves to several songs. */
 private data class RemoteMultiParams(val serverUrl: String, val manifestToken: String) {
     companion object {
         fun parse(uri: Uri): RemoteMultiParams? {
@@ -269,10 +268,7 @@ private fun ReceiveTransferContent(
         )
         Spacer(Modifier.height(4.dp))
 
-        // Keyed on a coarse "which icon" bucket rather than the raw state — Connecting's
-        // `detail` text and Downloading's `progress` both change several times per second and
-        // share the same icon, so keying on `state` directly would replay the pop-in animation
-        // on every one of those updates instead of only on an actual icon change.
+        // Keyed on the icon, not the state: progress updates must not replay the animation.
         val iconKey = when (state) {
             is ReceiveState.Done -> "done"
             is ReceiveState.Error -> "error"
@@ -503,11 +499,8 @@ private fun ReceiveMultiTransferContent(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }
-                                // Keyed on a coarse status bucket (frozen per AnimatedContent instance) rather
-                                // than the live `status` object directly — Downloading's `progress` changes many
-                                // times per second and shouldn't replay the pop-in/out swap on every tick; only
-                                // the "downloading" branch below reads the live outer `status` for its progress
-                                // value, which is safe since that branch only runs while the key is "downloading".
+                                // Keyed on the kind of status so progress updates don't replay the
+                                // swap. Only the downloading branch reads the live progress.
                                 val statusKey = when (status) {
                                     is SongDownloadStatus.Pending -> "pending"
                                     is SongDownloadStatus.Downloading -> "downloading"
@@ -651,7 +644,11 @@ private suspend fun connectToP2pNetwork(context: Context, params: ReceiveParams)
     val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
     val specifier = WifiNetworkSpecifier.Builder().setSsid(ssid).setWpa2Passphrase(passphrase).build()
-    val request = NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).setNetworkSpecifier(specifier).build()
+    val request = NetworkRequest.Builder()
+        .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+        .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        .setNetworkSpecifier(specifier)
+        .build()
 
     return suspendCancellableCoroutine { cont ->
         var resumed = false
@@ -763,8 +760,7 @@ private fun songFromReceivedFile(file: File, title: String, artist: String, mime
 )
 
 private suspend fun performReject(params: ReceiveParams) = withContext(Dispatchers.IO) {
-    // The internet relay has no /reject endpoint and no live sender to notify — declining
-    // just means "don't download"; the uploaded file still expires via its own TTL.
+    // The relay has no reject call; declining just skips the download and the file expires.
     if (params.mode == "remote") return@withContext
     try {
         val url = URL(params.rejectUrl)

@@ -1,6 +1,6 @@
-// resonance-share: a minimal, self-hosted relay for the Resonance Android app's
-// long-distance song sharing (mode=remote). Auth-gated upload, open-by-capability-token
-// download, TTL-based cleanup. No database — files live on disk under DATA_DIR.
+// resonance-share is a small self-hosted relay for Resonance's song sharing over the internet.
+// Uploads need the upload token, downloads need the file's own token, and files expire after a
+// TTL. Files live on disk under DATA_DIR; there is no database.
 package main
 
 import (
@@ -29,9 +29,8 @@ const (
 	sweepInterval         = 10 * time.Minute
 	rateLimitWindow       = time.Hour
 
-	// Rate limiting is by volume, not by file count: a 40-song share is 41 requests (40
-	// files + the manifest) and used to trip a 20-per-hour file limit. Bytes cap the real
-	// cost; the request cap only stops floods of tiny requests.
+	// Rate limits count bytes, since one share of many songs is many requests. The request cap
+	// only stops floods of tiny requests.
 	defaultRateLimitBytesPerHour    = 3 << 30 // 3 GB
 	defaultRateLimitRequestsPerHour = 300
 	defaultMaxStorageBytes          = 20 << 30 // 20 GB on disk across all pending shares
@@ -161,12 +160,8 @@ func envOr(key, def string) string {
 	return def
 }
 
-// setCORS allows any browser-based client (e.g. the Resonance web app, hosted on whatever
-// origin it ends up deployed at) to call this API. Wildcard is safe here: auth is via an
-// explicit Authorization header the caller supplies, never cookies/credentials, and every
-// download is either public-by-capability-token (/f/, /manifest/) or requires the upload
-// token outright — CORS doesn't weaken either of those. Purely additive for the existing
-// Android client, which isn't subject to CORS at all.
+// setCORS lets browser clients call the API. A wildcard is safe because auth uses an explicit
+// Authorization header, never cookies, and downloads are protected by their tokens.
 func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -370,7 +365,7 @@ func rangeStart(header string, size int64) (int64, bool) {
 	return start, end >= size-1
 }
 
-// GET /info — public limits so clients can adapt (TTL choices, size warnings, batch sizes).
+// GET /info returns the limits, so clients can adapt TTL choices, size warnings and batch sizes.
 func (s *server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -389,8 +384,7 @@ func (s *server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// manifestSongEntry mirrors the per-song fields the Android client already embeds in a
-// single-song mode=remote link; a manifest is just a list of these under one token.
+// manifestSongEntry holds the same fields as a single-song link; a manifest is a list of them.
 type manifestSongEntry struct {
 	Token  string `json:"token"`
 	Title  string `json:"title"`
@@ -404,8 +398,8 @@ type manifestUploadRequest struct {
 	Songs    []manifestSongEntry `json:"songs"`
 }
 
-// POST /manifest — same auth/rate-limit as /upload. Does not verify the referenced song
-// tokens exist; a stale one surfaces as a 404 at GET /f/:token time, same as today.
+// POST /manifest uses the same auth and rate limit as /upload. Song tokens aren't checked; a
+// stale one returns 404 when it is downloaded.
 func (s *server) handleManifestCreate(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -478,9 +472,8 @@ func (s *server) handleManifestCreate(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"token":"` + token + `"}`))
 }
 
-// GET /manifest/{token} — no auth (token is the capability, matching /f/:token). Unlike
-// file downloads this is NOT single-use: the recipient can reopen the song list and retry
-// a failed download without a new link, until the manifest's own TTL expires.
+// GET /manifest/{token} needs only the token. Unlike file downloads it can be read more than once,
+// so the recipient can retry a failed download until the manifest expires.
 func (s *server) handleManifestGet(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -568,9 +561,8 @@ func (s *server) pathFor(token string) string {
 	return filepath.Join(s.dataDir, token)
 }
 
-// clientIP prefers the Cloudflare-supplied real client IP. This is only trustworthy because
-// the origin has no publicly reachable listener of its own — all traffic arrives via the
-// cloudflared tunnel, so this header can't be spoofed by an external attacker talking to us directly.
+// clientIP prefers the IP Cloudflare reports. That header can be trusted only because all
+// traffic arrives through the cloudflared tunnel; the server has no public listener.
 func clientIP(r *http.Request) string {
 	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
 		return ip

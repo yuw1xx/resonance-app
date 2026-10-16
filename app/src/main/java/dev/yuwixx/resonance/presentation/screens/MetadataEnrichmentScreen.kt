@@ -54,14 +54,9 @@ fun MetadataEnrichmentScreen(
         }
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Keyed on the state's KClass, not the state instance itself — Scanning's index/
-            // total/foundSoFar tick many times per second while remaining "the same" state, and
-            // keying on the full instance would retrigger this enter/exit transition on every
-            // tick instead of just on genuine Idle/Scanning/Reviewing/Applying/Done transitions.
-            // The content lambda still reads the live `uiState` (not a stale snapshot), so it
-            // recomposes normally in between.
-            // Latest state of each kind, so the outgoing pane keeps showing its own content
-            // while it animates out instead of the incoming state.
+            // Keyed on the state's class: Scanning updates many times a second and must not
+            // restart the transition. The latest state of each kind is kept so the outgoing
+            // pane shows its own content while it animates out.
             val latestByKind = remember { mutableMapOf<KClass<*>, EnrichmentUiState>() }
             latestByKind[uiState::class] = uiState
             AnimatedContent(

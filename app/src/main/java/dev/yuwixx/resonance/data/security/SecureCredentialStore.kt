@@ -1,6 +1,3 @@
-// Keystore-backed storage for the two real secrets the app persists: the Navidrome account
-// password and the Last.fm session key. Everything else (server URLs, usernames, tokens the
-// codebase already documents as non-secret) stays in the regular DataStore-backed preferences.
 package dev.yuwixx.resonance.data.security
 
 import android.content.Context
@@ -17,6 +14,10 @@ private const val PREFS_NAME = "resonance_secure_prefs"
 private const val KEY_NAVIDROME_PASSWORD = "navidrome_password"
 private const val KEY_LASTFM_SESSION_KEY = "lastfm_session_key"
 
+/**
+ * Keystore-backed storage for the Navidrome password and the Last.fm session key. All other
+ * settings stay in DataStore.
+ */
 @Singleton
 class SecureCredentialStore @Inject constructor(@ApplicationContext context: Context) {
 

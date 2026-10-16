@@ -1,5 +1,3 @@
-// Up-next queue as a sheet over the player: tap to jump, long-press-drag to reorder (shuffle
-// off), swipe away to remove with undo, and save the whole queue as a playlist.
 package dev.yuwixx.resonance.presentation.player
 
 import androidx.compose.foundation.layout.*
@@ -17,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -167,7 +164,11 @@ fun QueueSheet(
                         backgroundContent = {
                             Box(
                                 Modifier.fillMaxSize().padding(horizontal = 24.dp),
-                                contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd,
+                                contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
+                                    Alignment.CenterStart
+                                } else {
+                                    Alignment.CenterEnd
+                                },
                             ) {
                                 Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error)
                             }

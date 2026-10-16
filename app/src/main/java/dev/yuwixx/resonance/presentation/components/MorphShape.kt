@@ -1,5 +1,3 @@
-// Shape that renders a point along a Morph between two MaterialShapes polygons — used for the
-// expressive play/pause button (rotating cookie while playing, rounded square when paused).
 package dev.yuwixx.resonance.presentation.components
 
 import androidx.compose.ui.geometry.Size
@@ -11,6 +9,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.graphics.shapes.Morph
 
+/** Draws a point along a Morph between two shapes. Used by the play/pause button. */
 class MorphShape(
     private val morph: Morph,
     private val progress: Float,

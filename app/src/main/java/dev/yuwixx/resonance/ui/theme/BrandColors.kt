@@ -1,6 +1,3 @@
-// Third-party brand colors (Last.fm, Maloja) and the "loved" heart. Each is harmonized toward
-// the current scheme's primary — hue nudged slightly, still recognisable — so it doesn't clash
-// with whatever dynamic/seeded palette is active.
 package dev.yuwixx.resonance.ui.theme
 
 import androidx.compose.material3.MaterialTheme
@@ -10,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.materialkolor.blend.Blend
 
+/** Brand colors are harmonized toward the scheme's primary so they don't clash with dynamic palettes. */
 object BrandColors {
     private val LastFmRed = Color(0xFFD51007)
     private val MalojaGreen = Color(0xFF1A8C4E)

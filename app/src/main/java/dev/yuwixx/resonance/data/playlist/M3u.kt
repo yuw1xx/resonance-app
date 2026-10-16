@@ -1,4 +1,3 @@
-// M3U / M3U8 playlist parsing and writing. Pure Kotlin (no Android types) so it's unit-testable.
 package dev.yuwixx.resonance.data.playlist
 
 import java.net.URLDecoder
@@ -61,7 +60,7 @@ object M3uParser {
         return M3uPlaylist(name, entries)
     }
 
-    // "#EXTINF:<duration> [key="value" …],<display>" — display is usually "Artist - Title".
+    // "#EXTINF:<duration> [key="value" ...],<display>", where display is usually "Artist - Title".
     private fun parseExtInf(body: String): Triple<Int?, String?, String?> {
         val comma = indexOfDisplayComma(body)
         val head = if (comma >= 0) body.substring(0, comma) else body
@@ -120,9 +119,8 @@ object M3uWriter {
 
     data class Track(val path: String, val durationMs: Long, val artist: String, val title: String)
 
-    /** Writes an extended M3U. With [relativeToDir] set (the folder the file will live in),
-     *  locations under that folder are written relative to it — portable when the music and
-     *  playlists are copied together to another device or PC. */
+    /** Writes an extended M3U. Paths under [relativeToDir] are written relative to it, so the
+     *  playlist still works when copied along with the music. */
     fun write(name: String, tracks: List<Track>, relativeToDir: String? = null): String = buildString {
         appendLine("#EXTM3U")
         appendLine("#PLAYLIST:$name")

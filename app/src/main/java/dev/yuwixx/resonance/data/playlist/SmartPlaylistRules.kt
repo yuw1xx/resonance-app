@@ -1,5 +1,3 @@
-// Smart playlists: a rule set stored as JSON (smart_playlists.rulesJson) and evaluated in
-// memory against the library, so results stay live as songs, play counts and likes change.
 package dev.yuwixx.resonance.data.playlist
 
 import com.squareup.moshi.JsonClass
@@ -7,6 +5,10 @@ import dev.yuwixx.resonance.data.model.Song
 import kotlin.math.floor
 import kotlin.random.Random
 
+/**
+ * Smart playlist rules, stored as JSON and evaluated in memory so results follow changes to the
+ * library, play counts and likes.
+ */
 @JsonClass(generateAdapter = true)
 data class SmartRules(
     /** true = every rule must match, false = any rule. */

@@ -1,6 +1,3 @@
-// Offline download/caching for Navidrome songs: enqueues background downloads (via
-// SongDownloadManager/WorkManager), tracks per-song state in the song_downloads table, and
-// resolves a downloaded song's local file path for playback substitution.
 package dev.yuwixx.resonance.data.repository
 
 import android.content.Context
@@ -12,6 +9,7 @@ import dev.yuwixx.resonance.data.database.dao.PlaylistDao
 import dev.yuwixx.resonance.data.database.dao.SongDownloadDao
 import dev.yuwixx.resonance.data.database.entity.DownloadState
 import dev.yuwixx.resonance.data.database.entity.SongDownloadEntity
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import dev.yuwixx.resonance.data.worker.SongDownloadManager
 import java.io.File
 import java.io.IOException
@@ -43,10 +41,7 @@ class NavidromeDownloadRepository @Inject constructor(
     val downloadStates: Flow<Map<Long, SongDownloadEntity>> =
         songDownloadDao.getAll().map { list -> list.associateBy { it.songId } }
 
-    // Hot in-memory snapshot of songId -> local file path, kept live from the DB. Playback
-    // substitution (PlayerViewModel.toMediaItem(), MusicService.restoreQueue()) happens at
-    // MediaItem-build call sites that aren't suspend today — a synchronous snapshot read avoids
-    // threading suspend through every one of those call sites just for this one lookup.
+    // Song ID to downloaded file, kept in memory so MediaItems can be built without suspending.
     private val downloadedPaths = MutableStateFlow<Map<Long, String>>(emptyMap())
 
     init {
@@ -87,7 +82,7 @@ class NavidromeDownloadRepository @Inject constructor(
         downloadManager.cancelSong(songId)
         val entity = songDownloadDao.getBySongId(songId)
         if (entity != null) {
-            runCatching { File(entity.localFilePath).delete() }
+            runCatchingCancellable { File(entity.localFilePath).delete() }
             songDownloadDao.delete(songId)
         }
     }

@@ -1,5 +1,3 @@
-// Spotify Client Credentials flow: app-level auth (no user login) used only to look up
-// album art for tracks missing embedded artwork. Token is cached in memory until it expires.
 package dev.yuwixx.resonance.data.repository
 
 import kotlinx.coroutines.CancellationException
@@ -19,6 +17,10 @@ private const val TAG = "SpotifyRepo"
 private val DEFAULT_CLIENT_ID = BuildConfig.SPOTIFY_CLIENT_ID
 private val DEFAULT_CLIENT_SECRET = BuildConfig.SPOTIFY_CLIENT_SECRET
 
+/**
+ * Album art lookup through Spotify's client-credentials flow (no user login). The token is kept
+ * in memory until it expires.
+ */
 @Singleton
 class SpotifyRepository @Inject constructor(
     private val authApi: SpotifyAuthApi,

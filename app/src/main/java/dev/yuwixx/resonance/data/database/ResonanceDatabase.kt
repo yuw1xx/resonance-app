@@ -1,4 +1,3 @@
-// Room database declaration listing all entities and exposing DAO accessors.
 package dev.yuwixx.resonance.data.database
 
 import androidx.room.Database

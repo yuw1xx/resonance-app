@@ -1,5 +1,3 @@
-// Room @Entity classes mapping to database tables: songs, playlists, history,
-// artist artwork cache, lyrics, playback queue, liked songs, and Navidrome remote tracks/albums.
 package dev.yuwixx.resonance.data.database.entity
 
 import androidx.room.Entity
@@ -51,9 +49,7 @@ data class PlaylistEntity(
     val mixSource: String? = null,
     val mixType: String? = null,
     val lastMixGenerated: Long = 0L,
-    // Set once this playlist has been pushed to (or pulled from) Navidrome — only playlists
-    // created in Resonance sync both ways; a playlist that already exists only on the server
-    // stays visible through the existing read-only browse view instead of being auto-imported.
+    // Set once the playlist is linked to Navidrome. Server-only playlists aren't imported.
     val navidromePlaylistId: String? = null,
 )
 
@@ -117,8 +113,7 @@ data class ArtistInfoEntity(
     val fetchedAt: Long = System.currentTimeMillis(),
 )
 
-// Durable backup for the in-memory pending-scrobble queues in LastFmRepository/MalojaRepository
-// — a killed process shouldn't silently lose scrobbles queued while offline.
+// Persists the offline scrobble queues so they survive the process being killed.
 @Entity(tableName = "pending_scrobbles")
 data class PendingScrobbleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -131,10 +126,8 @@ data class PendingScrobbleEntity(
     val timestamp: Long,
 )
 
-// Durable retry queue for star/unstar actions not yet pushed to Navidrome (offline, or the
-// push failed) — mirrors PendingScrobbleEntity's pattern. Its mere presence for a songId means
-// "not yet synced"; a pull from the server skips any song with a pending row here, so a local
-// action always wins over a stale remote read instead of needing timestamp-based merging.
+// Star changes not yet pushed to Navidrome. A pull skips songs that have a row here, so the
+// local change wins.
 @Entity(tableName = "pending_star_actions")
 data class PendingStarActionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -149,9 +142,8 @@ object StarAction {
     const val UNSTAR = "UNSTAR"
 }
 
-// Offline-download tracking for Navidrome songs. Kept as its own table (not extra columns on
-// NavidromeSongEntity) because NavidromeRepository.syncLibrary() deletes rows for songs that
-// disappear from the server — download state needs an independent lifecycle.
+// Downloads of Navidrome songs. A separate table because sync deletes rows of songs that leave
+// the server.
 @Entity(tableName = "song_downloads")
 data class SongDownloadEntity(
     @PrimaryKey val songId: Long,
@@ -180,7 +172,7 @@ data class LyricsEntity(
     val fetchedAt: Long = System.currentTimeMillis(),
 )
 
-// id is always 0 — we keep exactly one row and overwrite it on every queue change.
+// A single row (id 0), overwritten on every queue change.
 @Entity(tableName = "queues")
 data class QueueEntity(
     @PrimaryKey val id: Long = 0L,

@@ -1,5 +1,3 @@
-// Room DAO interfaces for every table: songs, playlists, history, lyrics, liked songs,
-// artist artwork cache, playback queue, and Navidrome remote tracks/albums.
 package dev.yuwixx.resonance.data.database.dao
 
 import androidx.room.*
@@ -152,8 +150,7 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE navidromePlaylistId = :navidromePlaylistId LIMIT 1")
     suspend fun getPlaylistByNavidromeId(navidromePlaylistId: String): PlaylistEntity?
 
-    // Used by backup restore to dedupe by name instead of always inserting a new row — isMix = 0
-    // excludes auto-generated Smart Mixes, which backups never contain and shouldn't be merged into.
+    // Backup restore matches playlists by name. Mixes are never in a backup, so they're excluded.
     @Query("SELECT * FROM playlists WHERE name = :name AND isMix = 0 LIMIT 1")
     suspend fun getPlaylistByName(name: String): PlaylistEntity?
 }

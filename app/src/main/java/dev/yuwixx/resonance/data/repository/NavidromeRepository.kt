@@ -16,6 +16,7 @@ import dev.yuwixx.resonance.data.model.*
 import dev.yuwixx.resonance.data.network.*
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.util.md5Hex
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import dev.yuwixx.resonance.data.util.sha256Hex
 import java.io.File
 import java.time.Instant
@@ -119,11 +120,10 @@ class NavidromeRepository @Inject constructor(
     /**
      * Brings the local Navidrome cache up to date.
      *
-     * Cheap by default: one getScanStatus call, and nothing else when the server's library
-     * hasn't been rescanned since the last sync. When it has (or [force]), songs are paged in
-     * with search3 (~1 request per 500 songs instead of one per album), albums with
-     * getAlbumList2, and only rows that actually changed are written — unchanged rows aren't
-     * touched, so the UI doesn't reload. One sync at a time.
+     * Usually just one getScanStatus call: nothing else happens unless the server rescanned its
+     * library since the last sync, or [force] is set. Then songs are paged in with search3 (one
+     * request per 500 songs) and albums with getAlbumList2, and only changed rows are written.
+     * One sync runs at a time.
      */
     suspend fun syncLibrary(force: Boolean = false): Boolean = syncMutex.withLock {
         withContext(Dispatchers.IO) { syncLocked(force) }
@@ -134,7 +134,7 @@ class NavidromeRepository @Inject constructor(
         val creds = navidromeApiProvider.currentCredentials() ?: return false
 
         try {
-            val status = runCatching { api.getScanStatus().ok.scanStatus }.getOrNull()
+            val status = runCatchingCancellable { api.getScanStatus().ok.scanStatus }.getOrNull()
             val stamp = status?.let { "${creds.serverUrl}|${creds.username}|${it.lastScan}|${it.count}" }
             val hasCache = navidromeSongDao.count() > 0
             if (!force && hasCache) {
@@ -171,7 +171,7 @@ class NavidromeRepository @Inject constructor(
             // Servers that don't support the empty-query listing: fall back to album details.
             if (songs.isEmpty() && albums.isNotEmpty()) {
                 albums.forEachIndexed { index, summary ->
-                    val detail = runCatching { api.getAlbum(summary.id).ok.album }.getOrNull()
+                    val detail = runCatchingCancellable { api.getAlbum(summary.id).ok.album }.getOrNull()
                     songs += detail?.song.orEmpty()
                     if (index % 20 == 0) _syncState.value = NavidromeSyncState.Syncing(index, songs.size, estimatedTotal)
                 }
@@ -231,13 +231,13 @@ class NavidromeRepository @Inject constructor(
         val creds = navidromeApiProvider.currentCredentials() ?: return@withContext emptyList()
         val file = artistsFile
         if (!file.exists()) return@withContext emptyList()
-        runCatching { artistsAdapter.fromJson(file.readText()) }.getOrNull().orEmpty().map { it.toDomain(creds) }
+        runCatchingCancellable { artistsAdapter.fromJson(file.readText()) }.getOrNull().orEmpty().map { it.toDomain(creds) }
     }
 
     private suspend fun refreshArtistCache() {
         val api = navidromeApiProvider.currentApi() ?: return
-        val artists = runCatching { api.getArtists().ok.artists?.index?.flatMap { it.artist } }.getOrNull() ?: return
-        runCatching { artistsFile.writeText(artistsAdapter.toJson(artists)) }
+        val artists = runCatchingCancellable { api.getArtists().ok.artists?.index?.flatMap { it.artist } }.getOrNull() ?: return
+        runCatchingCancellable { artistsFile.writeText(artistsAdapter.toJson(artists)) }
     }
 
     suspend fun getAllPlaylists(): List<Playlist> = withContext(Dispatchers.IO) {
@@ -245,7 +245,7 @@ class NavidromeRepository @Inject constructor(
         val creds = navidromeApiProvider.currentCredentials() ?: return@withContext emptyList()
         try {
             api.getPlaylists().ok.playlists?.playlist?.map { summary ->
-                val detail = runCatching { api.getPlaylist(summary.id).ok.playlist }.getOrNull()
+                val detail = runCatchingCancellable { api.getPlaylist(summary.id).ok.playlist }.getOrNull()
                 Playlist(
                     id = summary.id.toLongOrNull() ?: stableLongId(summary.id),
                     name = summary.name,
@@ -283,8 +283,7 @@ class NavidromeRepository @Inject constructor(
         }
     }
 
-    // Untranscoded original (rest/download), not rest/stream — the right choice for a
-    // permanent offline copy, since stream.view may be transcoded per server config.
+    // The original file (rest/download); rest/stream may be transcoded by the server.
     suspend fun buildDownloadUrl(songId: String): String? {
         val creds = navidromeApiProvider.currentCredentials() ?: return null
         return buildDownloadUrl(creds.serverUrl, creds.username, creds.password, songId)
@@ -292,10 +291,9 @@ class NavidromeRepository @Inject constructor(
 
 }
 
-// Token auth for URLs that get stored or cached (stream, download, cover art). The salt is
-// stable per server + account, so the same song/cover always has the same URL: syncs don't
-// rewrite every row with fresh salts and image/audio caches keep hitting across launches.
-// (API calls still get a fresh salt per request from NavidromeAuthInterceptor.)
+// Token auth for URLs that are stored or cached (stream, download, cover art). The salt is fixed
+// per server and account, so a song keeps the same URL and caches keep working across syncs.
+// API calls get a fresh salt per request from NavidromeAuthInterceptor.
 private fun authQuery(serverUrl: String, username: String, password: String): String {
     val salt = sha256Hex("resonance|${serverUrl.trimEnd('/')}|$username").take(12)
     val token = md5Hex("$password$salt")
@@ -311,14 +309,8 @@ private fun buildDownloadUrl(serverUrl: String, username: String, password: Stri
 private fun coverArtUrl(creds: NavidromeApiProvider.Credentials, id: String): String =
     "${creds.serverUrl.trimEnd('/')}/rest/getCoverArt?id=$id&${authQuery(creds.serverUrl, creds.username, creds.password)}"
 
-// Subsonic/Navidrome IDs are opaque strings (usually UUIDs), but the shared Song/Album domain
-// models use a Long id to stay compatible with local MediaStore songs, so non-numeric ids need
-// mapping to a Long. String.hashCode() is only 32 bits — collisions become likely well within
-// the size of a real library (~1% chance already at ~10k items, per the birthday bound), which
-// would silently merge two different songs' identity (queue persistence, playback, DB lookups
-// all key off this id). FNV-1a's 64-bit output makes collisions practically impossible instead.
-// Not private: NavidromeDownloadRepository needs the same string->Long mapping to match a
-// domain-model album/song id back to its raw Subsonic string id.
+// Maps Subsonic string IDs to the Long IDs the domain models use. 64-bit FNV-1a, because a 32-bit
+// hash already collides about 1% of the time at 10k songs.
 internal fun stableLongId(s: String): Long {
     var hash = -3750763034362895579L // FNV-1a 64-bit offset basis
     for (b in s.toByteArray(Charsets.UTF_8)) {
@@ -331,8 +323,8 @@ internal fun stableLongId(s: String): Long {
 // Accepts both "2025-03-26T22:26:35Z" and offset forms like "2025-03-26T22:26:35+00:00".
 private fun parseIsoMillis(iso: String?): Long? {
     if (iso.isNullOrBlank()) return null
-    return runCatching { OffsetDateTime.parse(iso).toInstant().toEpochMilli() }.getOrNull()
-        ?: runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull()
+    return runCatchingCancellable { OffsetDateTime.parse(iso).toInstant().toEpochMilli() }.getOrNull()
+        ?: runCatchingCancellable { Instant.parse(iso).toEpochMilli() }.getOrNull()
 }
 
 private fun SubsonicSong.toEntity(creds: NavidromeApiProvider.Credentials): NavidromeSongEntity {
@@ -358,8 +350,7 @@ private fun SubsonicSong.toEntity(creds: NavidromeApiProvider.Credentials): Navi
         bitrate = bitRate ?: 0,
         size = size ?: 0L,
         playCount = playCount ?: 0L,
-        // cachedAt doubles as "date added" in the UI — use the server's, so "Recently added"
-        // reflects the library rather than the last sync.
+        // cachedAt is shown as "date added", so use the server's date rather than the sync time.
         cachedAt = parseIsoMillis(created) ?: System.currentTimeMillis(),
     )
 }

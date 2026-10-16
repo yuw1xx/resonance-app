@@ -1,5 +1,3 @@
-// UI for importing .m3u/.m3u8 playlists: the file picker launcher, the name-conflict prompt,
-// progress, and a results sheet listing anything that couldn't be matched.
 package dev.yuwixx.resonance.presentation.components
 
 import android.net.Uri

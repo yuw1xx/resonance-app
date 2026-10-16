@@ -7,15 +7,14 @@ import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.squareup.moshi.Moshi
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dev.yuwixx.resonance.BuildConfig
 import dev.yuwixx.resonance.data.database.dao.PendingScrobbleDao
 import dev.yuwixx.resonance.data.database.entity.PendingScrobbleEntity
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.network.MalojaApi
 import dev.yuwixx.resonance.data.network.MalojaScrobbleRequest
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.CopyOnWriteArrayList
@@ -92,9 +91,8 @@ class MalojaRepository @Inject constructor(
         }
     }
 
-    // Mirrors the current in-memory pending list into the DB so a killed process doesn't lose
-    // whatever's still unflushed. Delete-all-then-reinsert instead of per-row tracking —
-    // simpler, and flushes are already infrequent/batched.
+    // Writes the pending queue to the DB so a killed process doesn't lose it. Flushes are rare,
+    // so the table is simply replaced.
     private suspend fun persistPendingToDb() {
         pendingScrobbleDao.deleteAllForService("MALOJA")
         pending.forEach { p ->
@@ -154,7 +152,7 @@ class MalojaRepository @Inject constructor(
         }
     }
 
-    suspend fun testConnection(url: String, key: String): Result<String> = runCatching {
+    suspend fun testConnection(url: String, key: String): Result<String> = runCatchingCancellable {
         if (url.isBlank()) error("Server URL is empty")
         if (key.isBlank()) error("API key is empty")
         val api = buildApi(url) ?: error("Not a valid server address")

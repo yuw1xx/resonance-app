@@ -1,7 +1,3 @@
-// Reads audio metadata via MediaMetadataRetriever and writes it via the shared AudioTagWriter
-// (jaudiotagger direct file write) — the same path MusicRepository's Tag Editor screen and
-// batch tag editing already use, so a fix or scoped-storage improvement to one benefits all
-// three call sites instead of drifting across two separate write implementations.
 package dev.yuwixx.resonance.domain.usecase
 
 import android.content.Context
@@ -19,6 +15,10 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Reads tags with MediaMetadataRetriever. Writes go through AudioTagWriter, like every other tag
+ * edit.
+ */
 @Singleton
 class TagEditor @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -62,12 +62,16 @@ class TagEditor @Inject constructor(
     suspend fun readEmbeddedLyrics(uri: Uri): String? = withContext(Dispatchers.IO) {
         // Downloaded copies (file://) are read directly; MediaStore items need their path.
         @Suppress("DEPRECATION")
-        val path = if (uri.scheme == "file") uri.path else context.contentResolver.query(
-            uri,
-            arrayOf(MediaStore.Audio.Media.DATA),
-            null, null, null,
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(0) else null
+        val path = if (uri.scheme == "file") {
+            uri.path
+        } else {
+            context.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.Audio.Media.DATA),
+                null, null, null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
         } ?: return@withContext null
 
         try {

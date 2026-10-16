@@ -49,10 +49,8 @@ class ShareViewModel @Inject constructor(
     val remoteTtlHours: StateFlow<Int> = _remoteTtlHours.asStateFlow()
     fun setRemoteTtlHours(hours: Int) { _remoteTtlHours.value = hours }
 
-    /** Shares whatever's currently selected — a single song via the existing one-song relay
-     *  path, or multiple songs via the manifest-linked multi-song path. Capped to match the
-     *  relay's own per-manifest song limit so a huge selection fails fast instead of
-     *  uploading everything and only then being rejected when the manifest is created. */
+    /** Shares the selection: one song directly, several through a manifest. The cap matches
+     *  the relay's manifest limit, so an oversized selection fails before anything uploads. */
     fun prepareRemoteTransfer() {
         val songs = _selectedSongs.value.take(MAX_SHARE_SONGS)
         if (songs.isEmpty()) return
@@ -109,7 +107,6 @@ class ShareViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        super.onCleared()
         nearbyManager.stopScanning()
         transferManager.cancel()
     }

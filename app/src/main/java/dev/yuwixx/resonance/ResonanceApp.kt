@@ -1,5 +1,3 @@
-// Application entry point: wires Hilt's WorkManager factory, kicks off the auto-scan schedule,
-// and pre-configures the Navidrome API client from saved credentials.
 package dev.yuwixx.resonance
 
 import android.app.Application

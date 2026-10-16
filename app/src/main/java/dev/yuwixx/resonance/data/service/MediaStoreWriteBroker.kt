@@ -1,9 +1,3 @@
-// Bridges MediaStore.createWriteRequest's system consent dialog (needed to write scoped-storage
-// files this app doesn't own — e.g. a song it didn't itself create) between AudioTagWriter, which
-// has no Activity/launcher of its own, and the single ActivityResultLauncher MainActivity
-// registers on startup. There's only one Activity in this app, so one bound launcher is enough;
-// concurrent requests are serialized behind a Mutex rather than racing two deferreds against one
-// launcher/callback.
 package dev.yuwixx.resonance.data.service
 
 import kotlinx.coroutines.withContext
@@ -21,6 +15,10 @@ import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Hands MediaStore write-consent requests from AudioTagWriter to the launcher MainActivity
+ * registers. There is only one launcher, so requests are serialized with a Mutex.
+ */
 @Singleton
 class MediaStoreWriteBroker @Inject constructor() {
     private var launcher: ActivityResultLauncher<IntentSenderRequest>? = null
@@ -33,10 +31,7 @@ class MediaStoreWriteBroker @Inject constructor() {
 
     fun unbind(launcher: ActivityResultLauncher<IntentSenderRequest>) {
         if (this.launcher === launcher) {
-            // Resolve any in-flight request before clearing the launcher — otherwise, if the
-            // Activity is destroyed before the system dialog's result callback fires, the
-            // coroutine awaiting `pending` in requestWriteAccess() stays suspended forever,
-            // permanently holding the Mutex (this is a @Singleton) and hanging every future call.
+            // Complete a pending request first, or its caller would wait forever holding the Mutex.
             pending?.complete(false)
             pending = null
             this.launcher = null
@@ -48,9 +43,7 @@ class MediaStoreWriteBroker @Inject constructor() {
         pending = null
     }
 
-    // Returns false immediately (no dialog shown) if no launcher is currently bound (e.g. the
-    // Activity was destroyed mid-request) — callers already treat "not granted" as "write
-    // failed", so this degrades the same way a user-denied prompt would.
+    // Returns false without a dialog when no launcher is bound, the same as a denied prompt.
     @RequiresApi(Build.VERSION_CODES.R)
     suspend fun requestWriteAccess(context: Context, uris: List<Uri>): Boolean = mutex.withLock {
         val activeLauncher = launcher ?: return@withLock false

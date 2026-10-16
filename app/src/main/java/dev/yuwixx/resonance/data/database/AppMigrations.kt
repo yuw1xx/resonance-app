@@ -3,10 +3,7 @@ package dev.yuwixx.resonance.data.database
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-// Migration from schema v1 or v2 to v3.
-// Both recreate all tables from scratch: these were pre-release schemas with no
-// users to protect, so a clean slate is acceptable and safer than partial ALTER TABLEs
-// that could leave the schema in an inconsistent state.
+// v1 and v2 were pre-release schemas without users, so v3 recreates every table.
 
 private val CREATE_ALL_TABLES: Array<String> = arrayOf(
     """CREATE TABLE IF NOT EXISTS `songs` (
@@ -282,7 +279,7 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
             )
         """.trimIndent())
 
-        // Deleting a playlist used to leave its song refs behind.
+        // Remove song refs whose playlist was deleted.
         db.execSQL("DELETE FROM `playlist_songs` WHERE `playlistId` NOT IN (SELECT `id` FROM `playlists`)")
         db.execSQL("DELETE FROM `mix_navidrome_songs` WHERE `playlistId` NOT IN (SELECT `id` FROM `playlists`)")
     }

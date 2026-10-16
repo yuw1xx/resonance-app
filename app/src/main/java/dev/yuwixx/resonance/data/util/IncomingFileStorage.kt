@@ -1,7 +1,3 @@
-// Saves audio files received via Resonance Share (Nearby or LAN/P2P) into Music/Resonance.
-// On API 29+ scoped storage blocks direct File writes into the public Music directory unless
-// MANAGE_EXTERNAL_STORAGE ("All files access") is granted — which this app never requests — so
-// writes must go through MediaStore instead.
 package dev.yuwixx.resonance.data.util
 
 import android.content.ContentValues
@@ -14,6 +10,10 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 
+/**
+ * Saves received songs to Music/Resonance. On Android 10+ this goes through MediaStore, because
+ * scoped storage blocks direct writes to shared folders.
+ */
 object IncomingFileStorage {
 
     fun sanitizeFileName(name: String): String =
@@ -22,11 +22,8 @@ object IncomingFileStorage {
             .ifBlank { "Unknown" }
             .take(200)
 
-    // title/ext arrive from an externally-reachable deep link (resonance://receive, exported —
-    // reachable by any app, QR code, or webpage, not just Resonance's own P2P sender), so both
-    // must be sanitized. ext in particular must never contain a path separator: on API < 29 it
-    // flows straight into File(destDir, fileName), where "../../x" would traverse outside the
-    // intended folder.
+    // title and ext come from a deep link any app or web page can open. Below API 29 they end up
+    // in a File path, so path separators must not get through.
     private fun sanitizeExtension(ext: String): String {
         val cleaned = ext.trim().trimStart('.').replace(Regex("[^A-Za-z0-9]"), "")
         return cleaned.ifBlank { "mp3" }.take(10)

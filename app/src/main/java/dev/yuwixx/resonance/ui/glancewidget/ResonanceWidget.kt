@@ -1,5 +1,3 @@
-// Glance (Jetpack Compose) home-screen widget showing now-playing info, a seekable progress
-// bar, and playback controls. Receives state pushes from MusicService via updateState().
 package dev.yuwixx.resonance.ui.glancewidget
 
 import android.content.Context
@@ -154,11 +152,8 @@ class ResonanceWidget : GlanceAppWidget() {
     }
 
     companion object {
-        // Downsamples against a single generous target rather than a fixed inSampleSize=2 —
-        // Glance composes this same bitmap into every declared size breakpoint at once (not
-        // just whatever's on-screen right now), so there's no single "target widget size" to
-        // sample against; this keeps memory bounded regardless of the source image's actual
-        // resolution instead of scaling everything by a flat, source-blind factor of 2.
+        // Glance uses the bitmap in every size at once, so decode to one generous target size to
+        // keep memory bounded.
         private const val ARTWORK_TARGET_PX = 400
 
         private fun loadArtwork(context: Context, uriStr: String): Bitmap? {
@@ -261,8 +256,7 @@ private fun WidgetContent(
             .cornerRadius(cornerRadius)
             .clickable(actionStartActivity<MainActivity>()),
     ) {
-        // Height >=200dp is only reached by the two new large/square breakpoints — a short
-        // banner never qualifies, so this cleanly picks the stacked layout only for those.
+        // Only the large and square sizes are 200dp tall; they get the stacked layout.
         val stacked = widgetHeight >= 200.dp
 
         if (!hasSong) {
@@ -562,11 +556,7 @@ private fun ArtworkOrPlaceholder(bitmap: Bitmap?, size: Dp, cornerRadius: Dp) {
     }
 }
 
-// Track with filled overlay (Glance has no Slider), plus a row of invisible equal-width
-// clickable zones layered on top for coarse tap-to-seek. Android's home-screen-widget
-// RemoteViews view whitelist has never included a real draggable slider/seekbar — this
-// ~10%-granularity segmented-tap approach is the practical ceiling for a widget; full precise
-// scrubbing is still available from the lock-screen/notification media controls.
+// Glance has no slider, so the bar is a filled track with ten invisible tap zones on top.
 @Composable
 private fun SeekableProgressBar(trackWidth: Dp, progress: Float) {
     val fillWidth = (trackWidth * progress.coerceIn(0f, 1f)).coerceAtLeast(0.dp)

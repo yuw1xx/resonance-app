@@ -1,5 +1,3 @@
-// Pure "does this MusicBrainz release-group result actually match the song" decision, pulled out
-// of MetadataEnrichmentScanner.checkYear so it's unit-testable without a MusicBrainzApi/DI graph.
 package dev.yuwixx.resonance.domain.usecase
 
 object ReleaseGroupMatcher {

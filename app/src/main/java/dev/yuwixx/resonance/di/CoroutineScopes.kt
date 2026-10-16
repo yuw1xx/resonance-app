@@ -1,5 +1,3 @@
-// Process-lifetime coroutine scope for work that must outlive the component that started it
-// (e.g. MusicService persisting the queue from onDestroy without blocking the main thread).
 package dev.yuwixx.resonance.di
 
 import dagger.Module
@@ -12,6 +10,10 @@ import kotlinx.coroutines.SupervisorJob
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
+/**
+ * Process-lifetime scope for work that must outlive its caller, such as saving the queue from
+ * MusicService.onDestroy.
+ */
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class ApplicationScope

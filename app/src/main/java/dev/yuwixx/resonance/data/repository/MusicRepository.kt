@@ -1,8 +1,5 @@
-// Single source of truth for the local music library: MediaStore sync, domain-model flows,
-// smart queue generation, listen history, and in-place tag editing via jaudiotagger.
 package dev.yuwixx.resonance.data.repository
 
-import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
@@ -28,8 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.withContext
 
-// Compiled once and reused by naturalCompare() below — it's the comparator for every pairwise
-// comparison during an Albums/Artists sort, so recompiling it per call adds up on large libraries.
+// Compiled once: naturalCompare() runs for every comparison while sorting.
 private val NATURAL_SORT_CHUNK_REGEX = Regex("(\\d+|\\D+)")
 
 @Singleton
@@ -42,15 +38,12 @@ class MusicRepository @Inject constructor(
     private val audioTagWriter: AudioTagWriter,
     @ApplicationScope private val appScope: CoroutineScope,
 ) {
-    // The library flows below are shared: one mapping/grouping pass per change for every
-    // collector (player, library screens, home, search…), replayed to late subscribers, and
-    // kept alive briefly across screen changes. distinctUntilChanged drops Room re-emissions
-    // whose result didn't actually change.
+    // Shared so each change is mapped once for all collectors and survives brief screen changes.
+    // distinctUntilChanged drops Room re-emissions with the same result.
     private fun <T> Flow<T>.shared(): Flow<T> = distinctUntilChanged()
         .shareIn(appScope, SharingStarted.WhileSubscribed(10_000), replay = 1)
 
-    // combine() with 5 flows so that changing any pref instantly re-filters/re-maps songs
-    // without re-scanning MediaStore.
+    // Preference changes re-filter the songs without a MediaStore scan.
     val allSongs: Flow<List<Song>> = combine(
         songDao.getAllSongs(),
         prefs.artistDelimiter,
@@ -139,13 +132,10 @@ class MusicRepository @Inject constructor(
             entities.map { it.toDomain(delimiter) }
         }.flowOn(Dispatchers.Default)
 
-    // ─── MediaStore Sync ───
-
     /**
-     * Brings the songs table in line with MediaStore. Cheap when nothing changed: the scan is
-     * skipped entirely if MediaStore's generation (API 30+) and the duration filter match the
-     * last sync, and otherwise only new/changed rows are written — unchanged rows aren't touched,
-     * so collectors don't re-emit and play counts / ReplayGain survive.
+     * Brings the songs table in line with MediaStore. The scan is skipped when MediaStore's
+     * generation (API 30+) and the duration filter match the last sync. Otherwise only new and
+     * changed rows are written, so play counts and ReplayGain values are kept.
      */
     suspend fun syncWithMediaStore(force: Boolean = false) = withContext(Dispatchers.IO) {
         val minDuration = prefs.minTrackDurationMs.first()
@@ -275,8 +265,6 @@ class MusicRepository @Inject constructor(
         }
     }
 
-    // ─── Listen History ───
-
     suspend fun recordListen(songId: Long, durationListened: Long, totalDuration: Long) {
         if (!prefs.historyEnabled.first()) return
 
@@ -306,8 +294,6 @@ class MusicRepository @Inject constructor(
     suspend fun clearAllHistory() = withContext(Dispatchers.IO) {
         historyDao.clearAllHistory()
     }
-
-    // ─── Smart Queue ───
 
     suspend fun generateSmartQueue(
         seedSong: Song,
@@ -376,11 +362,7 @@ class MusicRepository @Inject constructor(
         SmartQueueResult(songs = result, reason = reason)
     }
 
-    // Returns whether the tags were actually saved. The physical file write is attempted first
-    // and the DB is only updated to match on success — previously the DB was updated
-    // unconditionally and a failed write was silently discarded, so a failure looked like success
-    // until the next library sync silently reverted the DB back to the real (unedited) file, with
-    // no feedback to the user about what happened.
+    // Returns whether the tags were saved. The DB is only updated after the file write succeeds.
     suspend fun updateSongTags(
         songId: Long,
         title: String,
@@ -423,12 +405,8 @@ class MusicRepository @Inject constructor(
         success
     }
 
-    // Applies only the fields the caller passes non-null — a multi-song batch edit where each
-    // field is independently opt-in, unlike updateSongTags (single song, every field always
-    // overwritten with the form's current value). Returns how many files were actually rewritten
-    // on disk; the DB is only updated for songs whose physical write succeeded (previously the DB
-    // was updated for every song regardless of per-song write success, same silent-divergence
-    // issue as updateSongTags had).
+    // Batch edit: only non-null fields are applied. Returns how many files were rewritten; the DB
+    // is updated only for those.
     suspend fun batchUpdateSongTags(
         songIds: List<Long>,
         albumArtist: String?,
@@ -468,8 +446,6 @@ class MusicRepository @Inject constructor(
     suspend fun updateReplayGain(songId: Long, trackGain: Float?, albumGain: Float?) {
         songDao.updateReplayGain(songId, trackGain, albumGain)
     }
-
-    // ─── Utilities ───
 
     // Sorts strings with embedded numbers numerically ("Track 2" before "Track 10").
     private fun naturalCompare(a: String, b: String): Int {

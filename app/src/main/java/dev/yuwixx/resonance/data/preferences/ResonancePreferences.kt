@@ -1,5 +1,3 @@
-// DataStore-backed preferences covering every user-configurable setting: playback, audio,
-// appearance, library, Navidrome, Last.fm, equalizer, and history thresholds.
 package dev.yuwixx.resonance.data.preferences
 
 import android.content.Context
@@ -9,7 +7,6 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.BackupPreferenceEntry
 import dev.yuwixx.resonance.data.model.MusicSource
-import dev.yuwixx.resonance.data.model.SortOrder
 import dev.yuwixx.resonance.data.security.SecureCredentialStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import kotlinx.coroutines.flow.Flow
@@ -28,9 +25,8 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
 )
 
-// Each preference is exposed as its own Flow over the same DataStore. Without
-// distinctUntilChanged every write (even to an unrelated key) re-emits all ~100 of them and
-// re-runs every downstream collector/combine across the app.
+// Every preference is its own Flow over one DataStore. Without distinctUntilChanged, any write
+// would re-emit all of them.
 private fun <T> Flow<Preferences>.mapDistinct(transform: suspend (Preferences) -> T): Flow<T> =
     map(transform).distinctUntilChanged()
 
@@ -245,7 +241,7 @@ class ResonancePreferences @Inject constructor(
     val autoScanIntervalHours: Flow<Int> = data.mapDistinct { it[AUTO_SCAN_INTERVAL_HOURS] ?: 0 }
     suspend fun setAutoScanIntervalHours(hours: Int) { ds.edit { it[AUTO_SCAN_INTERVAL_HOURS] = hours } }
 
-    // All Online Services default to disabled — the user must opt in from Settings.
+    // Online services are off until the user turns them on.
     val fetchArtistImages: Flow<Boolean> = data.mapDistinct { it[FETCH_ARTIST_IMAGES] ?: false }
     suspend fun setFetchArtistImages(enabled: Boolean) { ds.edit { it[FETCH_ARTIST_IMAGES] = enabled } }
 
@@ -331,11 +327,8 @@ class ResonancePreferences @Inject constructor(
 
     val navidromeUsername: Flow<String?> = data.mapDistinct { it[NAVIDROME_USERNAME] }
 
-    // Migrated out of plain DataStore into Keystore-backed encrypted storage (see
-    // SecureCredentialStore). navidromePassword used to be a Flow<String?>, but every caller
-    // only ever read it with .first() — never .collect() — so a plain suspend getter is a
-    // smaller, equally-correct change than building a Flow bridge over EncryptedSharedPreferences
-    // (which has no native cold-flow/change-listener mechanism the way DataStore does).
+    // The password lives in SecureCredentialStore. A plaintext copy left by an older version is
+    // moved there on first read.
     @Volatile private var navidromePasswordMigrated = false
 
     suspend fun getNavidromePassword(): String? {
@@ -396,13 +389,10 @@ class ResonancePreferences @Inject constructor(
     val amoledBlackTheme: Flow<Boolean> = data.mapDistinct { it[AMOLED_BLACK_THEME] ?: false }
     suspend fun setAmoledBlackTheme(enabled: Boolean) { ds.edit { it[AMOLED_BLACK_THEME] = enabled } }
 
-    // How seed colors (presets, the default brand color, artwork) expand into a full scheme.
+    // How a seed color expands into a full scheme.
     val paletteStyle: Flow<String> = data.mapDistinct { it[PALETTE_STYLE] ?: "TONAL_SPOT" }
     suspend fun setPaletteStyle(style: String) { ds.edit { it[PALETTE_STYLE] = style } }
 
-    // Tints the expanded player with a scheme generated from the current song's artwork.
-
-    // ─── M3U folder sync ───
     // SAF tree URI of the folder whose .m3u/.m3u8 files are kept in sync with app playlists.
     val playlistSyncFolder: Flow<String?> = data.mapDistinct { it[PLAYLIST_SYNC_FOLDER] }
     suspend fun setPlaylistSyncFolder(uri: String?) {
@@ -498,8 +488,7 @@ class ResonancePreferences @Inject constructor(
     suspend fun setRemoteShareServerUrl(v: String)   { ds.edit { it[REMOTE_SHARE_SERVER_URL] = v } }
     suspend fun setRemoteShareUploadToken(v: String) { ds.edit { it[REMOTE_SHARE_UPLOAD_TOKEN] = v } }
 
-    // Anonymous per-install identifier, sent to the relay server so it can rate-limit or
-    // ban per-device without any login. Never surfaced in the UI.
+    // Anonymous per-install ID for the share relay, so it can rate-limit without accounts.
     suspend fun getOrCreateDeviceId(): String {
         val existing = data.mapDistinct { it[DEVICE_ID] }.first()
         if (!existing.isNullOrBlank()) return existing
@@ -508,13 +497,8 @@ class ResonancePreferences @Inject constructor(
         return generated
     }
 
-    // ─── Backup / Restore ───
-
-    // Never leaves the device in a backup file, and never gets written back in on restore even
-    // if a hand-edited file claims one of these keys: credentials, tokens, server URLs/usernames,
-    // and device/session identity. (Actual secrets — Navidrome password, Last.fm session key's
-    // sibling encrypted fields — mostly live in SecureCredentialStore, not this DataStore; these
-    // are the sensitive fields that do live here.)
+    // Never exported, and ignored on import: credentials, tokens, server addresses, usernames
+    // and device identity. The real secrets are in SecureCredentialStore anyway.
     private val BACKUP_EXCLUDED_KEYS = setOf(
         "navidrome_server_url", "navidrome_username", "navidrome_password",
         "maloja_server_url", "maloja_api_key",

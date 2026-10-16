@@ -1,7 +1,3 @@
-// Long-press-drag reordering for LazyColumn items. The dragged item follows the finger (via
-// graphicsLayer, no relayout) and swaps with neighbours as it crosses their midpoint; the list
-// edge auto-scrolls. The caller keeps a local list for live reordering and commits the final
-// move once on drop.
 package dev.yuwixx.resonance.presentation.components
 
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -19,6 +15,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/**
+ * Long-press drag reordering for LazyColumn items. The dragged item follows the finger through
+ * graphicsLayer and swaps with a neighbour once it crosses its midpoint. The caller keeps a local
+ * list while dragging and commits the move on drop.
+ */
 @Stable
 class ReorderState internal constructor(
     private val listState: LazyListState,

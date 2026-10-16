@@ -15,9 +15,7 @@ import org.robolectric.annotation.Config
 import java.util.Calendar
 import java.util.TimeZone
 
-// HistoryDao's date/hour queries use SQLite's date()/strftime(..., 'localtime'), which resolves
-// against the JVM's default timezone — pinned to UTC here so expected timestamps are
-// deterministic regardless of the machine/CI runner this runs on.
+// The queries use SQLite's 'localtime', so the JVM timezone is pinned to UTC.
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class HistoryDaoTest {

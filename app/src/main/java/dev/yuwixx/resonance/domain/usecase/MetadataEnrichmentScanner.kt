@@ -1,7 +1,3 @@
-// Scans the local library against MusicBrainz (release year) and Last.fm (genre, only when the
-// tag is currently blank) and streams a list of proposed tag changes for review — nothing is
-// written to a file from here; MetadataEnrichmentViewModel applies only what the user approves
-// via the existing TagEditor write path.
 package dev.yuwixx.resonance.domain.usecase
 
 import dev.yuwixx.resonance.data.model.Song
@@ -9,12 +5,17 @@ import dev.yuwixx.resonance.data.network.ApiRateLimiter
 import dev.yuwixx.resonance.data.network.LastFmApi
 import dev.yuwixx.resonance.data.network.MusicBrainzApi
 import dev.yuwixx.resonance.data.repository.LastFmRepository
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
+/**
+ * Proposes release years from MusicBrainz and missing genres from Last.fm. It never writes; the
+ * user reviews and applies the changes.
+ */
 @Singleton
 class MetadataEnrichmentScanner @Inject constructor(
     private val musicBrainzApi: MusicBrainzApi,
@@ -41,12 +42,11 @@ class MetadataEnrichmentScanner @Inject constructor(
     }
 
     fun scan(songs: List<Song>): Flow<ScanProgress> = flow {
-        // Local-only, matching TagEditor's MediaStore-only write scope — Navidrome-remote songs
-        // aren't locally tag-writable.
+        // Local songs only; Navidrome files can't be tagged from here.
         val local = songs.filter { it.navidromeId == null }
         local.forEachIndexed { index, song ->
             emit(ScanProgress.InProgress(index, local.size, (local.size - index).toLong() * 1100L))
-            val changes = runCatching { mbLimiter.withRateLimit { checkSong(song) } }.getOrNull().orEmpty()
+            val changes = runCatchingCancellable { mbLimiter.withRateLimit { checkSong(song) } }.getOrNull().orEmpty()
             changes.forEach { emit(ScanProgress.FoundChange(it)) }
         }
         emit(ScanProgress.Done)
@@ -62,7 +62,7 @@ class MetadataEnrichmentScanner @Inject constructor(
     private suspend fun checkYear(song: Song): MetadataChange? {
         if (song.artist.isBlank()) return null
         val query = "artist:\"${song.artist}\" AND release:\"${song.album.ifBlank { song.title }}\""
-        val response = runCatching { musicBrainzApi.searchReleaseGroup(query = query, limit = 1) }.getOrNull() ?: return null
+        val response = runCatchingCancellable { musicBrainzApi.searchReleaseGroup(query = query, limit = 1) }.getOrNull() ?: return null
         val match = response.releaseGroups.firstOrNull() ?: return null
         val year = match.firstReleaseDate?.take(4)?.toIntOrNull() ?: return null
         if (year == song.year) return null
@@ -87,7 +87,7 @@ class MetadataEnrichmentScanner @Inject constructor(
     private suspend fun checkGenre(song: Song): MetadataChange? {
         if (song.artist.isBlank()) return null
         val apiKey = lastFmRepository.getApiKey()
-        val response = runCatching { lastFmApi.getArtistInfo(artist = song.artist, apiKey = apiKey) }.getOrNull() ?: return null
+        val response = runCatchingCancellable { lastFmApi.getArtistInfo(artist = song.artist, apiKey = apiKey) }.getOrNull() ?: return null
         val genre = response.artist?.tags?.tag?.firstOrNull()?.name?.takeIf { it.isNotBlank() } ?: return null
         return MetadataChange(
             song = song,

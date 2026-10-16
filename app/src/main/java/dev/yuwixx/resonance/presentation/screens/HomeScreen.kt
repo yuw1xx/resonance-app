@@ -2,7 +2,6 @@ package dev.yuwixx.resonance.presentation.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -16,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -104,7 +102,7 @@ fun HomeScreen(
                 }
             }
 
-            // Your Mixes — weekly auto-generated playlists (empty when location is "PLAYLISTS")
+            // Weekly generated mixes; empty when mixes are set to appear under Playlists.
             if (autoMixes.isNotEmpty()) {
                 item {
                     AppSectionHeader(

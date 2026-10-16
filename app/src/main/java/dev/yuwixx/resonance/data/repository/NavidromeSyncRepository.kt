@@ -1,13 +1,6 @@
-// Two-way sync of liked songs and playlists with Navidrome, via the Subsonic star/unstar and
-// createPlaylist/updatePlaylist/deletePlaylist endpoints. Star/unstar mutations go through a
-// durable pending-action queue (modeled on LastFmRepository's pending-scrobble queue) so an
-// offline like isn't lost; a pull from the server always defers to a song with a pending local
-// action, so the local action wins instead of needing timestamp-based conflict resolution.
 package dev.yuwixx.resonance.data.repository
 
 import android.util.Log
-import dev.yuwixx.resonance.data.network.ok
-import kotlinx.coroutines.CancellationException
 import dev.yuwixx.resonance.data.database.dao.LikedSongsDao
 import dev.yuwixx.resonance.data.database.dao.NavidromeSongDao
 import dev.yuwixx.resonance.data.database.dao.PendingStarActionDao
@@ -17,15 +10,22 @@ import dev.yuwixx.resonance.data.database.entity.PendingStarActionEntity
 import dev.yuwixx.resonance.data.database.entity.PlaylistSongCrossRef
 import dev.yuwixx.resonance.data.database.entity.StarAction
 import dev.yuwixx.resonance.data.network.NavidromeApiProvider
+import dev.yuwixx.resonance.data.network.ok
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import javax.inject.Inject
-import javax.inject.Singleton
 
+/**
+ * Syncs likes and playlists with Navidrome. Star changes go through a pending-action queue so
+ * offline likes aren't lost, and a pull never overrides a song that still has a pending action.
+ */
 @Singleton
 class NavidromeSyncRepository @Inject constructor(
     private val navidromeApiProvider: NavidromeApiProvider,
@@ -40,8 +40,6 @@ class NavidromeSyncRepository @Inject constructor(
     init {
         scope.launch { flushPendingStarActions() }
     }
-
-    // ─── Likes ───
 
     fun star(songId: Long, navidromeId: String) {
         scope.launch {
@@ -74,8 +72,7 @@ class NavidromeSyncRepository @Inject constructor(
     suspend fun flushPendingStarActions() {
         val api = navidromeApiProvider.currentApi() ?: return
         flushMutex.withLock {
-            // Only the latest queued action per song matters — a rapid star-then-unstar only
-            // needs to push the net "unstar" result, not both calls in sequence.
+            // Only the latest action per song is pushed; star then unstar just sends the unstar.
             val latestPerSong = pendingStarActionDao.getAll()
                 .groupBy { it.songId }
                 .mapValues { (_, actions) -> actions.maxBy { it.timestamp } }
@@ -91,7 +88,7 @@ class NavidromeSyncRepository @Inject constructor(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    // Leave queued — retried on the next flush (next star/unstar, or next pull).
+                    // Stays queued for the next flush.
                 }
             }
         }
@@ -119,11 +116,10 @@ class NavidromeSyncRepository @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            // No network / server unreachable — local state stays as-is until the next pull.
+            // Server unreachable: keep the local state until the next pull.
         }
     }
 
-    // ─── Playlists ───
     // Only playlists created in Resonance sync both ways (a navidromePlaylistId gets assigned
     // on first push); playlists that already exist only on the server stay in the existing
     // read-only browse view rather than being auto-imported as editable.
@@ -154,34 +150,33 @@ class NavidromeSyncRepository @Inject constructor(
 
     suspend fun pushPlaylistRename(navidromePlaylistId: String, newName: String) {
         val api = navidromeApiProvider.currentApi() ?: return
-        runCatching { api.updatePlaylist(playlistId = navidromePlaylistId, name = newName) }
+        runCatchingCancellable { api.updatePlaylist(playlistId = navidromePlaylistId, name = newName) }
     }
 
     suspend fun pushPlaylistAddSongs(navidromePlaylistId: String, songNavidromeIds: List<String>) {
         if (songNavidromeIds.isEmpty()) return
         val api = navidromeApiProvider.currentApi() ?: return
-        runCatching { api.updatePlaylist(playlistId = navidromePlaylistId, songIdsToAdd = songNavidromeIds) }
+        runCatchingCancellable { api.updatePlaylist(playlistId = navidromePlaylistId, songIdsToAdd = songNavidromeIds) }
     }
 
     suspend fun pushPlaylistRemoveSong(navidromePlaylistId: String, songNavidromeId: String) {
         val api = navidromeApiProvider.currentApi() ?: return
-        runCatching { api.updatePlaylist(playlistId = navidromePlaylistId, songIdsToRemove = listOf(songNavidromeId)) }
+        runCatchingCancellable { api.updatePlaylist(playlistId = navidromePlaylistId, songIdsToRemove = listOf(songNavidromeId)) }
     }
 
     suspend fun pushPlaylistDelete(navidromePlaylistId: String) {
         val api = navidromeApiProvider.currentApi() ?: return
-        runCatching { api.deletePlaylist(navidromePlaylistId) }
+        runCatchingCancellable { api.deletePlaylist(navidromePlaylistId) }
     }
 
-    // Reconciles only playlists that already have a local navidromePlaylistId link — does not
-    // auto-import untouched server playlists as editable local ones.
+    // Only playlists already linked to Navidrome; server-only playlists aren't imported.
     suspend fun pullPlaylistsFromServer() {
         val api = navidromeApiProvider.currentApi() ?: return
         try {
             val remotePlaylists = api.getPlaylists().ok.playlists?.playlist.orEmpty()
             for (summary in remotePlaylists) {
                 val local = playlistDao.getPlaylistByNavidromeId(summary.id) ?: continue
-                val detail = runCatching { api.getPlaylist(summary.id).ok.playlist }.getOrNull() ?: continue
+                val detail = runCatchingCancellable { api.getPlaylist(summary.id).ok.playlist }.getOrNull() ?: continue
 
                 // Rewrite the local copy only when the server's track list actually differs.
                 val remoteIds = detail.entry.map { it.id.toLongOrNull() ?: stableLongId(it.id) }
@@ -199,7 +194,7 @@ class NavidromeSyncRepository @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            // No network / server unreachable — local state stays as-is until the next pull.
+            // Server unreachable: keep the local state until the next pull.
         }
     }
 }

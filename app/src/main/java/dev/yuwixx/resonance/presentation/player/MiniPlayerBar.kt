@@ -1,5 +1,3 @@
-// Collapsed player content: artwork, title/artist, play-pause and skip. Tap or drag up to
-// open the full player; swipe sideways to skip (the neighbouring song peeks in as you drag).
 package dev.yuwixx.resonance.presentation.player
 
 import androidx.compose.animation.AnimatedContent
@@ -154,7 +152,7 @@ fun MiniPlayerBar(
         )
 
         if (config.miniPlayerShowProgress) {
-            // Wavy while playing, flat when paused — the M3 Expressive "it's alive" cue.
+            // Wavy while playing, flat when paused.
             val amplitude by animateFloatAsState(
                 targetValue = if (isPlaying) 1f else 0f,
                 animationSpec = motion.slowEffectsSpec(),

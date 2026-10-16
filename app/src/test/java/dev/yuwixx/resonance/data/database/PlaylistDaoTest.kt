@@ -49,8 +49,7 @@ class PlaylistDaoTest {
         db.playlistDao().addSongToPlaylist(PlaylistSongCrossRef(playlistId, 2, 1))
         db.playlistDao().addSongToPlaylist(PlaylistSongCrossRef(playlistId, 3, 2))
 
-        // Move song 3 to the front — mirrors what PlaylistDetailScreen's drag-to-reorder does:
-        // reassign position = index for the whole list in its new order.
+        // Move song 3 to the front the way drag-to-reorder does: renumber the whole list.
         db.playlistDao().updateSongPosition(playlistId, 3, 0)
         db.playlistDao().updateSongPosition(playlistId, 1, 1)
         db.playlistDao().updateSongPosition(playlistId, 2, 2)

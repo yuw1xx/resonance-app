@@ -1,5 +1,3 @@
-// Last.fm integration: mobile-session authentication, now-playing updates, scrobbling
-// with offline queue, and track love/unlove. Uses its own DataStore separate from main prefs.
 package dev.yuwixx.resonance.data.repository
 
 import android.content.Context
@@ -18,6 +16,7 @@ import dev.yuwixx.resonance.data.network.LastFmApi
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.security.SecureCredentialStore
 import dev.yuwixx.resonance.data.util.md5Hex
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -78,10 +77,7 @@ class LastFmRepository @Inject constructor(
     val nowPlaying: Flow<Boolean> = store.data.map { it[LastFmKeys.NOW_PLAYING] ?: true }
     val onlyWifi: Flow<Boolean> = store.data.map { it[LastFmKeys.ONLY_WIFI]   ?: false }
 
-    // Migrated out of plain DataStore into Keystore-backed encrypted storage (see
-    // SecureCredentialStore). Was a Flow<String> before, but every use in this file only ever
-    // read it with .firstOrNull() — never .collect() — so a plain suspend getter is a smaller,
-    // equally-correct change than bridging a Flow over EncryptedSharedPreferences.
+    // Stored in SecureCredentialStore.
     @Volatile private var sessionKeyMigrated = false
 
     private suspend fun getSessionKey(): String {
@@ -129,9 +125,8 @@ class LastFmRepository @Inject constructor(
         }
     }
 
-    // Mirrors the current in-memory pendingScrobbles list into the DB so a killed process
-    // doesn't lose whatever's still unflushed. Delete-all-then-reinsert instead of per-row
-    // tracking — simpler, and flushes are already infrequent/batched.
+    // Writes the pending queue to the DB so a killed process doesn't lose it. Flushes are rare,
+    // so the table is simply replaced.
     private suspend fun persistPendingToDb() {
         pendingScrobbleDao.deleteAllForService("LASTFM")
         pendingScrobbles.forEach { p ->
@@ -321,8 +316,8 @@ class LastFmRepository @Inject constructor(
 
                 if (response.error != null) {
                     Log.w(TAG, "Scrobble error ${response.error}: ${response.message}")
-                    // 11 = service offline, 16 = temporarily unavailable — both are transient, re-queue.
-                    // All other API errors (bad session, invalid params, etc.) are permanent; drop them.
+                    // 11 (service offline) and 16 (temporarily unavailable) are retried; other
+                    // errors are permanent.
                     if (response.error == 11 || response.error == 16) pendingScrobbles.add(p)
                 } else {
                     Log.d(TAG, "Scrobbled: ${p.artist} – ${p.track}")
@@ -338,7 +333,7 @@ class LastFmRepository @Inject constructor(
         }
     }
 
-    suspend fun loveTrack(song: Song): Result<Unit> = runCatching {
+    suspend fun loveTrack(song: Song): Result<Unit> = runCatchingCancellable {
         val (apiKey, sk, sig) = buildSignedParams(
             "track.love",
             mapOf("artist" to song.displayArtist, "track" to song.title)
@@ -350,7 +345,7 @@ class LastFmRepository @Inject constructor(
         if (resp.error != null) error("Love failed: ${resp.message}")
     }
 
-    suspend fun unloveTrack(song: Song): Result<Unit> = runCatching {
+    suspend fun unloveTrack(song: Song): Result<Unit> = runCatchingCancellable {
         val (apiKey, sk, sig) = buildSignedParams(
             "track.unlove",
             mapOf("artist" to song.displayArtist, "track" to song.title)

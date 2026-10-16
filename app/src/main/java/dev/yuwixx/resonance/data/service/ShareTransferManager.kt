@@ -69,9 +69,7 @@ private class ProgressRequestBody(
         }
         val bufferedSink = countingSink.buffer()
         delegate.writeTo(bufferedSink)
-        // Without this, any bytes still sitting in bufferedSink's internal buffer never
-        // reach the network — the server sees fewer bytes than Content-Length promised and
-        // the connection dies mid-stream ("unexpected end of stream").
+        // Flush, or the last buffered bytes never reach the server.
         bufferedSink.flush()
     }
 }
@@ -105,10 +103,7 @@ class ShareTransferManager @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var prepareJob: Job? = null
 
-    // The injected OkHttpClient is shared app-wide and tuned for small API calls (15s
-    // connect/read, OkHttp's 10s default write timeout) — nowhere near enough to upload a
-    // multi-megabyte audio file over a typical home connection. Relay uploads/manifest
-    // calls need their own generous timeouts.
+    // The shared client's timeouts are made for small API calls, too short to upload a song.
     private val relayClient: OkHttpClient by lazy {
         okHttpClient.newBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)

@@ -1,6 +1,3 @@
-// Disk cache for streamed audio (Navidrome). Stream URLs are stable per song, so a replay or a
-// seek back into an already-played part is served from disk instead of downloading again.
-// Local files bypass it (CacheDataSource only caches network sources it is asked to read).
 package dev.yuwixx.resonance.di
 
 import android.content.Context
@@ -17,6 +14,10 @@ import dagger.hilt.components.SingletonComponent
 import java.io.File
 import javax.inject.Singleton
 
+/**
+ * Disk cache for streamed audio. Stream URLs are stable per song, so replays and seeks back are
+ * served from disk.
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 object MediaCacheModule {

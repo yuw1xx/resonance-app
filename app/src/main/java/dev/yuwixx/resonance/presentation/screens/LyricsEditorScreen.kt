@@ -5,8 +5,6 @@ package dev.yuwixx.resonance.presentation.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
@@ -18,14 +16,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.data.network.LrclibResponse
 import dev.yuwixx.resonance.data.repository.LyricsRepository
 import dev.yuwixx.resonance.presentation.components.formatDuration
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
 import java.util.Locale
-import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,8 +31,7 @@ fun LyricsEditorScreen(
     lyricsRepository: LyricsRepository,
     onBack: () -> Unit,
 ) {
-    // Pinned to the song the editor was opened for: if playback moves on while editing, Save
-    // must still write to this song, not to whatever is playing now.
+    // Save writes to the song the editor was opened for, even if playback has moved on.
     val song = remember { playerViewModel.currentSong.value }
     if (song == null) {
         LaunchedEffect(Unit) { onBack() }

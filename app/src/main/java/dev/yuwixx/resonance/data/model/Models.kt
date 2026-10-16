@@ -1,5 +1,3 @@
-// Domain model data classes and enums used throughout the app: Song, Album, Artist, Playlist,
-// playback state types (RepeatMode, SleepTimer, SortOrder), and smart queue types.
 package dev.yuwixx.resonance.data.model
 
 import android.net.Uri
@@ -34,8 +32,7 @@ data class Song(
     val artworkUri: Uri?,
     val listenCount: Int = 0,
     val lastListened: Long = 0L,
-    // Non-null only for Navidrome-sourced songs — the original opaque Subsonic string id,
-    // needed to star/unstar against the server (id is the stableLongId-mapped Long instead).
+    // The Subsonic ID of a Navidrome song, needed to star it on the server.
     val navidromeId: String? = null,
 ) {
     val displayArtist: String get() = artists.joinToString(", ")

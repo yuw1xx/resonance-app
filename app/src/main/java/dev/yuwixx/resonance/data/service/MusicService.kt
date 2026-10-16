@@ -1,5 +1,3 @@
-// Media3 MediaLibraryService that owns the ExoPlayer instance, manages the playback session,
-// and handles crossfade, ReplayGain, EQ, headphone events, queue persistence, and widget updates.
 package dev.yuwixx.resonance.data.service
 
 import android.app.PendingIntent
@@ -106,7 +104,7 @@ class MusicService : MediaLibraryService() {
     private var showSkipButtons = true
     private var lockscreenArtworkEnabled = true
 
-    // ─── Sleep timer (owned here so it survives the UI being closed) ───
+    // The sleep timer lives in the service so it keeps running with the UI closed.
     private var sleepJob: Job? = null
     private var sleepEndsAt = 0L
     private var sleepMinutes = 0
@@ -125,9 +123,8 @@ class MusicService : MediaLibraryService() {
     // True while restoreQueue applies the saved shuffle order, which must not be reshuffled.
     private var restoringShuffle = false
     private var smartShuffleEnabled: Boolean = false
-    // Tracks the actual playlist contents (by id, in window-index order) so a fresh
-    // setMediaItems() call can be told apart from a shuffle-order-only Timeline update —
-    // the latter fires the same onTimelineChanged callback but must not re-trigger itself.
+    // The playlist's song IDs in window order. A shuffle-order-only timeline change fires the same
+    // callback as a new queue; comparing this tells them apart.
     private var lastKnownMediaItemIds: List<Long> = emptyList()
 
     override fun onCreate() {
@@ -141,8 +138,6 @@ class MusicService : MediaLibraryService() {
         registerHeadphonesReceiver()
         registerWidgetActionsReceiver()
     }
-
-    // ─── Player / Session Setup ───
 
     private fun buildPlayer() {
         val loadControl = DefaultLoadControl.Builder()
@@ -289,10 +284,7 @@ class MusicService : MediaLibraryService() {
         private const val PRELOAD_AHEAD = 2
         private const val WIDGET_PROGRESS_INTERVAL_MS = 10_000L
         private const val EXTRA_STASHED_ARTWORK = "resonance.stashedArtworkUri"
-        // How often scheduleCrossfade's poll loop checks player.duration/currentPosition while
-        // the duration isn't known yet (e.g. some streamed/transcoded tracks briefly report no
-        // duration) — falling back to this much longer interval instead of the normal 50ms avoids
-        // spinning the coroutine dispatcher for nothing until the duration resolves.
+        // Poll interval while the duration is still unknown; some streams report none at first.
         private const val DURATION_UNKNOWN_POLL_MS = 300L
     }
 
@@ -366,8 +358,6 @@ class MusicService : MediaLibraryService() {
             Log.w("MusicService", "Failed to set up Equalizer (session ${player.audioSessionId})", e)
         }
     }
-
-    // ─── Preferences ───
 
     private fun applyInitialPreferences() {
         scope.launch {
@@ -489,8 +479,6 @@ class MusicService : MediaLibraryService() {
         }
     }
 
-    // ─── Crossfade & Volume ───
-
     private fun scheduleCrossfade(fadeIn: Boolean = false) {
         crossfadeJob?.cancel()
 
@@ -555,8 +543,7 @@ class MusicService : MediaLibraryService() {
         player.volume = targetVolume
     }
 
-    // ReplayGain multiplier: convert dB gain tag → linear amplitude, fall back to -3 dBFS
-    // normalisation (0.707) if no tag is present and volume normalisation is on.
+    // ReplayGain as a linear multiplier. Without a tag, normalisation falls back to -3 dBFS (0.707).
     private fun computeTargetVolume(): Float {
         if (replayGainMode != "OFF") {
             val extras = player.currentMediaItem?.mediaMetadata?.extras
@@ -595,8 +582,6 @@ class MusicService : MediaLibraryService() {
         if (crossfadeJob?.isActive == true) return
         player.volume = computeTargetVolume()
     }
-
-    // ─── Sleep timer ───
 
     private fun setSleepTimer(minutes: Int, tracks: Int, fade: Boolean) {
         clearSleepTimer(publish = false)
@@ -672,13 +657,9 @@ class MusicService : MediaLibraryService() {
         mediaSession.setSessionExtras(extras)
     }
 
-    // ─── Notification / Lockscreen ───
-
-    // Strips (or restores) the current item's artwork so it doesn't show on the lockscreen/
-    // notification. The original URI is stashed in the item's extras, so turning the setting
-    // back on restores it, and the check runs on every transition since only the current item
-    // is touched. No-op when the item is already in the wanted state, so it never needlessly
-    // replaces the playing item.
+    // Hides or restores the current item's artwork on the lock screen and notification. The
+    // original URI is kept in the item's extras so it can be put back. Only the current item is
+    // touched, so this runs on every transition, and does nothing if the item is already right.
     private fun applyLockscreenArtwork() {
         val index = player.currentMediaItemIndex
         val item = player.currentMediaItem ?: return
@@ -749,8 +730,6 @@ class MusicService : MediaLibraryService() {
             registerReceiver(headphonesReceiver, filter)
         }
     }
-
-    // ─── Queue Persistence ───
 
     private fun restoreQueue() {
         scope.launch(Dispatchers.IO) {
@@ -902,9 +881,8 @@ class MusicService : MediaLibraryService() {
         }
     }
 
-    // Applies a plain random order synchronously — no suspension, no window where
-    // shuffleModeEnabled is true but the order ExoPlayer actually uses is still sequential.
-    // If smart shuffle is on, it's refined asynchronously right after via applySmartShuffleOrder().
+    // Applies a random order right away, so shuffle is never on with a sequential order in place.
+    // Smart shuffle then refines it in the background.
     private fun applyShuffleOrder() {
         val count = player.mediaItemCount
         if (count == 0) return
@@ -935,11 +913,11 @@ class MusicService : MediaLibraryService() {
         // insertions (an undo restoring a song mid-queue) keep ExoPlayer's placement.
         val current = player.currentMediaItemIndex
         val insertedSet = inserted.toHashSet()
-        // The run of new windows directly after the current one…
+        // New windows directly after the current one,
         val afterCurrent = ArrayList<Int>()
         var next = current + 1
         while (next in insertedSet) afterCurrent += next++
-        // …and the run at the very end of the queue.
+        // and new windows at the end of the queue.
         val atEnd = ArrayList<Int>()
         var last = currentIds.lastIndex
         while (last in insertedSet && last !in afterCurrent) atEnd.add(0, last--)
@@ -1001,9 +979,9 @@ class MusicService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
-        // The queue is already persisted on every transition and pause; this final save runs on
-        // the process-wide scope so it completes after the service is gone without blocking the
-        // main thread (the old runBlocking here was an ANR risk).
+        // The queue is also saved on every transition and pause. This last save runs on the
+        // process-wide scope so it finishes after the service is gone without blocking the main
+        // thread.
         val finalQueue = buildQueueEntity()
         val appContext = applicationContext
         applicationScope.launch(Dispatchers.IO) {
@@ -1024,8 +1002,6 @@ class MusicService : MediaLibraryService() {
         player.release()
         super.onDestroy()
     }
-
-    // ─── Home-Screen Widget ───
 
     private fun pushWidgetState() {
         val mediaItem = player.currentMediaItem ?: run {
@@ -1154,8 +1130,6 @@ class MusicService : MediaLibraryService() {
         )
     }
 
-    // ─── Android Auto / Media Browser ───
-
     // Exposes a two-level browse tree (Songs, Playlists) to Android Auto and other Media3 browsers.
     private inner class LibraryCallback : MediaLibrarySession.Callback {
 
@@ -1174,8 +1148,7 @@ class MusicService : MediaLibraryService() {
                 .add(sleepSetCommand)
                 .add(sleepCancelCommand)
                 .build()
-            // Player commands are left at the builder's default: copying them from `result`
-            // granted none at all, so the app's controller couldn't even play.
+            // Player commands stay at the builder's default; the ones in `result` are empty.
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(commands)
                 .build()
@@ -1287,8 +1260,7 @@ class MusicService : MediaLibraryService() {
 
             val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
             scope.launch(Dispatchers.IO) {
-                // Always complete the future: an exception here used to leave the controller
-                // waiting forever on a voice search.
+                // Always complete the future, or the controller waits forever.
                 val resolved = try {
                     searchForPlayback(query).ifEmpty { mediaItems }
                 } catch (e: CancellationException) {

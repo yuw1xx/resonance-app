@@ -1,6 +1,3 @@
-// Backs the artist info bottom sheet on ArtistDetailScreen. Fetches on demand (only once the
-// sheet is actually opened) rather than prefetching like artwork does, since MusicBrainz/Discogs
-// calls are rate-limited and heavier than an image fetch.
 package dev.yuwixx.resonance.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
@@ -21,6 +18,7 @@ sealed class ArtistInfoState {
     data object Error : ArtistInfoState()
 }
 
+/** Loads artist info only when the sheet opens, since MusicBrainz and Discogs are rate-limited. */
 @HiltViewModel
 class ArtistInfoViewModel @Inject constructor(
     private val artistInfoRepository: ArtistInfoRepository,

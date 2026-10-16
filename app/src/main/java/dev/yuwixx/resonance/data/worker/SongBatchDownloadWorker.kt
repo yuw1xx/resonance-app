@@ -9,6 +9,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.yuwixx.resonance.data.repository.NavidromeDownloadRepository
 import dev.yuwixx.resonance.data.repository.NotDownloadableException
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import java.io.File
 import kotlinx.coroutines.CancellationException
 
@@ -22,7 +23,7 @@ class SongBatchDownloadWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val listFile = inputData.getString(KEY_LIST_FILE)?.let(::File) ?: return Result.failure()
-        val songIds = runCatching { listFile.readText() }.getOrNull()
+        val songIds = runCatchingCancellable { listFile.readText() }.getOrNull()
             ?.split(",")
             ?.mapNotNull { it.toLongOrNull() }
             ?: return Result.failure()

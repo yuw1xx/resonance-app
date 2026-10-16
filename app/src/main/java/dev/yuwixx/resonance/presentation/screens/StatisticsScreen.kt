@@ -70,10 +70,7 @@ fun StatisticsScreen(
             )
         }
     ) { innerPadding ->
-        // Was a LazyColumn of item{}/items{} blocks — switched to a plain scrollable Column so
-        // the whole dashboard body (charts + top lists, all bounded/small content, not the full
-        // library) can live inside one AnimatedContent slot and crossfade as a unit on period
-        // change, instead of every section hard-cutting independently.
+        // A plain Column (the content is small) so the dashboard crossfades as one on period change.
         Column(
             modifier = Modifier
                 .padding(innerPadding)
@@ -321,8 +318,7 @@ private fun StatCard(
     modifier: Modifier = Modifier,
     format: (Long) -> String = { it.toString() },
 ) {
-    // Counts up/down toward the new value on period change instead of the number jumping — Long
-    // rather than Int since listening-time totals (ms) can exceed Int range over long periods.
+    // Counts toward the new value. Long, since listening time in ms can overflow an Int.
     val animatedValue = remember { Animatable(0f) }
     LaunchedEffect(rawValue) {
         animatedValue.animateTo(rawValue.toFloat(), tween(600, easing = EmphasizedDecelerate))

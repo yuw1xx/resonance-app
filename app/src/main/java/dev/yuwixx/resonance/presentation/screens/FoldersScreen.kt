@@ -2,9 +2,7 @@ package dev.yuwixx.resonance.presentation.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -117,14 +115,16 @@ fun FoldersScreen(
         AnimatedContent(
             targetState = currentPath,
             transitionSpec = {
-                if (targetState != null && (initialState == null || targetState!!.startsWith("${initialState}/") || targetState!!.length > (initialState?.length ?: -1))) {
-                    // Drilling deeper — push in from the right, push old content left.
+                val target = targetState
+                val initial = initialState
+                if (target != null && (initial == null || target.length > initial.length)) {
+                    // Going deeper: new content comes in from the right.
                     (slideInHorizontally(tween(340, easing = EmphasizedDecelerate)) { (it * 0.25f).toInt() } +
                         fadeIn(tween(340, easing = EmphasizedDecelerate))) togetherWith
                         (slideOutHorizontally(tween(220, easing = EmphasizedAccelerate)) { -(it * 0.25f).toInt() } +
                             fadeOut(tween(220, easing = EmphasizedAccelerate)))
                 } else {
-                    // Going back up — push in from the left, push old content right.
+                    // Going up: new content comes in from the left.
                     (slideInHorizontally(tween(340, easing = EmphasizedDecelerate)) { -(it * 0.25f).toInt() } +
                         fadeIn(tween(340, easing = EmphasizedDecelerate))) togetherWith
                         (slideOutHorizontally(tween(220, easing = EmphasizedAccelerate)) { (it * 0.25f).toInt() } +

@@ -1,13 +1,3 @@
-// M3U folder sync: keeps playlists in step with .m3u/.m3u8 files in a folder the user picked
-// (Storage Access Framework tree, so it works on any storage, including SD cards and synced
-// folders like Syncthing). Each linked file is remembered in playlist_sources with its
-// last-modified time, so only new or changed files are read.
-//
-//  - New file      → imported as a playlist (or linked to a same-named one, whose songs it replaces)
-//  - Changed file  → re-imported into its playlist
-//  - Write-back on → a playlist edited in the app since the last sync is written to its file,
-//                    unless the file itself also changed (then the file wins)
-//  - Deleted file  → the link is dropped; the playlist stays
 package dev.yuwixx.resonance.data.playlist
 
 import android.content.Context
@@ -32,6 +22,7 @@ import dev.yuwixx.resonance.data.database.entity.PlaylistSourceEntity
 import dev.yuwixx.resonance.data.model.Playlist
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.PlaylistRepository
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import java.util.concurrent.TimeUnit
 import java.util.zip.CRC32
 import javax.inject.Inject
@@ -43,6 +34,17 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+/**
+ * Keeps playlists in step with .m3u/.m3u8 files in a folder picked through SAF, so SD cards and
+ * Syncthing folders work too. Each linked file is stored in playlist_sources with its
+ * last-modified time, so only new or changed files are read.
+ *
+ * - New file: imported as a playlist, or linked to an existing one with the same name.
+ * - Changed file: re-imported into its playlist.
+ * - With write-back on, a playlist edited in the app is written to its file, unless the file
+ *   changed too; then the file wins.
+ * - Deleted file: the link is dropped and the playlist stays.
+ */
 @Singleton
 class PlaylistFolderSync @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -95,7 +97,15 @@ class PlaylistFolderSync @Inject constructor(
                                 sourceDao.getByPlaylist(existingId)?.let { it.documentUri != uri.toString() } == true
                             val mode = if (takenByOtherFile) M3uImporter.ConflictMode.KEEP_BOTH else M3uImporter.ConflictMode.REPLACE
                             val result = importer.import(uri, mode)
-                            sourceDao.upsert(PlaylistSourceEntity(result.playlistId, uri.toString(), file.name ?: result.name, modified, System.currentTimeMillis()))
+                            sourceDao.upsert(
+                                PlaylistSourceEntity(
+                                    result.playlistId,
+                                    uri.toString(),
+                                    file.name ?: result.name,
+                                    modified,
+                                    System.currentTimeMillis(),
+                                )
+                            )
                             imported++
                         }
                         modified != source.lastModified -> {
@@ -137,7 +147,7 @@ class PlaylistFolderSync @Inject constructor(
                 .forEach { playlist ->
                     val fileName = uniqueFileName(dir, playlist.name.replace(Regex("""[\\/:*?"<>|]"""), "_"))
                     val file = dir.createFile("audio/x-mpegurl", fileName) ?: return@forEach
-                    runCatching {
+                    runCatchingCancellable {
                         importer.exportToUri(playlist, file.uri, if (relative) importer.baseDirFor(file.uri) else null)
                         val modified = DocumentFile.fromSingleUri(context, file.uri)?.let(::versionOf) ?: 0L
                         sourceDao.upsert(PlaylistSourceEntity(playlist.id, file.uri.toString(), fileName, modified, System.currentTimeMillis()))
@@ -159,7 +169,7 @@ class PlaylistFolderSync @Inject constructor(
     /** Change marker for a file. Some providers report no modification time; use a checksum then. */
     private fun versionOf(file: DocumentFile): Long {
         file.lastModified().takeIf { it > 0 }?.let { return it }
-        return runCatching {
+        return runCatchingCancellable {
             context.contentResolver.openInputStream(file.uri)?.use { input ->
                 val crc = CRC32()
                 val buf = ByteArray(8 * 1024)
@@ -180,7 +190,7 @@ class PlaylistFolderSync @Inject constructor(
     suspend fun setFolder(uri: Uri?): Boolean {
         val old = prefs.playlistSyncFolder.first()?.let(Uri::parse)
         if (old != null && old != uri) {
-            runCatching {
+            runCatchingCancellable {
                 context.contentResolver.releasePersistableUriPermission(old,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             }

@@ -8,6 +8,7 @@ import dev.yuwixx.resonance.data.database.entity.SongEntity
 import dev.yuwixx.resonance.data.repository.ArtworkRepository
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -21,11 +22,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-// Uses a real in-memory Room DB for HistoryDao/SongDao (StatisticsViewModel's aggregation logic
-// is expressed as SQL, not worth re-implementing as hand-written fakes) and a relaxed mock for
-// ArtworkRepository (a concrete class with its own network-backed dependency chain, and not
-// exercised by computeStats itself — only by the separate getSongArtworkUrl/getArtistArtworkUrl
-// wrappers this test doesn't call).
+// A real in-memory database, since the statistics are computed in SQL. ArtworkRepository isn't
+// used by computeStats and is mocked.
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class StatisticsViewModelTest {
@@ -35,11 +34,7 @@ class StatisticsViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
-        // StatisticsViewModel's init subscribes to historyDao.getRecentHistory() (a Room Flow)
-        // through a debounce() — Room normally emits that Flow from its own background executor
-        // thread, which runs in real time and isn't advanced by the test dispatcher's virtual
-        // clock. Running queries on the calling thread directly (Runnable::run) keeps the whole
-        // chain on the test's controlled dispatcher instead.
+        // Run Room queries on the calling thread so the debounced flow follows the test clock.
         db = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
             ResonanceDatabase::class.java,

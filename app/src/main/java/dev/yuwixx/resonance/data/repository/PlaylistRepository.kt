@@ -21,6 +21,7 @@ import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.playlist.SmartPlaylistMatcher
 import dev.yuwixx.resonance.data.playlist.SmartRules
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -51,9 +52,8 @@ class PlaylistRepository @Inject constructor(
 
     private val rulesAdapter by lazy { moshi.adapter(SmartRules::class.java) }
 
-    // Built from whole-table flows joined in memory: one emission whenever playlists, their
-    // song refs, or the songs themselves change (a rescan, a tag edit), instead of the old
-    // query-per-song-per-playlist fan-out that also missed ref/song changes entirely.
+    // Whole-table flows joined in memory, so any change to playlists, their songs or the songs
+    // themselves emits once.
     private val library: Flow<Library> = combine(
         playlistDao.getAllPlaylists(),
         playlistDao.observeAllSongRefs(),
@@ -83,7 +83,7 @@ class PlaylistRepository @Inject constructor(
     ) { lib, smartEntities, likedIds, source ->
         if (lib.entities.isEmpty()) return@combine emptyList()
         val rulesById = smartEntities.mapNotNull { e ->
-            runCatching { rulesAdapter.fromJson(e.rulesJson) }.getOrNull()?.let { e.playlistId to it }
+            runCatchingCancellable { rulesAdapter.fromJson(e.rulesJson) }.getOrNull()?.let { e.playlistId to it }
         }.toMap()
         val liked = likedIds.toHashSet()
         val activeLibrary by lazy {
@@ -170,8 +170,7 @@ class PlaylistRepository @Inject constructor(
 
     suspend fun addSongToPlaylist(playlistId: Long, songId: Long) = addSongsToPlaylist(playlistId, listOf(songId))
 
-    // Returns how many songs were actually added — songs already in the playlist are skipped
-    // (the table's (playlistId, songId) key allows each song once).
+    // Returns how many songs were added; songs already in the playlist are skipped.
     suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>): Int {
         val start = playlistDao.nextPosition(playlistId)
         val results = playlistDao.insertSongRefsIgnoringDuplicates(

@@ -5,6 +5,7 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.WaveformData
 import java.io.File
@@ -36,10 +37,7 @@ class WaveformExtractor @Inject constructor(
 
     private val diskDir = File(context.cacheDir, "waveforms").also { it.mkdirs() }
 
-    /** Synchronous, in-memory-only lookup — lets callers show already-precomputed data
-     *  immediately instead of nulling the UI out while a redundant (but cheap) re-extract
-     *  round-trips through a coroutine. Does not touch disk; a disk-cache hit still goes
-     *  through [extract]. */
+    /** Memory cache lookup only, so a known waveform can be shown immediately. */
     fun peekCached(songId: Long): WaveformData? = memCache[songId]
 
     /** In-flight decodes, so the current/next prefetch and the transition handler never
@@ -49,8 +47,8 @@ class WaveformExtractor @Inject constructor(
 
     suspend fun extract(songId: Long, uri: Uri, resolution: Int = 200): WaveformData? {
         memCache[songId]?.let { return it }
-        // Streams would be downloaded a second time just to draw bars — not worth the data
-        // and battery. The seekbar falls back to its plain style for them.
+        // Streams would have to be downloaded twice just to draw bars; the seekbar falls back to
+        // its plain style.
         if (uri.scheme == "http" || uri.scheme == "https") return null
         val job = inFlight.getOrPut(songId) {
             decodeScope.async { decode(songId, uri, resolution) }.also { d ->
@@ -190,7 +188,10 @@ class WaveformExtractor @Inject constructor(
         buf.putInt(data.resolution)
         data.amplitudes.forEach(buf::putFloat)
         file.writeBytes(buf.array())
-    } catch (_: Exception) {}
+    } catch (e: Exception) {
+        // Only a cache; the waveform is decoded again next time.
+        Log.w("WaveformExtractor", "Couldn't cache waveform: ${e.message}")
+    }
 
     private companion object {
         /** Block briefly for codec buffers instead of spinning a core at 100%. */

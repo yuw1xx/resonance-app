@@ -68,8 +68,7 @@ class CastManager @Inject constructor(
         override fun onSessionResuming(session: CastSession, sessionId: String) {}
     }
 
-    // Must be called from the main thread (MainActivity.onCreate).
-    // Safe to call on every Activity recreation — listener is only registered once.
+    // Main thread only. Safe to call on every Activity recreation.
     private var initializing = false
     private val initExecutor = Executors.newSingleThreadExecutor()
 

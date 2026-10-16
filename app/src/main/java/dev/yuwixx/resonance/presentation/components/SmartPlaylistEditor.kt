@@ -1,5 +1,3 @@
-// Create/edit a smart playlist: a name, "match all/any", a list of rules (field · operator ·
-// value), a sort order and an optional limit. Results update live once saved.
 package dev.yuwixx.resonance.presentation.components
 
 import androidx.compose.foundation.layout.*

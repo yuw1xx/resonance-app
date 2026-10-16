@@ -1,16 +1,11 @@
-// Pure date-math over the "date(listenedAt, 'localtime')"-derived distinct-dates lists used by
-// Statistics (device-local calendar dates, format yyyy-MM-dd, ordered most-recent-first).
-// Separated from StatisticsViewModel — and takes today/yesterday as explicit parameters rather
-// than reading Calendar.getInstance() internally — so it's unit-testable without a system-clock
-// dependency baked in.
 package dev.yuwixx.resonance.domain.usecase
 
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+/** Takes today and yesterday as parameters so it can be tested without a clock. */
 object StreakCalculator {
-    // Only counts a run anchored at `today`/`yesterday` — zero if the most recent listen
-    // predates yesterday.
+    // A streak must include today or yesterday; otherwise it is zero.
     fun computeStreak(dates: List<String>, today: String, yesterday: String): Int {
         if (dates.isEmpty()) return 0
         if (dates[0] != today && dates[0] != yesterday) return 0
