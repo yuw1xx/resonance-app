@@ -120,6 +120,10 @@ class MusicService : MediaLibraryService() {
     private var widgetActionsReceiver: BroadcastReceiver? = null
     private var widgetProgressJob: Job? = null
 
+    // Set once the saved queue has been loaded (or there was none); until then an empty player
+    // must not overwrite it.
+    @Volatile private var queueRestored = false
+
     // True while restoreQueue applies the saved shuffle order, which must not be reshuffled.
     private var restoringShuffle = false
     private var smartShuffleEnabled: Boolean = false
@@ -256,6 +260,8 @@ class MusicService : MediaLibraryService() {
                             else -> applyShuffleOrder()
                         }
                     }
+                    // Removals, reorders and a cleared queue must survive the app being killed.
+                    if (queueRestored) persistQueue()
                 }
             }
 
@@ -809,6 +815,8 @@ class MusicService : MediaLibraryService() {
                 }
 
                 withContext(Dispatchers.Main) {
+                    // The user already started something while this was loading; keep that.
+                    if (player.mediaItemCount > 0) return@withContext
                     // Only resume mid-track when the saved item survived the restore; if songs
                     // went missing the indices shift, so start that item from the top instead.
                     val startIndex = queueEntity.currentIndex.coerceIn(0, mediaItems.lastIndex)
@@ -841,6 +849,8 @@ class MusicService : MediaLibraryService() {
                 throw e
             } catch (e: Exception) {
                 Log.e("MusicService", "Failed to restore queue", e)
+            } finally {
+                queueRestored = true
             }
         }
     }
@@ -878,8 +888,24 @@ class MusicService : MediaLibraryService() {
 
     fun persistQueue() {
         scope.launch {
-            val entity = buildQueueEntity() ?: return@launch
-            withContext(Dispatchers.IO) { saveQueueEntity(entity) }
+            val entity = buildQueueEntity()
+            withContext(Dispatchers.IO) {
+                when {
+                    entity != null -> saveQueueEntity(entity)
+                    // An empty player before the restore has finished is not a cleared queue.
+                    queueRestored -> clearSavedQueue()
+                }
+            }
+        }
+    }
+
+    private suspend fun clearSavedQueue() {
+        try {
+            queueDao.clearQueue()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("MusicService", "Failed to clear the saved queue", e)
         }
     }
 
@@ -911,8 +937,8 @@ class MusicService : MediaLibraryService() {
             playOrder += idx
             idx = timeline.getNextWindowIndex(idx, Player.REPEAT_MODE_OFF, true)
         }
-        // "Play next" inserts right after the current window, "add to queue" at the end; other
-        // insertions (an undo restoring a song mid-queue) keep ExoPlayer's placement.
+        // "Play next" inserts right after the current window, "add to queue" at the end, and an
+        // undo carries the position it had. Anything else keeps ExoPlayer's placement.
         val current = player.currentMediaItemIndex
         val insertedSet = inserted.toHashSet()
         // New windows directly after the current one,
@@ -923,12 +949,21 @@ class MusicService : MediaLibraryService() {
         val atEnd = ArrayList<Int>()
         var last = currentIds.lastIndex
         while (last in insertedSet && last !in afterCurrent) atEnd.add(0, last--)
-        val moved = (afterCurrent + atEnd).toHashSet()
+        val restored = inserted
+            .filter { it !in afterCurrent && it !in atEnd }
+            .mapNotNull { window ->
+                val position = player.getMediaItemAt(window).mediaMetadata.extras
+                    ?.getInt(SessionProtocol.EXTRA_SHUFFLE_POSITION, -1) ?: -1
+                if (position >= 0) window to position else null
+            }
+            .sortedBy { it.second }
+        val moved = (afterCurrent + atEnd + restored.map { it.first }).toHashSet()
         if (moved.isEmpty()) return
         playOrder.removeAll(moved)
         val currentPos = playOrder.indexOf(current)
         playOrder.addAll(if (currentPos >= 0) currentPos + 1 else 0, afterCurrent)
         playOrder.addAll(atEnd)
+        restored.forEach { (window, position) -> playOrder.add(position.coerceAtMost(playOrder.size), window) }
         if (playOrder.size == currentIds.size) {
             player.setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(playOrder.toIntArray(), System.currentTimeMillis()))
         }
@@ -985,9 +1020,10 @@ class MusicService : MediaLibraryService() {
         // process-wide scope so it finishes after the service is gone without blocking the main
         // thread.
         val finalQueue = buildQueueEntity()
+        val clearSaved = finalQueue == null && queueRestored
         val appContext = applicationContext
         applicationScope.launch(Dispatchers.IO) {
-            finalQueue?.let { saveQueueEntity(it) }
+            if (finalQueue != null) saveQueueEntity(finalQueue) else if (clearSaved) clearSavedQueue()
             try { ResonanceWidget.updateState(appContext, "", "", "", false, false, false, false) }
             catch (e: Exception) { Log.e("MusicService", "Failed to clear widget state", e) }
         }

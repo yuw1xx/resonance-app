@@ -393,6 +393,9 @@ interface QueueDao {
 
     @Upsert
     suspend fun saveQueue(queue: QueueEntity)
+
+    @Query("DELETE FROM queues")
+    suspend fun clearQueue()
 }
 @Dao
 interface NavidromeSongDao {

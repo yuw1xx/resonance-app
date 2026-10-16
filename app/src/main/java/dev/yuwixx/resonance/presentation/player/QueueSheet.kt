@@ -26,6 +26,7 @@ import dev.yuwixx.resonance.presentation.components.reorderHandle
 import dev.yuwixx.resonance.presentation.components.reorderableItem
 import dev.yuwixx.resonance.presentation.screens.CreatePlaylistDialog
 import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,12 +86,12 @@ fun QueueSheet(
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
             val result = snackbar.showSnackbar(
-                message = "Removed “${removed.second.title}”",
+                message = "Removed “${removed.song.title}”",
                 actionLabel = "Undo",
                 duration = SnackbarDuration.Short,
             )
             if (result == SnackbarResult.ActionPerformed) {
-                playerViewModel.restoreQueueItem(removed.first, removed.second)
+                playerViewModel.restoreQueueItem(removed)
             }
         }
     }
@@ -155,11 +156,19 @@ fun QueueSheet(
                     val key = keys[i]
                     val isCurrent = entry.index == currentIndex
                     val dismissState = rememberSwipeToDismissBoxState()
-                    LaunchedEffect(dismissState.currentValue) {
+                    val currentEntry by rememberUpdatedState(entry)
+                    LaunchedEffect(dismissState) {
+                        // The swipe state is saved per row key, so a song brought back by Undo
+                        // returns already "dismissed". Reset it instead of removing it again.
                         if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
-                            haptic(HapticFeedbackType.GestureThresholdActivate)
-                            removeWithUndo(entry) { scope.launch { dismissState.reset() } }
+                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
                         }
+                        snapshotFlow { dismissState.currentValue }
+                            .filter { it != SwipeToDismissBoxValue.Settled }
+                            .collect {
+                                haptic(HapticFeedbackType.GestureThresholdActivate)
+                                removeWithUndo(currentEntry) { scope.launch { dismissState.reset() } }
+                            }
                     }
                     SwipeToDismissBox(
                         state = dismissState,

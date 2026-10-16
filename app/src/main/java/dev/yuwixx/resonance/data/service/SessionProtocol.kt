@@ -13,6 +13,9 @@ object SessionProtocol {
     const val ARG_TRACKS = "tracks"
     const val ARG_FADE = "fade"
 
+    // Media item extra: where a re-added item belongs in the shuffle order (an undo of a removal).
+    const val EXTRA_SHUFFLE_POSITION = "resonance.shufflePosition"
+
     // Session extras describing the active sleep timer.
     const val EXTRA_SLEEP_TYPE = "sleep_type"          // "off" | "time" | "tracks"
     const val EXTRA_SLEEP_ENDS_AT = "sleep_ends_at"    // epoch ms, time timers

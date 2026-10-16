@@ -801,15 +801,40 @@ class PlayerViewModel @Inject constructor(
     }
 
     /** Removes the item and returns what's needed to undo it. */
-    fun removeFromQueueForUndo(index: Int): Pair<Int, Song>? {
+    /** A removed queue item and where it was, so an undo can put it back in the same place. */
+    data class RemovedQueueItem(val index: Int, val song: Song, val shufflePosition: Int)
+
+    fun removeFromQueueForUndo(index: Int): RemovedQueueItem? {
+        val ctrl = _controller ?: return null
         val song = _queue.value.getOrNull(index) ?: return null
-        _controller?.removeMediaItem(index)
-        return index to song
+        val shufflePosition = if (ctrl.shuffleModeEnabled) playOrder(ctrl.currentTimeline).indexOf(index) else -1
+        ctrl.removeMediaItem(index)
+        return RemovedQueueItem(index, song, shufflePosition)
     }
 
-    fun restoreQueueItem(index: Int, song: Song) {
+    fun restoreQueueItem(item: RemovedQueueItem) {
         val ctrl = _controller ?: return
-        ctrl.addMediaItem(index.coerceIn(0, ctrl.mediaItemCount), song.toMediaItem())
+        var mediaItem = item.song.toMediaItem()
+        if (item.shufflePosition >= 0) {
+            // Without this, the service lets ExoPlayer drop it at a random place in the shuffle order.
+            val extras = Bundle(mediaItem.mediaMetadata.extras ?: Bundle()).apply {
+                putInt(SessionProtocol.EXTRA_SHUFFLE_POSITION, item.shufflePosition)
+            }
+            mediaItem = mediaItem.buildUpon()
+                .setMediaMetadata(mediaItem.mediaMetadata.buildUpon().setExtras(extras).build())
+                .build()
+        }
+        ctrl.addMediaItem(item.index.coerceIn(0, ctrl.mediaItemCount), mediaItem)
+    }
+
+    private fun playOrder(timeline: Timeline): List<Int> {
+        val order = ArrayList<Int>()
+        var idx = timeline.getFirstWindowIndex(true)
+        while (idx != C.INDEX_UNSET) {
+            order += idx
+            idx = timeline.getNextWindowIndex(idx, Player.REPEAT_MODE_OFF, true)
+        }
+        return order
     }
 
     /** Undo for "play next" / "add to queue": removes the most recently inserted copy. */
