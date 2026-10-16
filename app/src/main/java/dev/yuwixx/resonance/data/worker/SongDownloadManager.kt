@@ -31,14 +31,17 @@ class SongDownloadManager @Inject constructor(
         workManager.enqueueUniqueWork(workNameForSong(songId), ExistingWorkPolicy.KEEP, request)
     }
 
-    // Used for "download whole album/playlist" — one aggregate job with one progress
-    // notification, rather than one WorkManager job per song (which would mean dozens of
-    // independently-scheduled jobs for a large album/playlist).
+    // One job for a whole album or playlist. The IDs go in a file because WorkManager input
+    // data is limited to 10 KB, which a large playlist exceeds.
     suspend fun enqueueBatch(workName: String, songIds: List<Long>) {
         if (songIds.isEmpty()) return
+        val listFile = java.io.File(context.cacheDir, "download_batches/$workName.txt").apply {
+            parentFile?.mkdirs()
+            writeText(songIds.joinToString(","))
+        }
         val request = OneTimeWorkRequestBuilder<SongBatchDownloadWorker>()
             .setConstraints(buildConstraints())
-            .setInputData(workDataOf(SongBatchDownloadWorker.KEY_SONG_IDS to songIds.joinToString(",")))
+            .setInputData(workDataOf(SongBatchDownloadWorker.KEY_LIST_FILE to listFile.path))
             .build()
         workManager.enqueueUniqueWork(workName, ExistingWorkPolicy.REPLACE, request)
     }

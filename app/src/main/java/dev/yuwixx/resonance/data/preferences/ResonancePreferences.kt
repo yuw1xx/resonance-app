@@ -146,6 +146,7 @@ class ResonancePreferences @Inject constructor(
         val PLAYLIST_SYNC_FOLDER  = stringPreferencesKey("playlist_sync_folder")
         val PLAYLIST_SYNC_EXPORT  = booleanPreferencesKey("playlist_sync_export")
         val PLAYLIST_SYNC_RELATIVE = booleanPreferencesKey("playlist_sync_relative_paths")
+        val PLAYLIST_SYNC_IGNORED = stringSetPreferencesKey("playlist_sync_ignored")
         val COMPACT_LIST_MODE     = booleanPreferencesKey("compact_list_mode")
         val SHOW_DURATION_IN_LIST = booleanPreferencesKey("show_duration_in_list")
         val PLAYER_ARTWORK_SHAPE  = stringPreferencesKey("player_artwork_shape")
@@ -368,8 +369,12 @@ class ResonancePreferences @Inject constructor(
             navidromePasswordMigrated = true
             val legacyPlaintext = data.mapDistinct { it[NAVIDROME_PASSWORD] }.first()
             if (!legacyPlaintext.isNullOrEmpty()) {
-                secureCredentialStore.setNavidromePassword(legacyPlaintext)
-                ds.edit { it.remove(NAVIDROME_PASSWORD) }
+                // Only drop the old copy once the secure store actually holds it.
+                if (secureCredentialStore.setNavidromePassword(legacyPlaintext)) {
+                    ds.edit { it.remove(NAVIDROME_PASSWORD) }
+                } else {
+                    return legacyPlaintext
+                }
             }
         }
         return secureCredentialStore.getNavidromePassword()
@@ -448,6 +453,10 @@ class ResonancePreferences @Inject constructor(
     suspend fun setPlaylistSyncExport(enabled: Boolean) { ds.edit { it[PLAYLIST_SYNC_EXPORT] = enabled } }
     val playlistSyncRelativePaths: Flow<Boolean> = data.mapDistinct { it[PLAYLIST_SYNC_RELATIVE] ?: true }
     suspend fun setPlaylistSyncRelativePaths(enabled: Boolean) { ds.edit { it[PLAYLIST_SYNC_RELATIVE] = enabled } }
+
+    /** Files in the sync folder whose playlist the user deleted; folder sync leaves them alone. */
+    val playlistSyncIgnored: Flow<Set<String>> = data.mapDistinct { it[PLAYLIST_SYNC_IGNORED] ?: emptySet() }
+    suspend fun setPlaylistSyncIgnored(uris: Set<String>) { ds.edit { it[PLAYLIST_SYNC_IGNORED] = uris } }
 
     val compactListMode: Flow<Boolean> = data.mapDistinct { it[COMPACT_LIST_MODE] ?: false }
     suspend fun setCompactListMode(enabled: Boolean) { ds.edit { it[COMPACT_LIST_MODE] = enabled } }
@@ -585,6 +594,8 @@ class ResonancePreferences @Inject constructor(
         "music_source",
         "playlist_sync_folder",
         "is_first_run",
+        // Device state, not settings: restoring these would skip needed syncs.
+        "mediastore_sync_stamp", "navidrome_sync_stamp", "last_update_check",
     )
 
     suspend fun exportBackupPreferences(): List<BackupPreferenceEntry> {
@@ -606,8 +617,23 @@ class ResonancePreferences @Inject constructor(
     suspend fun importBackupPreferences(entries: List<BackupPreferenceEntry>): Int {
         var applied = 0
         ds.edit { mutablePrefs ->
+            val current = mutablePrefs.asMap().mapKeys { it.key.name }
             entries.forEach entry@{ entry ->
                 if (entry.key in BACKUP_EXCLUDED_KEYS) return@entry
+                // A value of another type than the stored one (older version, hand-edited file)
+                // would make every later read of the key throw.
+                current[entry.key]?.let { existing ->
+                    val existingType = when (existing) {
+                        is Boolean -> "boolean"
+                        is String -> "string"
+                        is Int -> "int"
+                        is Long -> "long"
+                        is Float -> "float"
+                        is Set<*> -> "stringSet"
+                        else -> null
+                    }
+                    if (existingType != entry.type) return@entry
+                }
                 val ok = when (entry.type) {
                     "boolean" -> entry.value?.toBooleanStrictOrNull()?.let { mutablePrefs[booleanPreferencesKey(entry.key)] = it } != null
                     "string" -> entry.value?.let { mutablePrefs[stringPreferencesKey(entry.key)] = it } != null

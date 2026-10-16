@@ -213,6 +213,7 @@ private fun computeFolderContents(
         val minimalRoots = songFolders.filter { folder ->
             songFolders.none { other -> other != folder && folder.startsWith("$other/") }
         }.toSortedSet()
+        if (minimalRoots.isEmpty()) return emptyList<String>() to emptyList()
 
         val commonPrefix = minimalRoots.fold(minimalRoots.first()) { acc, f ->
             acc.commonPrefixWith(f).substringBeforeLast('/')

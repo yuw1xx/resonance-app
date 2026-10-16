@@ -33,6 +33,7 @@ class PlaylistRepository @Inject constructor(
     private val prefs: ResonancePreferences,
     private val navidromeSyncRepository: NavidromeSyncRepository,
     private val smartPlaylistDao: dev.yuwixx.resonance.data.database.dao.SmartPlaylistDao,
+    private val playlistSourceDao: dev.yuwixx.resonance.data.database.dao.PlaylistSourceDao,
     private val likedSongsDao: dev.yuwixx.resonance.data.database.dao.LikedSongsDao,
     private val moshi: com.squareup.moshi.Moshi,
 ) {
@@ -124,6 +125,7 @@ class PlaylistRepository @Inject constructor(
         smartPlaylistDao.delete(playlistId)
         playlistDao.replaceSongs(playlistId, songIds)
         updateModifiedTime(playlistId)
+        syncPushReplace(playlistId)
     }
 
     private fun PlaylistEntity.toDomain(songs: List<Song>): Playlist = Playlist(
@@ -153,6 +155,12 @@ class PlaylistRepository @Inject constructor(
         val entity = playlistDao.getPlaylistById(playlistId) ?: return
         playlistDao.deletePlaylistAndSongs(entity)
         smartPlaylistDao.delete(playlistId)
+        // A playlist that came from the sync folder: remember its file so the next folder sync
+        // doesn't import it again.
+        playlistSourceDao.getByPlaylist(playlistId)?.let { source ->
+            prefs.setPlaylistSyncIgnored(prefs.playlistSyncIgnored.first() + source.documentUri)
+            playlistSourceDao.delete(playlistId)
+        }
         entity.navidromePlaylistId?.let { navidromeSyncRepository.pushPlaylistDelete(it) }
     }
 
@@ -184,6 +192,16 @@ class PlaylistRepository @Inject constructor(
     suspend fun replacePlaylistSongs(playlistId: Long, songIds: List<Long>) {
         playlistDao.replaceSongs(playlistId, songIds)
         updateModifiedTime(playlistId)
+        syncPushReplace(playlistId)
+    }
+
+    // For a Navidrome-linked playlist, sends the whole local track list to the server so the
+    // next pull doesn't undo a reorder, replace or clean-up made here.
+    private suspend fun syncPushReplace(playlistId: Long) {
+        val linked = playlistDao.getPlaylistById(playlistId)?.navidromePlaylistId ?: return
+        val ids = playlistDao.getPlaylistSongRefs(playlistId)
+            .mapNotNull { navidromeSongDao.getSongByNumericId(it.songId)?.navidromeId }
+        navidromeSyncRepository.pushPlaylistReplace(linked, ids)
     }
 
     suspend fun songIds(playlistId: Long): List<Long> =
@@ -233,6 +251,7 @@ class PlaylistRepository @Inject constructor(
             playlistDao.updateSongPosition(playlistId, song.id, index)
         }
         updateModifiedTime(playlistId)
+        syncPushReplace(playlistId)
     }
 
     suspend fun deduplicatePlaylist(playlistId: Long): Int = withContext(Dispatchers.IO) {
@@ -248,6 +267,7 @@ class PlaylistRepository @Inject constructor(
         if (toRemove.isNotEmpty()) {
             playlistDao.compactPositions(playlistId)
             updateModifiedTime(playlistId)
+            syncPushReplace(playlistId)
         }
         toRemove.size
     }

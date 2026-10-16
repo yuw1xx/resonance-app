@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.data.repository
 
+import dev.yuwixx.resonance.data.network.ok
 import android.net.Uri
 import dev.yuwixx.resonance.data.database.dao.LyricsDao
 import dev.yuwixx.resonance.data.database.entity.LyricsEntity
@@ -99,7 +100,7 @@ class LyricsRepository @Inject constructor(
 
     private suspend fun navidromeLyrics(id: String, artist: String, title: String): String? {
         val api = navidromeApiProvider.currentApi() ?: return null
-        runCatching { api.getLyricsBySongId(id).response.lyricsList?.structuredLyrics }.getOrNull()
+        runCatching { api.getLyricsBySongId(id).ok.lyricsList?.structuredLyrics }.getOrNull()
             ?.let { list ->
                 val best = list.firstOrNull { it.synced && it.line.isNotEmpty() } ?: list.firstOrNull { it.line.isNotEmpty() }
                 if (best != null) {
@@ -112,7 +113,7 @@ class LyricsRepository @Inject constructor(
                     } else best.line.joinToString("\n") { it.value }
                 }
             }
-        return runCatching { api.getLyrics(artist, title).response.lyrics?.value }.getOrNull()?.takeIf { it.isNotBlank() }
+        return runCatching { api.getLyrics(artist, title).ok.lyrics?.value }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun lrclibExact(title: String, artist: String, album: String, durationMs: Long): LrclibResponse? =

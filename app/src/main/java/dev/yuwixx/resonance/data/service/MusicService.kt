@@ -291,6 +291,8 @@ class MusicService : MediaLibraryService() {
             if (sessionId == 0) return
 
             equalizer?.release()
+            // Cleared first so the EQ callbacks never reach a released effect if creation fails.
+            equalizer = null
 
             val eq = Equalizer(0, sessionId)
             equalizer = eq
@@ -901,7 +903,10 @@ class MusicService : MediaLibraryService() {
         if (count == 0) return
         val songIds = (0 until count).map { player.getMediaItemAt(it).mediaId.toLongOrNull() ?: 0L }
         val listenCounts = withContext(Dispatchers.IO) {
-            songDao.getListenCountsForIds(songIds).associate { it.songId to it.playCount }
+            // SQLite allows at most 999 bound variables on older Android versions.
+            songIds.distinct().chunked(900)
+                .flatMap { songDao.getListenCountsForIds(it) }
+                .associate { it.songId to it.playCount }
         }
         val maxListens = listenCounts.values.maxOrNull()?.coerceAtLeast(1) ?: 1
         val rng = java.util.Random()

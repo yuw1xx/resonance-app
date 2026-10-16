@@ -2,6 +2,7 @@
 // Handles discovery, connection, metadata exchange (META||| protocol), and file transfer progress.
 package dev.yuwixx.resonance.data.service
 
+import android.util.Log
 import android.app.Activity
 import android.content.Context
 import android.location.LocationManager
@@ -46,6 +47,7 @@ class NearbyShareManager @Inject constructor(
     companion object {
         const val SERVICE_ID = "dev.yuwixx.resonance.nearby"
         val STRATEGY: Strategy = Strategy.P2P_STAR
+        private const val TAG = "NearbyShare"
     }
 
     private val appClient: ConnectionsClient = Nearby.getConnectionsClient(context)
@@ -106,6 +108,8 @@ class NearbyShareManager @Inject constructor(
 
     private val pendingSongsToSend = java.util.concurrent.ConcurrentHashMap<String, Song>()
     private val pendingIncomingMeta = java.util.concurrent.ConcurrentHashMap<String, Pair<String, String>>()
+    // Senders whose song the user accepted; a file from anyone else is refused.
+    private val acceptedSenders = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private var filePayloadId: Long? = null
 
     // Receiver-side tracking: set when onPayloadReceived fires for FILE, cleared after SUCCESS/FAILURE.
@@ -261,11 +265,13 @@ class NearbyShareManager @Inject constructor(
     }
 
     fun acceptRequest(endpointId: String) {
+        acceptedSenders += endpointId
         client.sendPayload(endpointId, Payload.fromBytes("ACCEPT".toByteArray()))
         _incomingRequest.value = null
     }
 
     fun rejectRequest(endpointId: String) {
+        acceptedSenders -= endpointId
         client.sendPayload(endpointId, Payload.fromBytes("REJECT".toByteArray()))
         _incomingRequest.value = null
     }
@@ -353,6 +359,7 @@ class NearbyShareManager @Inject constructor(
         }
 
         override fun onDisconnected(endpointId: String) {
+            acceptedSenders -= endpointId
             _state.value = when (_state.value) {
                 is NearbyState.Sending, is NearbyState.AwaitingAcceptance ->
                     NearbyState.Error("Connection lost during transfer")
@@ -399,6 +406,11 @@ class NearbyShareManager @Inject constructor(
                     }
                 }
                 Payload.Type.FILE -> {
+                    if (!acceptedSenders.remove(endpointId)) {
+                        Log.w(TAG, "Refusing a file from $endpointId that wasn't accepted")
+                        client.cancelPayload(payload.id)
+                        return
+                    }
                     // The Nearby FILE payload is only fully written to disk when
                     // onPayloadTransferUpdate fires with SUCCESS. Store the payload reference
                     // and track progress there; do not touch the file here.
@@ -475,6 +487,13 @@ class NearbyShareManager @Inject constructor(
             _state.value = NearbyState.Idle
         } catch (e: Exception) {
             _state.value = NearbyState.Error("Could not save received file: ${e.message}")
+        } finally {
+            // Nearby leaves its own copy behind; the song now lives in Music/Resonance.
+            try {
+                context.contentResolver.delete(tempUri, null, null)
+            } catch (e: Exception) {
+                Log.w(TAG, "Couldn't delete the Nearby temp file", e)
+            }
         }
     }
 

@@ -170,7 +170,7 @@ class ResonanceWidget : GlanceAppWidget() {
                 } ?: return null
                 decodeSampledBitmap(bytes, ARTWORK_TARGET_PX)
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to load widget artwork from $uriStr", e)
+                Log.w(TAG, "Failed to load widget artwork from ${uriStr.substringBefore('?')}", e)
                 null
             }
         }

@@ -126,7 +126,7 @@ class NavidromeRepository @Inject constructor(
         val creds = navidromeApiProvider.currentCredentials() ?: return false
 
         try {
-            val status = runCatching { api.getScanStatus().response.scanStatus }.getOrNull()
+            val status = runCatching { api.getScanStatus().ok.scanStatus }.getOrNull()
             val stamp = status?.let { "${creds.serverUrl}|${creds.username}|${it.lastScan}|${it.count}" }
             val hasCache = navidromeSongDao.count() > 0
             if (!force && hasCache) {
@@ -142,7 +142,7 @@ class NavidromeRepository @Inject constructor(
             val albums = mutableListOf<SubsonicAlbum>()
             var offset = 0
             while (true) {
-                val page = api.getAlbumList(size = 500, offset = offset).response.albumList2?.album.orEmpty()
+                val page = api.getAlbumList(size = 500, offset = offset).ok.albumList2?.album.orEmpty()
                 albums += page
                 _syncState.value = NavidromeSyncState.Syncing(albums.size, 0, estimatedTotal)
                 if (page.size < 500) break
@@ -163,7 +163,7 @@ class NavidromeRepository @Inject constructor(
             // Servers that don't support the empty-query listing: fall back to album details.
             if (songs.isEmpty() && albums.isNotEmpty()) {
                 albums.forEachIndexed { index, summary ->
-                    val detail = runCatching { api.getAlbum(summary.id).response.album }.getOrNull()
+                    val detail = runCatching { api.getAlbum(summary.id).ok.album }.getOrNull()
                     songs += detail?.song.orEmpty()
                     if (index % 20 == 0) _syncState.value = NavidromeSyncState.Syncing(index, songs.size, estimatedTotal)
                 }
@@ -228,7 +228,7 @@ class NavidromeRepository @Inject constructor(
 
     private suspend fun refreshArtistCache() {
         val api = navidromeApiProvider.currentApi() ?: return
-        val artists = runCatching { api.getArtists().response.artists?.index?.flatMap { it.artist } }.getOrNull() ?: return
+        val artists = runCatching { api.getArtists().ok.artists?.index?.flatMap { it.artist } }.getOrNull() ?: return
         runCatching { artistsFile.writeText(artistsAdapter.toJson(artists)) }
     }
 
@@ -236,7 +236,7 @@ class NavidromeRepository @Inject constructor(
         val api   = navidromeApiProvider.currentApi()   ?: return@withContext emptyList()
         val creds = navidromeApiProvider.currentCredentials() ?: return@withContext emptyList()
         try {
-            api.getArtists().response.artists?.index
+            api.getArtists().ok.artists?.index
                 ?.flatMap { it.artist }
                 ?.map { it.toDomain(creds) }
                 ?: emptyList()
@@ -250,9 +250,9 @@ class NavidromeRepository @Inject constructor(
         val api   = navidromeApiProvider.currentApi()   ?: return@withContext null
         val creds = navidromeApiProvider.currentCredentials() ?: return@withContext null
         try {
-            val artist = api.getArtist(artistId).response.artist ?: return@withContext null
+            val artist = api.getArtist(artistId).ok.artist ?: return@withContext null
             val albums = artist.album.map { summary ->
-                val detail = runCatching { api.getAlbum(summary.id).response.album }.getOrNull() ?: summary
+                val detail = runCatching { api.getAlbum(summary.id).ok.album }.getOrNull() ?: summary
                 detail.toAlbumDomain(creds)
             }
             Artist(
@@ -273,8 +273,8 @@ class NavidromeRepository @Inject constructor(
         val api   = navidromeApiProvider.currentApi()   ?: return@withContext emptyList()
         val creds = navidromeApiProvider.currentCredentials() ?: return@withContext emptyList()
         try {
-            api.getPlaylists().response.playlists?.playlist?.map { summary ->
-                val detail = runCatching { api.getPlaylist(summary.id).response.playlist }.getOrNull()
+            api.getPlaylists().ok.playlists?.playlist?.map { summary ->
+                val detail = runCatching { api.getPlaylist(summary.id).ok.playlist }.getOrNull()
                 Playlist(
                     id       = summary.id.toLongOrNull() ?: stableLongId(summary.id),
                     name     = summary.name,

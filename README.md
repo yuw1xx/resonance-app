@@ -142,6 +142,18 @@ cd resonance-app
 ./gradlew assembleGmsDebug   # or assembleFossDebug (no Google Play Services)
 ```
 
+API keys for Last.fm, Spotify (artwork lookup) and the share relay are read from
+`local.properties`, which isn't committed. Debug builds work without them (those features are
+just unavailable); release builds require them:
+
+```properties
+resonance.lastfm.apiKey=…
+resonance.lastfm.apiSecret=…
+resonance.spotify.clientId=…
+resonance.spotify.clientSecret=…
+resonance.share.uploadToken=…
+```
+
 ## Architecture
 
 ```

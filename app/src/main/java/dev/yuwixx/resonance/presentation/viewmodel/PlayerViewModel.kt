@@ -198,11 +198,6 @@ class PlayerViewModel @Inject constructor(
         startProgressTracker()
         observePreferences()
         observeCasting()
-        viewModelScope.launch {
-            _currentSong.collect { song ->
-                if (song != null) localAudioServer.trackCurrentSong(song)
-            }
-        }
     }
 
     private fun observeCasting() {

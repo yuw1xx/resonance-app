@@ -67,10 +67,12 @@ interface NavidromeApi {
     @GET("rest/getStarred2.view")
     suspend fun getStarred2(): SubsonicResponse
 
+    /** Creates a playlist, or with [playlistId] replaces an existing playlist's tracks. */
     @GET("rest/createPlaylist.view")
     suspend fun createPlaylist(
-        @Query("name") name: String,
+        @Query("name") name: String? = null,
         @Query("songId") songIds: List<String> = emptyList(),
+        @Query("playlistId") playlistId: String? = null,
     ): SubsonicResponse
 
     @GET("rest/updatePlaylist.view")
@@ -97,6 +99,22 @@ interface NavidromeApi {
 data class SubsonicResponse(
     @Json(name = "subsonic-response") val response: SubsonicResponseBody,
 )
+
+/** Thrown for a Subsonic error, which the API reports as HTTP 200 with status "failed". */
+class SubsonicException(val code: Int?, message: String) : Exception(message)
+
+/**
+ * The response body, or [SubsonicException] if the server reported an error. Callers must use
+ * this rather than [SubsonicResponse.response]: a failed response has no data, and reading it as
+ * "empty" would look like an empty library.
+ */
+val SubsonicResponse.ok: SubsonicResponseBody
+    get() {
+        if (response.status != "ok") {
+            throw SubsonicException(response.error?.code, response.error?.message ?: "Server error (${response.status})")
+        }
+        return response
+    }
 
 @JsonClass(generateAdapter = true)
 data class SubsonicResponseBody(

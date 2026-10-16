@@ -68,21 +68,29 @@ class PlaylistFolderSync @Inject constructor(
             val dir = folder() ?: return@withContext Report(0, 0, 0, 0)
             val writeBack = prefs.playlistSyncExport.first()
             val relative = prefs.playlistSyncRelativePaths.first()
-            val files = dir.listFiles().filter { it.isPlaylistFile() }
-            val present = files.map { it.uri.toString() }.toHashSet()
+            val ignored = prefs.playlistSyncIgnored.first()
+            val allFiles = dir.listFiles().filter { it.isPlaylistFile() }
+            val present = allFiles.map { it.uri.toString() }.toHashSet()
+            val files = allFiles.filter { it.uri.toString() !in ignored }
             var imported = 0; var updated = 0; var written = 0; var failed = 0
             // Loaded on first need only (write-back), since building it maps the whole library.
             var playlists: List<dev.yuwixx.resonance.data.model.Playlist>? = null
 
             for (file in files) {
                 val uri = file.uri
-                val modified = file.lastModified()
+                val modified = versionOf(file)
                 val source = sourceDao.getByUri(uri.toString())
                 val linked = source?.let { playlistDao.getPlaylistById(it.playlistId) }
                 try {
                     when {
                         source == null || linked == null -> {
-                            val result = importer.import(uri, M3uImporter.ConflictMode.REPLACE)
+                            // A same-named playlist is taken over, unless another file already
+                            // feeds it: then this file becomes a playlist of its own.
+                            val existingId = importer.preview(listOf(uri)).firstOrNull()?.existingPlaylistId
+                            val takenByOtherFile = existingId != null &&
+                                sourceDao.getByPlaylist(existingId)?.let { it.documentUri != uri.toString() } == true
+                            val mode = if (takenByOtherFile) M3uImporter.ConflictMode.KEEP_BOTH else M3uImporter.ConflictMode.REPLACE
+                            val result = importer.import(uri, mode)
                             sourceDao.upsert(PlaylistSourceEntity(result.playlistId, uri.toString(), file.name ?: result.name, modified, System.currentTimeMillis()))
                             imported++
                         }
@@ -95,7 +103,7 @@ class PlaylistFolderSync @Inject constructor(
                             val all = playlists ?: playlistRepository.allPlaylists.first().also { playlists = it }
                             val playlist = all.firstOrNull { it.id == linked.id } ?: continue
                             importer.exportToUri(playlist, uri, if (relative) importer.baseDirFor(uri) else null)
-                            val newModified = DocumentFile.fromSingleUri(context, uri)?.lastModified() ?: modified
+                            val newModified = DocumentFile.fromSingleUri(context, uri)?.let(::versionOf) ?: modified
                             sourceDao.upsert(source.copy(lastModified = newModified, lastSyncedAt = System.currentTimeMillis()))
                             written++
                         }
@@ -108,6 +116,7 @@ class PlaylistFolderSync @Inject constructor(
             }
             // Files that disappeared: forget the link, keep the playlist.
             sourceDao.getAll().filter { it.documentUri !in present }.forEach { sourceDao.delete(it.playlistId) }
+            if (ignored.any { it !in present }) prefs.setPlaylistSyncIgnored(ignored.filterTo(HashSet()) { it in present })
             Report(imported, updated, written, failed)
         }
     }
@@ -122,11 +131,11 @@ class PlaylistFolderSync @Inject constructor(
             playlistRepository.allPlaylists.first()
                 .filter { !it.isMix && it.id !in linkedIds && it.songs.isNotEmpty() }
                 .forEach { playlist ->
-                    val fileName = playlist.name.replace(Regex("""[\\/:*?"<>|]"""), "_") + ".m3u8"
-                    val file = dir.findFile(fileName) ?: dir.createFile("audio/x-mpegurl", fileName) ?: return@forEach
+                    val fileName = uniqueFileName(dir, playlist.name.replace(Regex("""[\\/:*?"<>|]"""), "_"))
+                    val file = dir.createFile("audio/x-mpegurl", fileName) ?: return@forEach
                     runCatching {
                         importer.exportToUri(playlist, file.uri, if (relative) importer.baseDirFor(file.uri) else null)
-                        val modified = DocumentFile.fromSingleUri(context, file.uri)?.lastModified() ?: 0L
+                        val modified = DocumentFile.fromSingleUri(context, file.uri)?.let(::versionOf) ?: 0L
                         sourceDao.upsert(PlaylistSourceEntity(playlist.id, file.uri.toString(), fileName, modified, System.currentTimeMillis()))
                         count++
                     }.onFailure { Log.w(TAG, "Export failed for ${playlist.name}", it) }
@@ -135,8 +144,36 @@ class PlaylistFolderSync @Inject constructor(
         }
     }
 
-    /** Sets (or clears) the sync folder, keeping read/write access across reboots. */
-    suspend fun setFolder(uri: Uri?) {
+    /** Never overwrites an existing file: "Mix.m3u8", then "Mix (2).m3u8", … */
+    private fun uniqueFileName(dir: DocumentFile, base: String): String {
+        var name = "$base.m3u8"
+        var n = 2
+        while (dir.findFile(name) != null) name = "$base (${n++}).m3u8"
+        return name
+    }
+
+    /** Change marker for a file. Some providers report no modification time; use a checksum then. */
+    private fun versionOf(file: DocumentFile): Long {
+        file.lastModified().takeIf { it > 0 }?.let { return it }
+        return runCatching {
+            context.contentResolver.openInputStream(file.uri)?.use { input ->
+                val crc = java.util.zip.CRC32()
+                val buf = ByteArray(8 * 1024)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    crc.update(buf, 0, n)
+                }
+                crc.value
+            }
+        }.getOrNull() ?: 0L
+    }
+
+    /**
+     * Sets (or clears) the sync folder, keeping read/write access across reboots.
+     * Returns false if the folder's access couldn't be kept.
+     */
+    suspend fun setFolder(uri: Uri?): Boolean {
         val old = prefs.playlistSyncFolder.first()?.let(Uri::parse)
         if (old != null && old != uri) {
             runCatching {
@@ -146,11 +183,18 @@ class PlaylistFolderSync @Inject constructor(
             sourceDao.getAll().forEach { sourceDao.delete(it.playlistId) }
         }
         if (uri != null) {
-            context.contentResolver.takePersistableUriPermission(uri,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            try {
+                context.contentResolver.takePersistableUriPermission(uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            } catch (e: SecurityException) {
+                Log.w(TAG, "Can't keep access to $uri", e)
+                return false
+            }
         }
+        if (old != uri) prefs.setPlaylistSyncIgnored(emptySet())
         prefs.setPlaylistSyncFolder(uri?.toString())
         schedule(uri != null)
+        return true
     }
 
     /** Periodic background sync while a folder is set; battery-friendly constraints. */

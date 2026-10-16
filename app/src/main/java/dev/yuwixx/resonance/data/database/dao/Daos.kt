@@ -404,8 +404,9 @@ interface PendingStarActionDao {
     @Query("SELECT DISTINCT songId FROM pending_star_actions")
     suspend fun getPendingSongIds(): List<Long>
 
-    @Query("DELETE FROM pending_star_actions WHERE songId = :songId")
-    suspend fun deleteForSong(songId: Long)
+    /** Removes the actions for a song up to and including [upTo], leaving newer ones queued. */
+    @Query("DELETE FROM pending_star_actions WHERE songId = :songId AND timestamp <= :upTo")
+    suspend fun deleteForSongUpTo(songId: Long, upTo: Long)
 
     @Query("DELETE FROM pending_star_actions")
     suspend fun deleteAll()

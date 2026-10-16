@@ -4,7 +4,9 @@
 // per-IP rate limiting. Users who want their own server can override both in Settings.
 package dev.yuwixx.resonance.data.service
 
+import dev.yuwixx.resonance.BuildConfig
+
 object RemoteShareDefaults {
     const val SERVER_URL = "https://share.yuwixx.dev"
-    const val UPLOAD_TOKEN = "68fa11a42c40cc9a4ae01389109e8a59c5ce18e6346f38ef"
+    val UPLOAD_TOKEN: String = BuildConfig.SHARE_UPLOAD_TOKEN
 }

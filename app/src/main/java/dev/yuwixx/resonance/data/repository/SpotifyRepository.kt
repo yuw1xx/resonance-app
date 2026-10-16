@@ -2,6 +2,7 @@
 // album art for tracks missing embedded artwork. Token is cached in memory until it expires.
 package dev.yuwixx.resonance.data.repository
 
+import dev.yuwixx.resonance.BuildConfig
 import android.util.Base64
 import android.util.Log
 import dev.yuwixx.resonance.data.network.SpotifyApi
@@ -14,8 +15,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "SpotifyRepo"
-private const val DEFAULT_CLIENT_ID     = "257fd355d619466b80cc30e02e3836b2"
-private const val DEFAULT_CLIENT_SECRET = "6113274799b340388eaf12946dd0b4df"
+private val DEFAULT_CLIENT_ID = BuildConfig.SPOTIFY_CLIENT_ID
+private val DEFAULT_CLIENT_SECRET = BuildConfig.SPOTIFY_CLIENT_SECRET
 
 @Singleton
 class SpotifyRepository @Inject constructor(

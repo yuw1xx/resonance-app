@@ -2,6 +2,7 @@
 // with offline queue, and track love/unlove. Uses its own DataStore separate from main prefs.
 package dev.yuwixx.resonance.data.repository
 
+import dev.yuwixx.resonance.BuildConfig
 import android.content.Context
 import android.util.Log
 import androidx.datastore.core.DataStore
@@ -23,8 +24,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "LastFmRepo"
-private const val DEFAULT_API_KEY    = "56e83db5fd112b64e486cba54141c783"
-private const val DEFAULT_API_SECRET = "cad85a4626b55111661a4d6e0be85f5d"
+private val DEFAULT_API_KEY = BuildConfig.LASTFM_API_KEY
+private val DEFAULT_API_SECRET = BuildConfig.LASTFM_API_SECRET
 
 private val Context.lastFmStore: DataStore<Preferences> by preferencesDataStore(name = "lastfm_prefs")
 

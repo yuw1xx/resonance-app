@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.yuwixx.resonance.data.repository.MalojaRepository
 import dev.yuwixx.resonance.APP_VERSION
 import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
@@ -2080,7 +2081,8 @@ private fun MalojaSetupDialog(
         confirmButton = {
             Button(
                 onClick = { onSave(url.trim(), apiKey.trim()) },
-                enabled = url.isNotBlank() && apiKey.isNotBlank(),
+                enabled = MalojaRepository.normalizeUrl(url) != null &&
+                    apiKey.isNotBlank(),
             ) { Text("Save") }
         },
         dismissButton = {

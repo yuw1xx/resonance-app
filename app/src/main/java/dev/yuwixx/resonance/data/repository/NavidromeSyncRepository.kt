@@ -5,6 +5,9 @@
 // action, so the local action wins instead of needing timestamp-based conflict resolution.
 package dev.yuwixx.resonance.data.repository
 
+import android.util.Log
+import dev.yuwixx.resonance.data.network.ok
+import kotlinx.coroutines.CancellationException
 import dev.yuwixx.resonance.data.database.dao.LikedSongsDao
 import dev.yuwixx.resonance.data.database.dao.NavidromeSongDao
 import dev.yuwixx.resonance.data.database.dao.PendingStarActionDao
@@ -70,10 +73,13 @@ class NavidromeSyncRepository @Inject constructor(
             for ((songId, action) in latestPerSong) {
                 try {
                     when (action.action) {
-                        StarAction.STAR -> api.star(action.navidromeId)
-                        StarAction.UNSTAR -> api.unstar(action.navidromeId)
+                        StarAction.STAR -> api.star(action.navidromeId).ok
+                        StarAction.UNSTAR -> api.unstar(action.navidromeId).ok
                     }
-                    pendingStarActionDao.deleteForSong(songId)
+                    // A toggle made while this request was in flight stays queued.
+                    pendingStarActionDao.deleteForSongUpTo(songId, action.timestamp)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     // Leave queued — retried on the next flush (next star/unstar, or next pull).
                 }
@@ -85,7 +91,7 @@ class NavidromeSyncRepository @Inject constructor(
         val api = navidromeApiProvider.currentApi() ?: return
         try {
             val pendingIds = pendingStarActionDao.getPendingSongIds().toSet()
-            val starred = api.getStarred2().response.starred2?.song.orEmpty()
+            val starred = api.getStarred2().ok.starred2?.song.orEmpty()
                 .map { it.id.toLongOrNull() ?: stableLongId(it.id) }
                 .toSet()
 
@@ -115,12 +121,24 @@ class NavidromeSyncRepository @Inject constructor(
     suspend fun pushPlaylistCreate(playlistId: Long, name: String, songNavidromeIds: List<String>): String? {
         val api = navidromeApiProvider.currentApi() ?: return null
         return try {
-            val remoteId = api.createPlaylist(name = name, songIds = songNavidromeIds).response.playlist?.id ?: return null
+            val remoteId = api.createPlaylist(name = name, songIds = songNavidromeIds).ok.playlist?.id ?: return null
             val entity = playlistDao.getPlaylistById(playlistId) ?: return remoteId
             playlistDao.updatePlaylist(entity.copy(navidromePlaylistId = remoteId))
             remoteId
         } catch (e: Exception) {
             null
+        }
+    }
+
+    /** Replaces the server playlist's tracks with [songNavidromeIds], in this order. */
+    suspend fun pushPlaylistReplace(navidromePlaylistId: String, songNavidromeIds: List<String>) {
+        val api = navidromeApiProvider.currentApi() ?: return
+        try {
+            api.createPlaylist(playlistId = navidromePlaylistId, songIds = songNavidromeIds).ok
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("NavidromeSync", "Couldn't update playlist $navidromePlaylistId on the server", e)
         }
     }
 
@@ -150,10 +168,10 @@ class NavidromeSyncRepository @Inject constructor(
     suspend fun pullPlaylistsFromServer() {
         val api = navidromeApiProvider.currentApi() ?: return
         try {
-            val remotePlaylists = api.getPlaylists().response.playlists?.playlist.orEmpty()
+            val remotePlaylists = api.getPlaylists().ok.playlists?.playlist.orEmpty()
             for (summary in remotePlaylists) {
                 val local = playlistDao.getPlaylistByNavidromeId(summary.id) ?: continue
-                val detail = runCatching { api.getPlaylist(summary.id).response.playlist }.getOrNull() ?: continue
+                val detail = runCatching { api.getPlaylist(summary.id).ok.playlist }.getOrNull() ?: continue
 
                 // Rewrite the local copy only when the server's track list actually differs.
                 val remoteIds = detail.entry.map { it.id.toLongOrNull() ?: stableLongId(it.id) }

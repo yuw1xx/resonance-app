@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -66,7 +67,7 @@ class MalojaRepository @Inject constructor(
     init {
         scope.launch {
             serverUrl.collect { url ->
-                currentApi = if (url.isBlank()) null else buildApi(url)
+                currentApi = buildApi(url)
                 currentApiUrl = url
             }
         }
@@ -114,12 +115,15 @@ class MalojaRepository @Inject constructor(
     suspend fun setServerUrl(v: String) { store.edit { it[MalojaKeys.SERVER_URL] = v } }
     suspend fun setApiKey(v: String)    { store.edit { it[MalojaKeys.API_KEY]    = v } }
 
-    suspend fun configure(url: String, key: String) {
+    /** Returns false (and saves nothing) when [url] isn't a usable http(s) address. */
+    suspend fun configure(url: String, key: String): Boolean {
+        val normalized = normalizeUrl(url) ?: return false
         store.edit {
-            it[MalojaKeys.SERVER_URL] = url.trim()
+            it[MalojaKeys.SERVER_URL] = normalized
             it[MalojaKeys.API_KEY]    = key.trim()
             it[MalojaKeys.ENABLED]    = true
         }
+        return true
     }
 
     suspend fun clear() {
@@ -154,7 +158,7 @@ class MalojaRepository @Inject constructor(
     suspend fun testConnection(url: String, key: String): Result<String> = runCatching {
         if (url.isBlank()) error("Server URL is empty")
         if (key.isBlank()) error("API key is empty")
-        val api = buildApi(url)
+        val api = buildApi(url) ?: error("Not a valid server address")
         val resp = api.ping(key = key)
         when {
             resp.status == "success" || resp.status == "ok" -> resp.desc ?: "Connected"
@@ -206,8 +210,9 @@ class MalojaRepository @Inject constructor(
         }
     }
 
-    private fun buildApi(baseUrl: String): MalojaApi {
-        val normalized = baseUrl.trim().trimEnd('/') + "/"
+    // Null for a blank or malformed address; Retrofit would throw on it.
+    private fun buildApi(baseUrl: String): MalojaApi? {
+        val normalized = normalizeUrl(baseUrl) ?: return null
         val client = okHttp.newBuilder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
@@ -222,5 +227,16 @@ class MalojaRepository @Inject constructor(
 
     companion object {
         private const val TAG = "MalojaRepo"
+
+        /** Adds http:// to a bare host:port and checks the result parses; null if it doesn't. */
+        fun normalizeUrl(url: String): String? {
+            val trimmed = url.trim()
+            if (trimmed.isEmpty()) return null
+            val withScheme = if (SCHEME.containsMatchIn(trimmed)) trimmed else "http://$trimmed"
+            val parsed = withScheme.toHttpUrlOrNull()?.takeIf { it.host.isNotEmpty() } ?: return null
+            return parsed.toString().trimEnd('/') + "/"
+        }
+
+        private val SCHEME = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")
     }
 }

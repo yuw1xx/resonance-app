@@ -262,12 +262,15 @@ class MusicRepository @Inject constructor(
                 )
             }
             if (changed.isNotEmpty()) songDao.upsertSongs(changed)
-            if (foundIds.isEmpty()) {
-                songDao.deleteAllSongs()
-            } else {
-                val idsToDelete = existing.keys - foundIds.toHashSet()
-                idsToDelete.chunked(900).forEach { chunk -> songDao.deleteSongsByIds(chunk) }
+            // An empty result while songs are stored usually means MediaStore is rebuilding or
+            // storage isn't mounted yet. Keep the library (and its play counts) and try again
+            // on the next scan instead of deleting everything.
+            if (foundIds.isEmpty() && existing.isNotEmpty()) {
+                Log.w("MusicRepository", "MediaStore returned no songs; keeping the existing library")
+                return@withContext
             }
+            val idsToDelete = existing.keys - foundIds.toHashSet()
+            idsToDelete.chunked(900).forEach { chunk -> songDao.deleteSongsByIds(chunk) }
             if (stamp != null) prefs.setMediaStoreSyncStamp(stamp)
         } catch (e: Exception) {
             Log.e("MusicRepository", "Sync failed", e)

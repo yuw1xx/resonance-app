@@ -21,8 +21,12 @@ class SongDownloadWorker @AssistedInject constructor(
         return try {
             downloadRepository.performDownload(songId)
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: dev.yuwixx.resonance.data.repository.NotDownloadableException) {
+            Result.failure()
         } catch (e: Exception) {
-            Result.retry()
+            if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
 

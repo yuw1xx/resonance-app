@@ -101,14 +101,18 @@ class NavidromeDownloadRepository @Inject constructor(
 
     suspend fun totalBytesUsed(): Long = songDownloadDao.sumDownloadedBytes()
 
+    // getExternalFilesDir is null when shared storage is unavailable; fall back to internal.
     private fun downloadsDir(): File =
-        File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "downloads").apply { mkdirs() }
+        File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: context.filesDir, "downloads")
+            .apply { mkdirs() }
 
-    // Called by SongDownloadWorker/SongBatchDownloadWorker — actually performs one song's
-    // download and persists the result. Not private: the workers live in a different package.
+    /** Downloads one song (used by the download workers). Already-downloaded songs are skipped. */
     suspend fun performDownload(songId: Long) = withContext(Dispatchers.IO) {
         val entity = navidromeSongDao.getSongByNumericId(songId)
-            ?: throw IllegalStateException("Song $songId not found in Navidrome cache")
+            ?: throw NotDownloadableException("Song $songId isn't in the Navidrome library")
+        songDownloadDao.getBySongId(songId)?.let { existing ->
+            if (existing.state == DownloadState.DOWNLOADED && File(existing.localFilePath).exists()) return@withContext
+        }
 
         songDownloadDao.upsert(
             SongDownloadEntity(
@@ -126,17 +130,27 @@ class NavidromeDownloadRepository @Inject constructor(
 
             val ext = entity.path.substringAfterLast('.', "mp3").ifBlank { "mp3" }
             val destFile = File(downloadsDir(), "$songId.$ext")
+            val partFile = File(destFile.path + ".part")
 
             val connection = (URL(downloadUrl).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15_000
-                readTimeout    = 300_000
+                readTimeout = 300_000
             }
             try {
-                connection.inputStream.use { input ->
-                    destFile.outputStream().use { output -> input.copyTo(output) }
+                val code = connection.responseCode
+                if (code != HttpURLConnection.HTTP_OK) throw java.io.IOException("Server returned HTTP $code")
+                // Subsonic reports errors as a 200 with a JSON/XML body; don't save that as audio.
+                val type = connection.contentType.orEmpty()
+                if (type.contains("json") || type.contains("xml")) {
+                    throw java.io.IOException("Server returned an error instead of audio")
                 }
+                connection.inputStream.use { input ->
+                    partFile.outputStream().use { output -> input.copyTo(output) }
+                }
+                if (!partFile.renameTo(destFile)) throw java.io.IOException("Couldn't save ${destFile.name}")
             } finally {
                 connection.disconnect()
+                partFile.delete()
             }
 
             songDownloadDao.upsert(
@@ -156,3 +170,6 @@ class NavidromeDownloadRepository @Inject constructor(
         }
     }
 }
+
+/** A song that can never be downloaded (not a Navidrome song); retrying won't help. */
+class NotDownloadableException(message: String) : Exception(message)

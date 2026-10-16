@@ -1,4 +1,5 @@
 import com.github.jk1.license.render.JsonReportRenderer
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -8,6 +9,20 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.license.report)
     alias(libs.plugins.baselineprofile)
+}
+
+val apiKeys = mapOf(
+    "resonance.lastfm.apiKey" to "LASTFM_API_KEY",
+    "resonance.lastfm.apiSecret" to "LASTFM_API_SECRET",
+    "resonance.spotify.clientId" to "SPOTIFY_CLIENT_ID",
+    "resonance.spotify.clientSecret" to "SPOTIFY_CLIENT_SECRET",
+    "resonance.share.uploadToken" to "SHARE_UPLOAD_TOKEN",
+)
+
+fun apiKey(property: String): String {
+    val local = Properties()
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { local.load(it) }
+    return (local.getProperty(property) ?: providers.gradleProperty(property).orNull).orEmpty()
 }
 
 licenseReport {
@@ -40,6 +55,11 @@ android {
     compileSdk = 37
 
     defaultConfig {
+        // API keys come from local.properties (or the same keys as Gradle properties on CI) so
+        // they stay out of the repository.
+        apiKeys.forEach { (property, field) ->
+            buildConfigField("String", field, "\"${apiKey(property)}\"")
+        }
         applicationId = "dev.yuwixx.resonance"
         minSdk = 26
         targetSdk = 36
@@ -226,3 +246,13 @@ kotlin {
 tasks.withType<Test> {
     environment("TZ", "UTC")
 }
+
+// A release without the keys would ship with scrobbling, artwork lookup and sharing broken.
+gradle.taskGraph.whenReady {
+    val buildsRelease = allTasks.any { it.project == project && it.name.contains("Release") && it.name.startsWith("assemble") }
+    val missing = apiKeys.keys.filter { apiKey(it).isBlank() }
+    if (buildsRelease && missing.isNotEmpty()) {
+        throw GradleException("Missing API keys for a release build: ${missing.joinToString()}. Add them to local.properties.")
+    }
+}
+
