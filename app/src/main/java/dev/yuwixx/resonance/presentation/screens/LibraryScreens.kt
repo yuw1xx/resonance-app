@@ -969,7 +969,12 @@ fun AlbumDetailScreen(
                         },
                         onArtistClick = { onArtistClick(currentAlbum.artist) },
                         showDownloadAction = musicSource == MusicSource.NAVIDROME,
+                        downloadedCount = albumSongs.count { downloadStates[it.id]?.state == DownloadState.DOWNLOADED },
+                        downloading = albumSongs.any {
+                            downloadStates[it.id]?.state.let { s -> s == DownloadState.QUEUED || s == DownloadState.DOWNLOADING }
+                        },
                         onDownloadClick = { libraryViewModel.downloadAlbum(albumId) },
+                        onRemoveDownloadClick = { albumSongs.forEach { libraryViewModel.removeDownload(it.id) } },
                         modifier = Modifier.staggeredEntrance(0),
                     )
                 }
@@ -997,7 +1002,10 @@ fun AlbumHeader(
     onPlayClick: () -> Unit,
     onArtistClick: () -> Unit = {},
     showDownloadAction: Boolean = false,
+    downloadedCount: Int = 0,
+    downloading: Boolean = false,
     onDownloadClick: () -> Unit = {},
+    onRemoveDownloadClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1044,10 +1052,29 @@ fun AlbumHeader(
                 Text("Play")
             }
             if (showDownloadAction) {
-                OutlinedButton(onClick = onDownloadClick, shape = MaterialTheme.shapes.medium) {
-                    Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Download")
+                val allDownloaded = songs.isNotEmpty() && downloadedCount == songs.size
+                OutlinedButton(
+                    onClick = if (allDownloaded) onRemoveDownloadClick else onDownloadClick,
+                    enabled = !downloading,
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    when {
+                        downloading -> {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Downloading $downloadedCount/${songs.size}")
+                        }
+                        allDownloaded -> {
+                            Icon(Icons.Rounded.DownloadDone, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Remove download")
+                        }
+                        else -> {
+                            Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Download")
+                        }
+                    }
                 }
             }
         }
