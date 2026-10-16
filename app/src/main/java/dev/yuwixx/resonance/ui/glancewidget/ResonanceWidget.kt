@@ -37,6 +37,7 @@ import androidx.glance.material3.ColorProviders
 import androidx.glance.state.GlanceStateDefinition
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.*
+import dev.yuwixx.resonance.BuildConfig
 import dev.yuwixx.resonance.MainActivity
 import dev.yuwixx.resonance.R
 import dev.yuwixx.resonance.ui.theme.ResonanceSeed
@@ -47,7 +48,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val TAG = "ResonanceWidget"
-private const val APP_PACKAGE = "dev.yuwixx.resonance"
+private const val APP_PACKAGE = BuildConfig.APPLICATION_ID
 private const val SEEK_ZONES = 10
 
 const val ACTION_WIDGET_PLAY_PAUSE = "dev.yuwixx.resonance.WIDGET_PLAY_PAUSE"
@@ -60,7 +61,7 @@ const val EXTRA_SEEK_FRACTION_PCT = "seek_fraction_pct"
 // Signature-protected: only apps signed with the same key as this one (i.e. only this app)
 // can broadcast these widget control actions. Without it, any installed app could send an
 // unprotected implicit broadcast with a matching action string to hijack playback controls.
-const val PERMISSION_WIDGET_CONTROL = "dev.yuwixx.resonance.permission.WIDGET_CONTROL"
+const val PERMISSION_WIDGET_CONTROL = BuildConfig.APPLICATION_ID + ".permission.WIDGET_CONTROL"
 
 val KEY_TITLE = stringPreferencesKey("widget_title")
 val KEY_ARTIST = stringPreferencesKey("widget_artist")

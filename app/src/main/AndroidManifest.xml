@@ -5,9 +5,9 @@
     <!-- Signature-level: only this app (or another app signed with the same key) can send
          the home-screen widget's playback-control broadcasts. -->
     <permission
-        android:name="dev.yuwixx.resonance.permission.WIDGET_CONTROL"
+        android:name="${applicationId}.permission.WIDGET_CONTROL"
         android:protectionLevel="signature" />
-    <uses-permission android:name="dev.yuwixx.resonance.permission.WIDGET_CONTROL" />
+    <uses-permission android:name="${applicationId}.permission.WIDGET_CONTROL" />
 
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
