@@ -1555,7 +1555,15 @@ fun PlaylistDetailScreen(
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 IconButton(onClick = {
-                                    libraryViewModel.removeSongsFromPlaylist(playlistId, listOf(song.id))
+                                    libraryViewModel.removeSongsFromPlaylist(playlistId, listOf(song.id)) { undo ->
+                                        scope.launch {
+                                            snackbarHostState.currentSnackbarData?.dismiss()
+                                            val result = snackbarHostState.showSnackbar(
+                                                "“${song.title}” removed", actionLabel = "Undo", duration = SnackbarDuration.Short,
+                                            )
+                                            if (result == SnackbarResult.ActionPerformed) undo()
+                                        }
+                                    }
                                 }) {
                                     Icon(Icons.Rounded.RemoveCircleOutline, "Remove")
                                 }

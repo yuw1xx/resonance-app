@@ -282,10 +282,19 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch { playlistRepository.addSongsToPlaylist(playlistId, songIds) }
     }
 
-    fun removeSongsFromPlaylist(playlistId: Long, songIds: List<Long>) {
+    /** Removes songs; [onUndoAvailable] receives an action that puts them back where they were. */
+    fun removeSongsFromPlaylist(playlistId: Long, songIds: List<Long>, onUndoAvailable: ((() -> Unit) -> Unit)? = null) {
         viewModelScope.launch {
+            val before = playlistRepository.songIds(playlistId)
             songIds.forEach { songId ->
                 playlistRepository.removeSongFromPlaylist(playlistId, songId)
+            }
+            onUndoAvailable?.invoke {
+                viewModelScope.launch {
+                    // Re-add (also pushes to a linked Navidrome playlist), then restore the order.
+                    playlistRepository.addSongsToPlaylist(playlistId, songIds)
+                    playlistRepository.replacePlaylistSongs(playlistId, before)
+                }
             }
         }
     }

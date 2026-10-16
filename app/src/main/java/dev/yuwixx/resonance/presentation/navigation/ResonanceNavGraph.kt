@@ -44,6 +44,7 @@ import dev.yuwixx.resonance.presentation.components.PermissionWrapper
 import dev.yuwixx.resonance.presentation.screens.library.LibraryScreen
 import dev.yuwixx.resonance.presentation.screens.library.LibrarySection
 import dev.yuwixx.resonance.data.model.MusicSource
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -520,6 +521,23 @@ fun ResonanceNavGraph(
                 modifier = Modifier.graphicsLayer { translationY = size.height * sheetState.progress },
             )
         }
+
+        // App-wide undo snackbar ("Play next", "Add to queue"…), just above the mini player.
+        val undoSnackbar = remember { SnackbarHostState() }
+        LaunchedEffect(Unit) {
+            playerViewModel.undoEvents.collectLatest { event ->
+                undoSnackbar.currentSnackbarData?.dismiss()
+                val result = undoSnackbar.showSnackbar(event.message, actionLabel = "Undo", duration = SnackbarDuration.Short)
+                if (result == SnackbarResult.ActionPerformed) event.undo()
+            }
+        }
+        SnackbarHost(
+            undoSnackbar,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = contentBottomPadding)
+                .graphicsLayer { alpha = 1f - sheetState.progress },
+        )
 
         receiveUri?.let { uri ->
             ReceiveSheet(

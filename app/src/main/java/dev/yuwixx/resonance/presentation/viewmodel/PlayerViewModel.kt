@@ -557,8 +557,41 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    // ─── Undo snackbars ───
+
+    /** A queue change the app-wide snackbar can offer to undo. */
+    class UndoableEvent(val message: String, val undo: () -> Unit)
+
+    private val _undoEvents = MutableSharedFlow<UndoableEvent>(extraBufferCapacity = 4)
+    val undoEvents: SharedFlow<UndoableEvent> = _undoEvents.asSharedFlow()
+
+    // Several adds in a row (multi-select "play next") become one snackbar that undoes them all.
+    private val pendingUndos = mutableListOf<Pair<String, () -> Unit>>()
+    private var pendingVerb = ""
+    private var undoFlushJob: Job? = null
+
+    private fun offerUndo(title: String, verb: String, undo: () -> Unit) {
+        if (pendingUndos.isNotEmpty() && verb != pendingVerb) flushUndo()
+        pendingVerb = verb
+        pendingUndos += title to undo
+        undoFlushJob?.cancel()
+        undoFlushJob = viewModelScope.launch {
+            delay(150)
+            flushUndo()
+        }
+    }
+
+    private fun flushUndo() {
+        if (pendingUndos.isEmpty()) return
+        val batch = pendingUndos.toList()
+        pendingUndos.clear()
+        val message = if (batch.size == 1) "“${batch[0].first}” $pendingVerb" else "${batch.size} songs $pendingVerb"
+        _undoEvents.tryEmit(UndoableEvent(message) { batch.asReversed().forEach { it.second() } })
+    }
+
     fun addToQueueEnd(song: Song) {
         _controller?.addMediaItem(song.toMediaItem())
+        offerUndo(song.title, "added to queue") { removeQueuedSong(song.id) }
         viewModelScope.launch(Dispatchers.IO) { extractWaveform(song.id, song.uri) }
         prefetchReplayGain(song)
     }
@@ -568,6 +601,7 @@ class PlayerViewModel @Inject constructor(
             val insertIndex = (ctrl.currentMediaItemIndex + 1)
                 .coerceAtMost(ctrl.mediaItemCount)
             ctrl.addMediaItem(insertIndex, song.toMediaItem())
+            offerUndo(song.title, "plays next") { removeQueuedSong(song.id, insertIndex) }
         }
         viewModelScope.launch(Dispatchers.IO) { extractWaveform(song.id, song.uri) }
         prefetchReplayGain(song)

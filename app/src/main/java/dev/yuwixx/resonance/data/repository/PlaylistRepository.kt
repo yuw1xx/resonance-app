@@ -186,6 +186,9 @@ class PlaylistRepository @Inject constructor(
         updateModifiedTime(playlistId)
     }
 
+    suspend fun songIds(playlistId: Long): List<Long> =
+        playlistDao.getPlaylistSongRefs(playlistId).map { it.songId }
+
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
         playlistDao.removeSongFromPlaylist(playlistId, songId)
         playlistDao.compactPositions(playlistId)
