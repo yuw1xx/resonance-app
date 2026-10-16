@@ -2,6 +2,7 @@ package dev.yuwixx.resonance.baselineprofile
 
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.Until
@@ -9,18 +10,20 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-private const val PACKAGE = "dev.yuwixx.resonance"
-
 /** Records the hot paths users hit first: cold start, the library list, and the player. */
 @RunWith(AndroidJUnit4::class)
 class BaselineProfileGenerator {
     @get:Rule
     val rule = BaselineProfileRule()
 
+    // The profiled build has its own application ID, passed in by the Gradle build.
+    private val packageName = InstrumentationRegistry.getArguments().getString("targetAppId")
+        ?: error("targetAppId instrumentation argument missing")
+
     @Test
-    fun generate() = rule.collect(packageName = PACKAGE, includeInStartupProfile = true) {
-        device.executeShellCommand("pm grant $PACKAGE android.permission.READ_MEDIA_AUDIO")
-        device.executeShellCommand("pm grant $PACKAGE android.permission.POST_NOTIFICATIONS")
+    fun generate() = rule.collect(packageName = packageName, includeInStartupProfile = true) {
+        device.executeShellCommand("pm grant $packageName android.permission.READ_MEDIA_AUDIO")
+        device.executeShellCommand("pm grant $packageName android.permission.POST_NOTIFICATIONS")
         pressHome()
         startActivityAndWait()
 

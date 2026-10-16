@@ -38,6 +38,17 @@ baselineProfile {
     useConnectedDevices = true
 }
 
+// Tells the generator which application ID it is profiling.
+androidComponents {
+    onVariants { variant ->
+        val loader = variant.artifacts.getBuiltArtifactsLoader()
+        variant.instrumentationRunnerArguments.put(
+            "targetAppId",
+            variant.testedApks.map { loader.load(it)?.applicationId },
+        )
+    }
+}
+
 dependencies {
     implementation(libs.androidx.junit)
     implementation(libs.androidx.uiautomator)

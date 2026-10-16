@@ -899,6 +899,8 @@ private data class ConfettiPiece(
     val rotationsPerFall: Float,
 )
 
+private const val CONFETTI_CYCLE_SECONDS = 12.6f
+
 @Composable
 fun ConfettiOverlay(modifier: Modifier = Modifier) {
     val pieces = remember {
@@ -919,17 +921,19 @@ fun ConfettiOverlay(modifier: Modifier = Modifier) {
         }
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "confetti")
-    val progress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(12600, easing = LinearEasing)),
-        label = "confetti_t",
-    )
+    // A clock that only moves forward. A repeating 0..1 animation would make every piece jump
+    // back each time it restarts.
+    val elapsedSeconds = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        val start = withFrameNanos { it }
+        while (true) {
+            withFrameNanos { elapsedSeconds.floatValue = (it - start) / 1_000_000_000f }
+        }
+    }
 
     Canvas(modifier = modifier.fillMaxSize()) {
+        val progress = elapsedSeconds.floatValue / CONFETTI_CYCLE_SECONDS
         pieces.forEach { p ->
-            // Only ever grows, so rotation stays continuous across cycles.
             val accumulated = p.yOffset + progress * p.speed
             val rawY = accumulated % 1.0f
             val half = p.sizeDp.dp.toPx() / 2f

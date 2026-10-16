@@ -100,6 +100,7 @@ android {
         // performance on a device and generating baseline profiles. Not for distribution.
         create("profile") {
             initWith(getByName("release"))
+            applicationIdSuffix = ".profile"
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
         }
@@ -129,6 +130,16 @@ android {
     // read the merged *debug* assets (test-source-set assets aren't packaged for them), so they
     // go there; release builds don't carry them.
     sourceSets.getByName("debug").assets.srcDirs(files("$projectDir/schemas"))
+}
+
+// The baseline profile plugin adds these build types, signed with the debug key. Give them their
+// own application ID so profiling installs beside the release app instead of replacing it.
+androidComponents {
+    onVariants { variant ->
+        if (variant.buildType == "nonMinifiedRelease" || variant.buildType == "benchmarkRelease") {
+            variant.applicationId.set("dev.yuwixx.resonance.benchmark")
+        }
+    }
 }
 
 dependencies {
