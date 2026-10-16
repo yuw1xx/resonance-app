@@ -35,7 +35,14 @@ class MusicRepository @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val prefs: ResonancePreferences,
     private val audioTagWriter: AudioTagWriter,
+    @dev.yuwixx.resonance.di.ApplicationScope private val appScope: kotlinx.coroutines.CoroutineScope,
 ) {
+    // The library flows below are shared: one mapping/grouping pass per change for every
+    // collector (player, library screens, home, search…), replayed to late subscribers, and
+    // kept alive briefly across screen changes. distinctUntilChanged drops Room re-emissions
+    // whose result didn't actually change.
+    private fun <T> Flow<T>.shared(): Flow<T> = distinctUntilChanged()
+        .shareIn(appScope, SharingStarted.WhileSubscribed(10_000), replay = 1)
 
     // combine() with 5 flows so that changing any pref instantly re-filters/re-maps songs
     // without re-scanning MediaStore.
@@ -55,7 +62,7 @@ class MusicRepository @Inject constructor(
                 val song = entity.toDomain(delimiter)
                 if (showFilename) song.copy(title = java.io.File(song.path).nameWithoutExtension) else song
             }
-    }.flowOn(Dispatchers.Default)
+    }.flowOn(Dispatchers.Default).shared()
 
     val allFolders: Flow<List<String>> = songDao.getAllFolders()
 
@@ -83,7 +90,7 @@ class MusicRepository @Inject constructor(
         }.sortedWith(Comparator { a, b ->
             naturalCompare(a.title.stripArticles(ignoreArticles), b.title.stripArticles(ignoreArticles))
         })
-    }.flowOn(Dispatchers.Default)
+    }.flowOn(Dispatchers.Default).shared()
 
     val allArtists: Flow<List<Artist>> = combine(
         allSongs,
@@ -106,7 +113,7 @@ class MusicRepository @Inject constructor(
         }.sortedWith(Comparator { a, b ->
             naturalCompare(a.name.stripArticles(ignoreArticles), b.name.stripArticles(ignoreArticles))
         })
-    }.flowOn(Dispatchers.Default)
+    }.flowOn(Dispatchers.Default).shared()
 
     private fun String.stripArticles(ignore: Boolean): String {
         if (!ignore) return this
@@ -136,8 +143,20 @@ class MusicRepository @Inject constructor(
 
     // ─── MediaStore Sync ───
 
-    suspend fun syncWithMediaStore() = withContext(Dispatchers.IO) {
+    /**
+     * Brings the songs table in line with MediaStore. Cheap when nothing changed: the scan is
+     * skipped entirely if MediaStore's generation (API 30+) and the duration filter match the
+     * last sync, and otherwise only new/changed rows are written — unchanged rows aren't touched,
+     * so collectors don't re-emit and play counts / ReplayGain survive.
+     */
+    suspend fun syncWithMediaStore(force: Boolean = false) = withContext(Dispatchers.IO) {
         val minDuration = prefs.minTrackDurationMs.first()
+        val stamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            "${MediaStore.getVersion(context)}:${MediaStore.getGeneration(context, MediaStore.VOLUME_EXTERNAL)}:$minDuration"
+        } else null
+        if (!force && stamp != null && stamp == prefs.mediaStoreSyncStamp.first() && songDao.getAllSongIds().isNotEmpty()) {
+            return@withContext
+        }
         val foundIds = mutableListOf<Long>()
         val entities = mutableListOf<SongEntity>()
         var querySucceeded = false
@@ -231,14 +250,25 @@ class MusicRepository @Inject constructor(
             }
 
             if (!querySucceeded) return@withContext
-            songDao.upsertSongs(entities)
+            val existing = songDao.getSyncKeys().associateBy { it.id }
+            val changed = entities.mapNotNull { entity ->
+                val old = existing[entity.id] ?: return@mapNotNull entity
+                val fileUnchanged = old.dateModified == entity.dateModified &&
+                    old.size == entity.size && old.path == entity.path
+                if (fileUnchanged) null
+                else entity.copy(
+                    listenCount = old.listenCount,
+                    lastListened = old.lastListened,
+                )
+            }
+            if (changed.isNotEmpty()) songDao.upsertSongs(changed)
             if (foundIds.isEmpty()) {
                 songDao.deleteAllSongs()
             } else {
-                val currentIds = songDao.getAllSongIds().toHashSet()
-                val idsToDelete = currentIds - foundIds.toHashSet()
+                val idsToDelete = existing.keys - foundIds.toHashSet()
                 idsToDelete.chunked(900).forEach { chunk -> songDao.deleteSongsByIds(chunk) }
             }
+            if (stamp != null) prefs.setMediaStoreSyncStamp(stamp)
         } catch (e: Exception) {
             Log.e("MusicRepository", "Sync failed", e)
         }

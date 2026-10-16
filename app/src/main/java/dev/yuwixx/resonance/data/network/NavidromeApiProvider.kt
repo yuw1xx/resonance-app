@@ -15,6 +15,7 @@ import javax.inject.Singleton
 @Singleton
 class NavidromeApiProvider @Inject constructor(
     private val moshi: Moshi,
+    private val okHttp: OkHttpClient,
 ) {
     @Volatile private var api: NavidromeApi? = null
     @Volatile private var currentServerUrl: String? = null
@@ -42,13 +43,10 @@ class NavidromeApiProvider @Inject constructor(
 
         fun rebuild(serverUrl: String, username: String, password: String): NavidromeApi {
         val normalizedUrl = serverUrl.trimEnd('/') + "/"
-        val client = OkHttpClient.Builder()
+        val client = okHttp.newBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(NavidromeAuthInterceptor(username, password))
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
-            })
             .build()
 
         val newApi = Retrofit.Builder()
@@ -67,7 +65,7 @@ class NavidromeApiProvider @Inject constructor(
 
         fun buildApi(serverUrl: String, username: String, password: String): NavidromeApi {
         val normalizedUrl = serverUrl.trimEnd('/') + "/"
-        val client = OkHttpClient.Builder()
+        val client = okHttp.newBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(NavidromeAuthInterceptor(username, password))

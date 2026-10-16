@@ -2,6 +2,7 @@
 // AlbumDetail, ArtistDetail, PlaylistDetail, Queue, and the TagEditor screen.
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.presentation.screens.library.LocalLibrarySections
 import dev.yuwixx.resonance.presentation.screens.library.LibraryTitle
 import android.annotation.SuppressLint
@@ -85,8 +86,8 @@ fun SongsScreen(
     onNavigateToPlayer: () -> Unit,
     onNavigateToTagEditor: (Long) -> Unit,
 ) {
-    val rawSongs by libraryViewModel.allSongs.collectAsState()
-    val defaultSongsSort by libraryViewModel.prefs.defaultSongsSort.collectAsState(initial = "TITLE")
+    val rawSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
+    val defaultSongsSort by libraryViewModel.prefs.defaultSongsSort.collectAsStateWithLifecycle(initialValue = "TITLE")
     val songs = remember(rawSongs, defaultSongsSort) {
         when (defaultSongsSort) {
             "ARTIST" -> rawSongs.sortedBy { it.displayArtist.lowercase() }
@@ -95,13 +96,13 @@ fun SongsScreen(
             else     -> rawSongs.sortedBy { it.title.lowercase() }
         }
     }
-    val currentSong by playerViewModel.currentSong.collectAsState()
-    val isPlaying by playerViewModel.isPlaying.collectAsState()
-    val isSyncing by libraryViewModel.isSyncing.collectAsState()
-    val navSyncState by libraryViewModel.navSyncState.collectAsState()
-    val playlists by libraryViewModel.allPlaylists.collectAsState()
-    val musicSource by libraryViewModel.prefs.musicSource.collectAsState(initial = MusicSource.LOCAL)
-    val downloadStates by libraryViewModel.downloadStates.collectAsState()
+    val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
+    val isPlaying by playerViewModel.isPlaying.collectAsStateWithLifecycle()
+    val isSyncing by libraryViewModel.isSyncing.collectAsStateWithLifecycle()
+    val navSyncState by libraryViewModel.navSyncState.collectAsStateWithLifecycle()
+    val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
+    val musicSource by libraryViewModel.prefs.musicSource.collectAsStateWithLifecycle(initialValue = MusicSource.LOCAL)
+    val downloadStates by libraryViewModel.downloadStates.collectAsStateWithLifecycle()
 
     var selectedSongs by remember { mutableStateOf(setOf<Song>()) }
     val isSelectionMode = selectedSongs.isNotEmpty()
@@ -515,7 +516,7 @@ fun AlbumsScreen(
     onAlbumClick: (Album) -> Unit,
     onSearchClick: () -> Unit,
 ) {
-    val albums by libraryViewModel.allAlbums.collectAsState()
+    val albums by libraryViewModel.allAlbums.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -618,7 +619,7 @@ fun ArtistsScreen(
     onArtistClick: (Artist) -> Unit,
     onSearchClick: () -> Unit,
 ) {
-    val artists by libraryViewModel.allArtists.collectAsState()
+    val artists by libraryViewModel.allArtists.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -641,7 +642,7 @@ fun ArtistsScreen(
         if (artists.isEmpty()) {
             EmptyLibraryView(onScan = { libraryViewModel.syncLibrary() })
         } else {
-            val fetchImages by libraryViewModel.prefs.fetchArtistImages.collectAsState(initial = false)
+            val fetchImages by libraryViewModel.prefs.fetchArtistImages.collectAsStateWithLifecycle(initialValue = false)
             val listState = rememberLazyListState()
             LazyColumnWithScrollbar(
                 state = listState,
@@ -710,8 +711,8 @@ fun PlaylistsScreen(
     libraryViewModel: LibraryViewModel,
     onPlaylistClick: (Playlist) -> Unit,
 ) {
-    val playlists by libraryViewModel.allPlaylists.collectAsState()
-    val importState by libraryViewModel.m3uImportState.collectAsState()
+    val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
+    val importState by libraryViewModel.m3uImportState.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     val launchImport = rememberM3uImportLauncher { uris -> libraryViewModel.startM3uImport(uris) }
 
@@ -862,11 +863,11 @@ fun AlbumDetailScreen(
     onNavigateToTagEditor: (Long) -> Unit = {},
     onArtistClick: (String) -> Unit = {},
 ) {
-    val albums by libraryViewModel.allAlbums.collectAsState()
-    val allSongs by libraryViewModel.allSongs.collectAsState()
-    val playlists by libraryViewModel.allPlaylists.collectAsState()
-    val musicSource by libraryViewModel.prefs.musicSource.collectAsState(initial = MusicSource.LOCAL)
-    val downloadStates by libraryViewModel.downloadStates.collectAsState()
+    val albums by libraryViewModel.allAlbums.collectAsStateWithLifecycle()
+    val allSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
+    val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
+    val musicSource by libraryViewModel.prefs.musicSource.collectAsStateWithLifecycle(initialValue = MusicSource.LOCAL)
+    val downloadStates by libraryViewModel.downloadStates.collectAsStateWithLifecycle()
 
     val album = remember(albums, albumId) { albums.find { it.id == albumId } }
     val albumSongs = remember(allSongs, album) {
@@ -1030,11 +1031,11 @@ fun ArtistDetailScreen(
     onNavigateToPlayer: () -> Unit,
     onNavigateToTagEditor: (Long) -> Unit = {},
 ) {
-    val artists by libraryViewModel.allArtists.collectAsState()
-    val albums by libraryViewModel.allAlbums.collectAsState()
-    val playlists by libraryViewModel.allPlaylists.collectAsState()
-    val musicSource by libraryViewModel.prefs.musicSource.collectAsState(initial = MusicSource.LOCAL)
-    val downloadStates by libraryViewModel.downloadStates.collectAsState()
+    val artists by libraryViewModel.allArtists.collectAsStateWithLifecycle()
+    val albums by libraryViewModel.allAlbums.collectAsStateWithLifecycle()
+    val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
+    val musicSource by libraryViewModel.prefs.musicSource.collectAsStateWithLifecycle(initialValue = MusicSource.LOCAL)
+    val downloadStates by libraryViewModel.downloadStates.collectAsStateWithLifecycle()
 
     val artist = remember(artists, artistName) { artists.find { it.name == artistName } }
     val artistSongs = remember(artist) { artist?.songs ?: emptyList() }
@@ -1072,7 +1073,7 @@ fun ArtistDetailScreen(
 
     var showArtistInfoSheet by remember { mutableStateOf(false) }
     val artistInfoViewModel: dev.yuwixx.resonance.presentation.viewmodel.ArtistInfoViewModel = hiltViewModel()
-    val artistInfoState by artistInfoViewModel.state.collectAsState()
+    val artistInfoState by artistInfoViewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(showArtistInfoSheet, artistName) {
         if (showArtistInfoSheet) artistInfoViewModel.load(artistName)
     }
@@ -1192,7 +1193,7 @@ fun ArtistHeader(
     modifier: Modifier = Modifier,
     onPlayClick: () -> Unit,
 ) {
-    val fetchImages by libraryViewModel.prefs.fetchArtistImages.collectAsState(initial = false)
+    val fetchImages by libraryViewModel.prefs.fetchArtistImages.collectAsStateWithLifecycle(initialValue = false)
     var imageUrl by remember(artist.name) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(artist.name, fetchImages) {
@@ -1275,9 +1276,9 @@ fun PlaylistDetailScreen(
     onBack: () -> Unit,
     onNavigateToPlayer: () -> Unit,
 ) {
-    val playlists by libraryViewModel.allPlaylists.collectAsState()
-    val allSongs by libraryViewModel.allSongs.collectAsState()
-    val musicSource by libraryViewModel.prefs.musicSource.collectAsState(initial = MusicSource.LOCAL)
+    val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
+    val allSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
+    val musicSource by libraryViewModel.prefs.musicSource.collectAsStateWithLifecycle(initialValue = MusicSource.LOCAL)
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -2081,7 +2082,7 @@ fun SongInfoBottomSheet(
                     modifier = Modifier.padding(16.dp)
                 )
                 LazyColumn {
-                    items(playlists) { playlist ->
+                    items(playlists, key = { it.id }) { playlist ->
                         ListItem(
                             modifier = Modifier.clickable { onPlaylistSelected(playlist) },
                             headlineContent = { Text(playlist.name) },
@@ -2173,9 +2174,9 @@ fun LikedSongsScreen(
     onBack: () -> Unit,
     onNavigateToPlayer: () -> Unit,
 ) {
-    val allSongs by libraryViewModel.allSongs.collectAsState()
-    val likedIds by playerViewModel.likedSongIds.collectAsState(initial = emptyList())
-    val playlists by libraryViewModel.allPlaylists.collectAsState()
+    val allSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
+    val likedIds by playerViewModel.likedSongIds.collectAsStateWithLifecycle(initialValue = emptyList())
+    val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
 
     val likedSongs: List<Song> = remember(allSongs, likedIds) {
         val songMap = allSongs.associateBy { it.id }
@@ -2436,10 +2437,10 @@ fun SearchScreen(
     onArtistClick: (Artist) -> Unit,
     onNavigateToPlayer: () -> Unit,
 ) {
-    val allSongs by libraryViewModel.allSongs.collectAsState()
-    val allAlbums by libraryViewModel.allAlbums.collectAsState()
-    val allArtists by libraryViewModel.allArtists.collectAsState()
-    val playlists by libraryViewModel.allPlaylists.collectAsState()
+    val allSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
+    val allAlbums by libraryViewModel.allAlbums.collectAsStateWithLifecycle()
+    val allArtists by libraryViewModel.allArtists.collectAsStateWithLifecycle()
+    val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
 
     var query by remember { mutableStateOf("") }
     val trimmed = query.trim()
@@ -2766,7 +2767,7 @@ fun TagEditorScreen(
     libraryViewModel: LibraryViewModel,
     onBack: () -> Unit
 ) {
-    val allSongs by libraryViewModel.allSongs.collectAsState()
+    val allSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
     val song = remember(allSongs, songId) { allSongs.find { it.id == songId } }
 
     LaunchedEffect(song) {

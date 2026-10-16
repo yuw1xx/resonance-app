@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.app.Activity
 import android.Manifest
 import android.content.Intent
@@ -144,15 +145,15 @@ private fun ShareMain(
     onPlayNow: (Song) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val nearbyState     by viewModel.nearbyState.collectAsState()
-    val devices         by viewModel.nearbyDevices.collectAsState()
-    val selectedSongs   by viewModel.selectedSongs.collectAsState()
+    val nearbyState     by viewModel.nearbyState.collectAsStateWithLifecycle()
+    val devices         by viewModel.nearbyDevices.collectAsStateWithLifecycle()
+    val selectedSongs   by viewModel.selectedSongs.collectAsStateWithLifecycle()
     val selectedSong    = selectedSongs.singleOrNull()
-    val transferState   by viewModel.transferState.collectAsState()
-    val allSongs        by viewModel.allSongs.collectAsState()
-    val incomingRequest by viewModel.incomingRequest.collectAsState()
-    val incomingFile    by viewModel.incomingFile.collectAsState()
-    val remoteTtlHours  by viewModel.remoteTtlHours.collectAsState()
+    val transferState   by viewModel.transferState.collectAsStateWithLifecycle()
+    val allSongs        by viewModel.allSongs.collectAsStateWithLifecycle()
+    val incomingRequest by viewModel.incomingRequest.collectAsStateWithLifecycle()
+    val incomingFile    by viewModel.incomingFile.collectAsStateWithLifecycle()
+    val remoteTtlHours  by viewModel.remoteTtlHours.collectAsStateWithLifecycle()
 
     val haptics = LocalHapticFeedback.current
     var showSongPicker by remember { mutableStateOf(false) }

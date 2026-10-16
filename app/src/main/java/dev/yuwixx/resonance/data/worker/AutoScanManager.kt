@@ -35,6 +35,7 @@ class AutoScanManager @Inject constructor(
     private fun scheduleWork(hours: Int) {
         val constraints = Constraints.Builder()
             .setRequiresStorageNotLow(true)
+            .setRequiresBatteryNotLow(true)
             .build()
 
         val request = PeriodicWorkRequestBuilder<AutoScanWorker>(

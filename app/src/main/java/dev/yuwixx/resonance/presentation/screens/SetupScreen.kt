@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.Manifest
 import android.os.Build
 import androidx.compose.animation.*
@@ -48,9 +49,9 @@ fun SetupScreen(onComplete: () -> Unit) {
     var chosenSource by remember { mutableStateOf(MusicSource.LOCAL) }
 
     val settingsViewModel: SettingsViewModel = hiltViewModel()
-    val lastFmAuthState by settingsViewModel.lastFmAuthState.collectAsState()
-    val navidromeConnectionState by settingsViewModel.navidromeConnectionState.collectAsState()
-    val navidromeSyncState by settingsViewModel.navidromeSyncState.collectAsState()
+    val lastFmAuthState by settingsViewModel.lastFmAuthState.collectAsStateWithLifecycle()
+    val navidromeConnectionState by settingsViewModel.navidromeConnectionState.collectAsStateWithLifecycle()
+    val navidromeSyncState by settingsViewModel.navidromeSyncState.collectAsStateWithLifecycle()
 
     val permissions = remember {
         buildList {

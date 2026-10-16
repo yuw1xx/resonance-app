@@ -3,6 +3,7 @@
 // artwork background.
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -65,34 +66,34 @@ fun PlayerScreen(
     onArtistClick: (String) -> Unit = {},
     onSongClick: (Long) -> Unit = {},
 ) {
-    val currentSong by playerViewModel.currentSong.collectAsState()
-    val isPlaying by playerViewModel.isPlaying.collectAsState()
+    val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
+    val isPlaying by playerViewModel.isPlaying.collectAsStateWithLifecycle()
 
     // Not `by` — this obtains the State<Long> reference without reading `.value` here, so
     // PlayerScreen's own (large) recompose scope isn't subscribed to every ~100ms position tick.
     // Only SeekBarAndTimeLabels (the one place that actually needs live position) reads `.value`.
-    val positionMsState = playerViewModel.positionMs.collectAsState()
+    val positionMsState = playerViewModel.positionMs.collectAsStateWithLifecycle()
 
-    val durationMs by playerViewModel.durationMs.collectAsState()
-    val repeatMode by playerViewModel.repeatMode.collectAsState()
-    val shuffleEnabled by playerViewModel.shuffleEnabled.collectAsState()
-    val waveformData by playerViewModel.waveformData.collectAsState()
-    val seekbarStyle by playerViewModel.seekbarStyle.collectAsState()
-    val blurBackground by playerViewModel.blurBackground.collectAsState()
-    val blurStrength by playerViewModel.blurStrength.collectAsState()
-    val artworkAnimation by playerViewModel.artworkAnimation.collectAsState()
-    val sleepTimer by playerViewModel.sleepTimer.collectAsState()
-    val lyricsResult by playerViewModel.lyricsResult.collectAsState()
-    val activeLyricIndex by playerViewModel.activeLyricIndex.collectAsState()
-    val isTrackLoved by playerViewModel.isCurrentSongLiked.collectAsState()
-    val artworkColors by playerViewModel.artworkColors.collectAsState()
-    val nextSong by playerViewModel.nextSong.collectAsState()
-    val isLoadingSmartQueue by playerViewModel.isLoadingSmartQueue.collectAsState()
-    val smartQueueError by playerViewModel.smartQueueError.collectAsState()
+    val durationMs by playerViewModel.durationMs.collectAsStateWithLifecycle()
+    val repeatMode by playerViewModel.repeatMode.collectAsStateWithLifecycle()
+    val shuffleEnabled by playerViewModel.shuffleEnabled.collectAsStateWithLifecycle()
+    val waveformData by playerViewModel.waveformData.collectAsStateWithLifecycle()
+    val seekbarStyle by playerViewModel.seekbarStyle.collectAsStateWithLifecycle()
+    val blurBackground by playerViewModel.blurBackground.collectAsStateWithLifecycle()
+    val blurStrength by playerViewModel.blurStrength.collectAsStateWithLifecycle()
+    val artworkAnimation by playerViewModel.artworkAnimation.collectAsStateWithLifecycle()
+    val sleepTimer by playerViewModel.sleepTimer.collectAsStateWithLifecycle()
+    val lyricsResult by playerViewModel.lyricsResult.collectAsStateWithLifecycle()
+    val activeLyricIndex by playerViewModel.activeLyricIndex.collectAsStateWithLifecycle()
+    val isTrackLoved by playerViewModel.isCurrentSongLiked.collectAsStateWithLifecycle()
+    val artworkColors by playerViewModel.artworkColors.collectAsStateWithLifecycle()
+    val nextSong by playerViewModel.nextSong.collectAsStateWithLifecycle()
+    val isLoadingSmartQueue by playerViewModel.isLoadingSmartQueue.collectAsStateWithLifecycle()
+    val smartQueueError by playerViewModel.smartQueueError.collectAsStateWithLifecycle()
 
-    val playerLayout by playerViewModel.playerLayout.collectAsState()
-    val showLyricsButton by playerViewModel.showLyricsButton.collectAsState()
-    val lyricsFontScale by playerViewModel.lyricsFontScale.collectAsState()
+    val playerLayout by playerViewModel.playerLayout.collectAsStateWithLifecycle()
+    val showLyricsButton by playerViewModel.showLyricsButton.collectAsStateWithLifecycle()
+    val lyricsFontScale by playerViewModel.lyricsFontScale.collectAsStateWithLifecycle()
 
     val song = currentSong ?: return
     val shareViewModel: ShareViewModel = hiltViewModel()
@@ -652,7 +653,9 @@ private fun TransportControls(
 ) {
     val motion = MaterialTheme.motionScheme
     val morph = remember { androidx.graphics.shapes.Morph(MaterialShapes.Square, MaterialShapes.Cookie9Sided) }
-    val morphProgress by animateFloatAsState(
+    // Morph, spin and press scale are all read inside graphicsLayer below, so the per-frame
+    // spin redraws one layer instead of recomposing the controls row.
+    val morphProgress = animateFloatAsState(
         targetValue = if (isPlaying) 1f else 0f,
         animationSpec = motion.defaultSpatialSpec(),
         label = "play_morph",
@@ -668,7 +671,7 @@ private fun TransportControls(
     }
     val playInteraction = remember { MutableInteractionSource() }
     val pressed by playInteraction.collectIsPressedAsState()
-    val pressScale by animateFloatAsState(
+    val pressScale = animateFloatAsState(
         targetValue = if (pressed) 0.88f else 1f,
         animationSpec = motion.fastSpatialSpec(),
         label = "play_press",
@@ -703,10 +706,12 @@ private fun TransportControls(
             modifier = Modifier
                 .size(84.dp)
                 .graphicsLayer {
-                    scaleX = pressScale
-                    scaleY = pressScale
+                    val p = morphProgress.value
+                    scaleX = pressScale.value
+                    scaleY = pressScale.value
+                    shape = MorphShape(morph, p, rotation.value % 360f * p)
+                    clip = true
                 }
-                .clip(MorphShape(morph, morphProgress, rotation.value % 360f * morphProgress))
                 .background(playButtonColor)
                 .clickable(
                     interactionSource = playInteraction,
@@ -771,7 +776,8 @@ private fun SeekBarAndTimeLabels(
     showRemainingTime: Boolean,
     onSeek: (Long) -> Unit,
 ) {
-    val positionMs by position
+    // Whole seconds only: the labels recompose once a second, not on every position tick.
+    val positionSec by remember(position) { derivedStateOf { position.value / 1000 } }
 
     when (seekbarStyle) {
         "WAVEFORM" -> {
@@ -801,7 +807,7 @@ private fun SeekBarAndTimeLabels(
         }
         else -> {
             Slider(
-                value = positionMs.toFloat(),
+                value = position.value.toFloat(),
                 onValueChange = { onSeek(it.toLong()) },
                 valueRange = 0f..durationMs.toFloat().coerceAtLeast(1f),
                 colors = SliderDefaults.colors(
@@ -818,13 +824,13 @@ private fun SeekBarAndTimeLabels(
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
-            formatDuration(positionMs),
+            formatDuration(positionSec * 1000),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             if (showRemainingTime && durationMs > 0)
-                "-${formatDuration(durationMs - positionMs)}"
+                "-${formatDuration(durationMs - positionSec * 1000)}"
             else formatDuration(durationMs),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

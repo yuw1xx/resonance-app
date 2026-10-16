@@ -49,6 +49,7 @@ class MalojaRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val moshi: Moshi,
     private val pendingScrobbleDao: PendingScrobbleDao,
+    private val okHttp: OkHttpClient,
 ) {
     private val store = context.malojaStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -207,12 +208,9 @@ class MalojaRepository @Inject constructor(
 
     private fun buildApi(baseUrl: String): MalojaApi {
         val normalized = baseUrl.trim().trimEnd('/') + "/"
-        val client = OkHttpClient.Builder()
+        val client = okHttp.newBuilder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
-            })
             .build()
         return Retrofit.Builder()
             .baseUrl(normalized)

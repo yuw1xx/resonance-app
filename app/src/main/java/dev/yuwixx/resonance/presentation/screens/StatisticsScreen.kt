@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -49,8 +50,8 @@ fun StatisticsScreen(
     onBack: () -> Unit,
     viewModel: StatisticsViewModel = hiltViewModel(),
 ) {
-    val period by viewModel.period.collectAsState()
-    val stats by viewModel.stats.collectAsState()
+    val period by viewModel.period.collectAsStateWithLifecycle()
+    val stats by viewModel.stats.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {

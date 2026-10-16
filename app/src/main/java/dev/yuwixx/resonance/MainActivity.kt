@@ -2,6 +2,7 @@
 // drives the in-app update flow, and renders ResonanceNavGraph inside ResonanceTheme.
 package dev.yuwixx.resonance
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -34,7 +35,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,15 +92,15 @@ class MainActivity : ComponentActivity() {
             val playerViewModel: PlayerViewModel = hiltViewModel()
             val settingsViewModel: SettingsViewModel = hiltViewModel()
 
-            val dynamicColor by playerViewModel.dynamicColor.collectAsState()
-            val darkThemePref by settingsViewModel.darkTheme.collectAsState()
+            val dynamicColor by playerViewModel.dynamicColor.collectAsStateWithLifecycle()
+            val darkThemePref by settingsViewModel.darkTheme.collectAsStateWithLifecycle()
             val systemDark = isSystemInDarkTheme()
-            val uri by receiveUri.collectAsState()
-            val amoledMode by playerViewModel.prefs.amoledBlackTheme.collectAsState(initial = false)
-            val systemDynamicEnabled by playerViewModel.prefs.dynamicColorEnabled.collectAsState(initial = true)
-            val partyMode by playerViewModel.partyMode.collectAsState(initial = false)
-            val cornerRadius by playerViewModel.prefs.cornerRadius.collectAsState(initial = 28)
-            val paletteStyle by playerViewModel.prefs.paletteStyle.collectAsState(initial = "TONAL_SPOT")
+            val uri by receiveUri.collectAsStateWithLifecycle()
+            val amoledMode by playerViewModel.prefs.amoledBlackTheme.collectAsStateWithLifecycle(initialValue = false)
+            val systemDynamicEnabled by playerViewModel.prefs.dynamicColorEnabled.collectAsStateWithLifecycle(initialValue = true)
+            val partyMode by playerViewModel.partyMode.collectAsStateWithLifecycle(initialValue = false)
+            val cornerRadius by playerViewModel.prefs.cornerRadius.collectAsStateWithLifecycle(initialValue = 28)
+            val paletteStyle by playerViewModel.prefs.paletteStyle.collectAsStateWithLifecycle(initialValue = "TONAL_SPOT")
 
             val useDark = when (darkThemePref) {
                 "LIGHT" -> false
@@ -112,7 +112,7 @@ class MainActivity : ComponentActivity() {
                 settingsViewModel.checkForUpdates(APP_VERSION, isManual = false)
             }
 
-            val updateState by settingsViewModel.updateState.collectAsState()
+            val updateState by settingsViewModel.updateState.collectAsStateWithLifecycle()
 
 
             ResonanceTheme(

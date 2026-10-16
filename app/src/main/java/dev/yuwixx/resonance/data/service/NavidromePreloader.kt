@@ -9,9 +9,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class NavidromePreloader @Inject constructor() {
+class NavidromePreloader @Inject constructor(okHttp: OkHttpClient) {
 
-    private val client = OkHttpClient.Builder()
+    private val client = okHttp.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(5,  TimeUnit.SECONDS)
         .build()

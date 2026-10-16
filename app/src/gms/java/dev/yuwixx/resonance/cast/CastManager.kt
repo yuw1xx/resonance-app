@@ -68,19 +68,32 @@ class CastManager @Inject constructor(
 
     // Must be called from the main thread (MainActivity.onCreate).
     // Safe to call on every Activity recreation — listener is only registered once.
+    private var initializing = false
+
     fun initialize() {
-        if (_castContext != null) return
+        if (_castContext != null || initializing) return
+        initializing = true
+        // Async init: the Play Services setup happens off the main thread so it doesn't
+        // delay the first frame; the listeners below run back on the main thread.
         try {
-            _castContext = CastContext.getSharedInstance(context)
-            val sessionManager = _castContext?.sessionManager ?: return
-            sessionManager.addSessionManagerListener(sessionListener, CastSession::class.java)
-            // Sync state if already in a session (e.g., app restarted while casting)
-            val currentSession = sessionManager.currentCastSession
-            if (currentSession != null) {
-                _isCasting.value = true
-                currentSession.remoteMediaClient?.registerCallback(clientCallback)
-            }
+            CastContext.getSharedInstance(context, java.util.concurrent.Executors.newSingleThreadExecutor())
+                .addOnSuccessListener { castContext ->
+                    _castContext = castContext
+                    val sessionManager = castContext.sessionManager
+                    sessionManager.addSessionManagerListener(sessionListener, CastSession::class.java)
+                    // Sync state if already in a session (e.g., app restarted while casting)
+                    val currentSession = sessionManager.currentCastSession
+                    if (currentSession != null) {
+                        _isCasting.value = true
+                        currentSession.remoteMediaClient?.registerCallback(clientCallback)
+                    }
+                }
+                .addOnFailureListener { e ->
+                    initializing = false
+                    Log.w("CastManager", "Cast not available: ${e.message}")
+                }
         } catch (e: Exception) {
+            initializing = false
             Log.w("CastManager", "Cast not available: ${e.message}")
         }
     }

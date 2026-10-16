@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -35,14 +36,14 @@ fun HomeScreen(
     onNavigateTo: (Screen) -> Unit,
     onOpenPlayer: () -> Unit,
 ) {
-    val currentSong by playerViewModel.currentSong.collectAsState()
-    val isPlaying by playerViewModel.isPlaying.collectAsState()
-    val mostPlayed by libraryViewModel.mostPlayed.collectAsState()
-    val autoMixes by libraryViewModel.autoMixes.collectAsState()
-    val allSongs by libraryViewModel.allSongs.collectAsState()
-    val showMostPlayed by libraryViewModel.prefs.homeShowMostPlayed.collectAsState(initial = true)
-    val showRecentlyAdded by libraryViewModel.prefs.homeShowRecentlyAdded.collectAsState(initial = true)
-    val recentlyAddedCount by libraryViewModel.prefs.homeRecentlyAddedCount.collectAsState(initial = 20)
+    val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
+    val isPlaying by playerViewModel.isPlaying.collectAsStateWithLifecycle()
+    val mostPlayed by libraryViewModel.mostPlayed.collectAsStateWithLifecycle()
+    val autoMixes by libraryViewModel.autoMixes.collectAsStateWithLifecycle()
+    val allSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
+    val showMostPlayed by libraryViewModel.prefs.homeShowMostPlayed.collectAsStateWithLifecycle(initialValue = true)
+    val showRecentlyAdded by libraryViewModel.prefs.homeShowRecentlyAdded.collectAsStateWithLifecycle(initialValue = true)
+    val recentlyAddedCount by libraryViewModel.prefs.homeRecentlyAddedCount.collectAsStateWithLifecycle(initialValue = 20)
     val recentlyAdded = remember(allSongs, recentlyAddedCount) {
         allSongs.sortedByDescending { it.dateAdded }.take(recentlyAddedCount)
     }

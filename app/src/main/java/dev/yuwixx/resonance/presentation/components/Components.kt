@@ -515,16 +515,19 @@ fun WaveformSeekbar(
 
     // Both animated values are read only inside the draw block, so the breathing effect costs
     // a redraw per frame instead of a recomposition per frame.
-    val infiniteTransition = rememberInfiniteTransition(label = "wave_breathe")
-    val breathe = infiniteTransition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2520, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "breathe_amp",
-    )
+    // Only animates while playing — an infinite transition would redraw every frame even
+    // when paused (where its effect is multiplied away).
+    val breathe = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(isPlaying) {
+        if (!isPlaying) {
+            breathe.animateTo(1f, tween(600, easing = EaseInOutSine))
+            return@LaunchedEffect
+        }
+        while (true) {
+            breathe.animateTo(1.04f, tween(1260, easing = EaseInOutSine))
+            breathe.animateTo(0.96f, tween(2520, easing = EaseInOutSine))
+        }
+    }
     val playingBlend = animateFloatAsState(
         targetValue = if (isPlaying) 1f else 0f,
         animationSpec = MaterialTheme.motionScheme.slowEffectsSpec(),
@@ -796,14 +799,36 @@ fun ArtworkImage(
     }
 }
 
+/** Whether audio is actually playing (not just "this is the current song"), so decorative
+ *  playback animations can stop while paused. Provided by the nav graph. */
+val LocalPlaybackActive = compositionLocalOf { true }
+
 @Composable
 fun PlayingBarsIndicator(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     barCount: Int = 3,
 ) {
+    if (!LocalPlaybackActive.current) {
+        // Paused: static bars, no per-frame animation.
+        Canvas(modifier = modifier) {
+            val barW = size.width / (barCount * 2 - 1)
+            val cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2f)
+            for (i in 0 until barCount) {
+                val h = size.height * if (i % 2 == 0) 0.45f else 0.75f
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(i * barW * 2f, (size.height - h) / 2f),
+                    size = androidx.compose.ui.geometry.Size(barW, h),
+                    cornerRadius = cornerRadius,
+                )
+            }
+        }
+        return
+    }
     val sharedTransition = rememberInfiniteTransition(label = "bars_shared")
-    val baseAnim by sharedTransition.animateFloat(
+    // Read only in the draw phase: redraws per frame without recomposing.
+    val baseAnim = sharedTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -816,7 +841,7 @@ fun PlayingBarsIndicator(
         val barW = size.width / (barCount * 2 - 1)
         val cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2f)
         for (i in 0 until barCount) {
-            val phase = (baseAnim + i / barCount.toFloat()) % 1f
+            val phase = (baseAnim.value + i / barCount.toFloat()) % 1f
             val sineVal = (sin(phase * 2 * PI).toFloat() + 1f) / 2f
             val h = (size.height * (0.25f + sineVal * 0.75f)).coerceAtLeast(barW)
             drawRoundRect(

@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.presentation.screens.library.LocalLibrarySections
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -42,7 +43,7 @@ fun FoldersScreen(
     playerViewModel: PlayerViewModel,
     onBack: () -> Unit,
 ) {
-    val allSongs by libraryViewModel.allSongs.collectAsState()
+    val allSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
 
     var currentPath by remember { mutableStateOf<String?>(null) }
 

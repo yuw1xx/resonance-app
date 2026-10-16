@@ -8,7 +8,6 @@ import coil.ImageLoader
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -77,7 +76,9 @@ object DatabaseModule {
 object NetworkModule {
 
     @Singleton @Provides
-    fun provideMoshi(): Moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+    // Codegen adapters only (@JsonClass(generateAdapter = true) on every model): no
+    // kotlin-reflect at runtime, faster first parse, and R8-safe.
+    fun provideMoshi(): Moshi = Moshi.Builder().build()
 
     @Singleton @Provides
     fun provideOkHttp(): OkHttpClient = OkHttpClient.Builder()
@@ -97,8 +98,9 @@ object NetworkModule {
     // should fail fast rather than block the player for up to 30s (15s connect + 15s read) on
     // the shared client if LRCLIB is slow or unreachable.
     @Singleton @Provides @Named("lrclib")
-    fun provideLrclibRetrofit(moshi: Moshi): Retrofit {
-        val client = OkHttpClient.Builder()
+    fun provideLrclibRetrofit(okHttp: OkHttpClient, moshi: Moshi): Retrofit {
+        // Derived from the shared client: same connection pool and threads, own timeouts.
+        val client = okHttp.newBuilder()
             .connectTimeout(6, TimeUnit.SECONDS)
             .readTimeout(8, TimeUnit.SECONDS)
             // Cloudflare in front of lrclib.net returns a 520 for requests with OkHttp's default
@@ -110,9 +112,6 @@ object NetworkModule {
                     .build()
                 chain.proceed(request)
             }
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
-            })
             .build()
         return Retrofit.Builder().baseUrl("https://lrclib.net/")
             .client(client).addConverterFactory(MoshiConverterFactory.create(moshi)).build()
@@ -141,14 +140,11 @@ object NetworkModule {
     // MusicBrainz gets its own dedicated OkHttpClient (not the shared singleton above) so the
     // User-Agent it requires is scoped only to MusicBrainz traffic.
     @Singleton @Provides @Named("musicbrainz")
-    fun provideMusicBrainzRetrofit(moshi: Moshi, mbInterceptor: MusicBrainzInterceptor): Retrofit {
-        val client = OkHttpClient.Builder()
+    fun provideMusicBrainzRetrofit(okHttp: OkHttpClient, moshi: Moshi, mbInterceptor: MusicBrainzInterceptor): Retrofit {
+        val client = okHttp.newBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .addInterceptor(mbInterceptor)
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
-            })
             .build()
         return Retrofit.Builder().baseUrl("https://musicbrainz.org/ws/2/")
             .client(client).addConverterFactory(MoshiConverterFactory.create(moshi)).build()
@@ -216,13 +212,45 @@ object ImageModule {
                     .build()
             }
             .crossfade(true)
+            .components { add(StableSubsonicCacheKeys) }
             .build()
+}
+
+/**
+ * Subsonic/Navidrome URLs carry per-request auth (`u`, `t`=token, `s`=salt, `p`) that changes
+ * between sessions, so the same cover would be a cache miss every time. Key memory and disk
+ * cache entries on the URL with those parameters removed.
+ */
+private object StableSubsonicCacheKeys : coil.intercept.Interceptor {
+    private val authParams = setOf("u", "t", "s", "p")
+
+    override suspend fun intercept(chain: coil.intercept.Interceptor.Chain): coil.request.ImageResult {
+        val request = chain.request
+        val url = request.data.toString()
+        if (!url.startsWith("http") || "/rest/" !in url) return chain.proceed(request)
+        val key = stableKey(url) ?: return chain.proceed(request)
+        val keyed = request.newBuilder()
+            .memoryCacheKey(key)
+            .diskCacheKey(key)
+            .build()
+        return chain.proceed(keyed)
+    }
+
+    fun stableKey(url: String): String? {
+        val uri = android.net.Uri.parse(url)
+        val names = uri.queryParameterNames.takeIf { it.isNotEmpty() } ?: return null
+        val builder = uri.buildUpon().clearQuery()
+        names.filter { it !in authParams }.sorted().forEach { name ->
+            uri.getQueryParameters(name).forEach { builder.appendQueryParameter(name, it) }
+        }
+        return builder.build().toString()
+    }
 }
 
 @Module
 @InstallIn(SingletonComponent::class)
 object NavidromeModule {
     @Singleton @Provides
-    fun provideNavidromeApiProvider(moshi: Moshi): NavidromeApiProvider =
-        NavidromeApiProvider(moshi)
+    fun provideNavidromeApiProvider(moshi: Moshi, okHttp: OkHttpClient): NavidromeApiProvider =
+        NavidromeApiProvider(moshi, okHttp)
 }

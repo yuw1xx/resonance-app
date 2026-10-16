@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,7 +30,7 @@ fun LyricsEditorScreen(
     lyricsRepository: LyricsRepository,
     onBack: () -> Unit,
 ) {
-    val currentSong by playerViewModel.currentSong.collectAsState()
+    val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
     val song = currentSong ?: run { onBack(); return }
 
     var lrcText by remember { mutableStateOf("") }
@@ -317,7 +318,7 @@ private fun LyricsSearchSheet(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         contentPadding = PaddingValues(bottom = 24.dp),
                     ) {
-                        items(results) { candidate ->
+                        items(results, key = { it.id }) { candidate ->
                             LyricsCandidateRow(candidate = candidate, onClick = { onSelect(candidate) })
                         }
                     }

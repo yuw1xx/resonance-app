@@ -306,7 +306,7 @@ class LibraryViewModel @Inject constructor(
             when (prefs.musicSource.first()) {
                 MusicSource.LOCAL -> {
                     _isSyncing.value = true
-                    try { musicRepository.syncWithMediaStore() }
+                    try { musicRepository.syncWithMediaStore(force) }
                     finally { _isSyncing.value = false }
                 }
                 MusicSource.NAVIDROME -> {

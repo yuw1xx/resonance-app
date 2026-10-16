@@ -7,7 +7,12 @@ import android.media.MediaFormat
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.WaveformData
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
@@ -34,7 +39,25 @@ class WaveformExtractor @Inject constructor(
      *  through [extract]. */
     fun peekCached(songId: Long): WaveformData? = memCache[songId]
 
-    suspend fun extract(songId: Long, uri: Uri, resolution: Int = 200): WaveformData? =
+    /** In-flight decodes, so the current/next prefetch and the transition handler never
+     *  decode the same file twice in parallel. */
+    private val inFlight = java.util.concurrent.ConcurrentHashMap<Long, Deferred<WaveformData?>>()
+    private val decodeScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    suspend fun extract(songId: Long, uri: Uri, resolution: Int = 200): WaveformData? {
+        memCache[songId]?.let { return it }
+        // Streams would be downloaded a second time just to draw bars — not worth the data
+        // and battery. The seekbar falls back to its plain style for them.
+        if (uri.scheme == "http" || uri.scheme == "https") return null
+        val job = inFlight.getOrPut(songId) {
+            decodeScope.async { decode(songId, uri, resolution) }.also { d ->
+                d.invokeOnCompletion { inFlight.remove(songId, d) }
+            }
+        }
+        return job.await()
+    }
+
+    private suspend fun decode(songId: Long, uri: Uri, resolution: Int): WaveformData? =
         withContext(Dispatchers.Default) {
             memCache[songId]?.let { return@withContext it }
 
@@ -80,8 +103,9 @@ class WaveformExtractor @Inject constructor(
                 val bufferInfo = MediaCodec.BufferInfo()
 
                 while (!outputDone && currentBucket < resolution) {
+                    ensureActive()
                     if (!inputDone) {
-                        val inputIdx = codec.dequeueInputBuffer(0)
+                        val inputIdx = codec.dequeueInputBuffer(DEQUEUE_TIMEOUT_US)
                         if (inputIdx >= 0) {
                             val buf = codec.getInputBuffer(inputIdx)!!
                             val sampleSize = extractor.readSampleData(buf, 0)
@@ -95,7 +119,7 @@ class WaveformExtractor @Inject constructor(
                         }
                     }
 
-                    val outputIdx = codec.dequeueOutputBuffer(bufferInfo, 0)
+                    val outputIdx = codec.dequeueOutputBuffer(bufferInfo, DEQUEUE_TIMEOUT_US)
                     if (outputIdx >= 0) {
                         if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
                         val outBuf = codec.getOutputBuffer(outputIdx)
@@ -134,6 +158,8 @@ class WaveformExtractor @Inject constructor(
                 memCache[songId] = result
                 writeToDisk(diskFile, result)
                 result
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (_: Exception) { null }
             finally {
                 codec?.release()
@@ -155,4 +181,9 @@ class WaveformExtractor @Inject constructor(
         data.amplitudes.forEach(buf::putFloat)
         file.writeBytes(buf.array())
     } catch (_: Exception) {}
+
+    private companion object {
+        /** Block briefly for codec buffers instead of spinning a core at 100%. */
+        const val DEQUEUE_TIMEOUT_US = 10_000L
+    }
 }

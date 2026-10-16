@@ -194,7 +194,6 @@ class PlayerViewModel @Inject constructor(
     val previousSong: StateFlow<Song?> = _previousSong.asStateFlow()
 
     init {
-        localAudioServer.safeStart()
         initializeController()
         startProgressTracker()
         observePreferences()
@@ -210,6 +209,9 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             var wasCasting = false
             castManager.isCasting.collect { casting ->
+                // The LAN server that feeds local files to the Cast device only needs to run
+                // during a cast session.
+                if (casting) localAudioServer.safeStart() else localAudioServer.safeStop()
                 if (casting) {
                     wasCasting = true
                     // Hand off to Cast only when the local player is actively playing.
@@ -298,9 +300,24 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
+    /** Waveforms are only decoded when the waveform seekbar style is in use. */
+    private suspend fun extractWaveform(songId: Long, uri: android.net.Uri) =
+        if (prefs.seekbarStyle.first() == "WAVEFORM") waveformExtractor.extract(songId, uri) else null
+
     private fun startProgressTracker() {
+        // Position only matters while something is playing and the UI is collecting position
+        // or lyrics (subscriptions drop when the UI stops, thanks to lifecycle-aware
+        // collection). Casting keeps it running: cast auto-advance is driven from here.
+        val uiWatching = combine(
+            _positionMs.subscriptionCount,
+            _activeLyricIndex.subscriptionCount,
+        ) { position, lyrics -> position + lyrics > 0 }
+        val shouldTick = combine(_isPlaying, uiWatching, castManager.isCasting) { playing, watching, casting ->
+            casting || (playing && watching)
+        }
         viewModelScope.launch {
             while (isActive) {
+                shouldTick.first { it }
                 if (castManager.isCasting.value) {
                     val pos = castManager.getCurrentPosition()
                     val dur = castManager.getStreamDuration()
@@ -341,13 +358,11 @@ class PlayerViewModel @Inject constructor(
                         if (rawPosition != C.TIME_UNSET) {
                             _positionMs.value = rawPosition.coerceAtLeast(0)
                         }
-                        if (ctrl.isPlaying) {
-                            updateActiveLyricIndex(ctrl.currentPosition)
-                            checkScrobbleThreshold(ctrl.currentPosition, ctrl.duration)
-                        }
+                        // Local scrobbling/history live in MusicService (ScrobbleTracker).
+                        if (ctrl.isPlaying) updateActiveLyricIndex(ctrl.currentPosition)
                     }
                 }
-                delay(100)
+                delay(if (castManager.isCasting.value) 500 else 100)
             }
         }
     }
@@ -410,11 +425,11 @@ class PlayerViewModel @Inject constructor(
             // waiting for onMediaItemTransition to fire — that was the only trigger before,
             // so the very first song of a queue never got a head start.
             songs.getOrNull(startIndex)?.let { song ->
-                viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
+                viewModelScope.launch(Dispatchers.IO) { extractWaveform(song.id, song.uri) }
                 prefetchReplayGain(song)
             }
             songs.getOrNull(startIndex + 1)?.let { song ->
-                viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
+                viewModelScope.launch(Dispatchers.IO) { extractWaveform(song.id, song.uri) }
                 prefetchReplayGain(song)
             }
 
@@ -483,6 +498,8 @@ class PlayerViewModel @Inject constructor(
         } else {
             _controller?.seekTo(position)
         }
+        _positionMs.value = position.coerceAtLeast(0)
+        updateActiveLyricIndex(position)
     }
 
     fun toggleRepeat() {
@@ -533,7 +550,7 @@ class PlayerViewModel @Inject constructor(
 
     fun addToQueueEnd(song: Song) {
         _controller?.addMediaItem(song.toMediaItem())
-        viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
+        viewModelScope.launch(Dispatchers.IO) { extractWaveform(song.id, song.uri) }
         prefetchReplayGain(song)
     }
 
@@ -543,7 +560,7 @@ class PlayerViewModel @Inject constructor(
                 .coerceAtMost(ctrl.mediaItemCount)
             ctrl.addMediaItem(insertIndex, song.toMediaItem())
         }
-        viewModelScope.launch(Dispatchers.IO) { waveformExtractor.extract(song.id, song.uri) }
+        viewModelScope.launch(Dispatchers.IO) { extractWaveform(song.id, song.uri) }
         prefetchReplayGain(song)
     }
 
@@ -782,7 +799,7 @@ class PlayerViewModel @Inject constructor(
                         // before these resolve, an older transition's slow response must not
                         // overwrite the now-current song's already-correct state.
                         launch {
-                            val waveform = waveformExtractor.extract(song.id, song.uri)
+                            val waveform = extractWaveform(song.id, song.uri)
                             if (_currentSong.value?.id == song.id) _waveformData.value = waveform
                         }
                         launch {
@@ -797,13 +814,6 @@ class PlayerViewModel @Inject constructor(
                             if (_currentSong.value?.id == song.id) _lyricsResult.value = lyrics
                         }
 
-                        val now = System.currentTimeMillis()
-                        scrobbleTrackStartedAt = now
-                        scrobbleSegmentStart = now
-                        scrobbleAccumulatedMs = 0L
-                        scrobbleSubmittedForCurrentTrack = false
-                        lastFmRepository.updateNowPlaying(song)
-
                         _controller?.let { ctrl ->
                             val nextIndex = ctrl.nextMediaItemIndex
                             if (nextIndex != C.INDEX_UNSET) {
@@ -814,7 +824,7 @@ class PlayerViewModel @Inject constructor(
                                         val nextSong = lookupSong(nextId)
                                             ?: nextItem.toSong()
                                         if (nextSong != null) {
-                                            waveformExtractor.extract(nextSong.id, nextSong.uri)
+                                            extractWaveform(nextSong.id, nextSong.uri)
                                             lyricsRepository.getLyrics(
                                                 songId = nextSong.id,
                                                 title = nextSong.title,
@@ -849,14 +859,8 @@ class PlayerViewModel @Inject constructor(
             // own collector (see init{}) is the source of truth for _isPlaying while casting.
             if (castManager.isCasting.value) return
             _isPlaying.value = isPlaying
-            if (!scrobbleSubmittedForCurrentTrack) {
-                if (isPlaying) {
-                    scrobbleSegmentStart = System.currentTimeMillis()
-                } else if (scrobbleSegmentStart > 0L) {
-                    scrobbleAccumulatedMs += System.currentTimeMillis() - scrobbleSegmentStart
-                    scrobbleSegmentStart = 0L
-                }
-            }
+            // A final position snapshot, since the ticker stops while paused.
+            if (!isPlaying) _controller?.currentPosition?.let { _positionMs.value = it.coerceAtLeast(0) }
         }
 
         override fun onRepeatModeChanged(repeatMode: Int) {
@@ -914,7 +918,7 @@ class PlayerViewModel @Inject constructor(
             _lyricsResult.value = LyricsResult.Loading
             _activeLyricIndex.value = -1
             launch {
-                val waveform = waveformExtractor.extract(song.id, song.uri)
+                val waveform = extractWaveform(song.id, song.uri)
                 if (_currentSong.value?.id == song.id) _waveformData.value = waveform
             }
             launch {
@@ -989,8 +993,12 @@ class PlayerViewModel @Inject constructor(
     // versus blocking playback start on a file read). Persists the result to the DB too, so it
     // survives across app sessions without a re-read.
     private fun prefetchReplayGain(song: Song) {
+        // Already known: skip the tag read, and above all the DB write — every write to the
+        // songs table re-emits the whole library to every collector.
+        if (song.replayGainTrack != null || song.replayGainAlbum != null) return
         viewModelScope.launch(Dispatchers.IO) {
             val (track, album) = replayGainProcessor.readAndCacheGain(song.id, song.path) ?: return@launch
+            if (track == song.replayGainTrack && album == song.replayGainAlbum) return@launch
             musicRepository.updateReplayGain(song.id, track, album)
         }
     }

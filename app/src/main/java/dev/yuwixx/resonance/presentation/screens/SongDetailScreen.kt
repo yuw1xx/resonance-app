@@ -2,6 +2,7 @@
 // header, a metadata info card, a per-song listening-stats card, and a static lyrics section.
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
@@ -42,10 +43,10 @@ fun SongDetailScreen(
     onArtistClick: (String) -> Unit = {},
     viewModel: SongDetailViewModel = hiltViewModel(),
 ) {
-    val song by viewModel.song.collectAsState()
-    val lyricsResult by viewModel.lyricsResult.collectAsState()
-    val playCount by viewModel.playCount.collectAsState()
-    val totalListenedMs by viewModel.totalListenedMs.collectAsState()
+    val song by viewModel.song.collectAsStateWithLifecycle()
+    val lyricsResult by viewModel.lyricsResult.collectAsStateWithLifecycle()
+    val playCount by viewModel.playCount.collectAsStateWithLifecycle()
+    val totalListenedMs by viewModel.totalListenedMs.collectAsStateWithLifecycle()
 
     LaunchedEffect(songId) { viewModel.load(songId) }
 

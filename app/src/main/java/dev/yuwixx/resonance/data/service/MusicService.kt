@@ -60,6 +60,7 @@ class MusicService : MediaLibraryService() {
     @Inject lateinit var replayGainProcessor: ReplayGainProcessor
     @Inject lateinit var navidromePreloader: NavidromePreloader
     @Inject lateinit var eqStateHolder: EqStateHolder
+    @Inject lateinit var scrobbleTracker: ScrobbleTracker
     @Inject @dev.yuwixx.resonance.di.ApplicationScope lateinit var applicationScope: CoroutineScope
 
     private lateinit var player: ExoPlayer
@@ -69,6 +70,8 @@ class MusicService : MediaLibraryService() {
     private var equalizer: Equalizer? = null
 
     private var crossfadeJob: Job? = null
+    /** Mirrors player.isPlaying so loops can suspend while paused instead of polling. */
+    private val playingState = kotlinx.coroutines.flow.MutableStateFlow(false)
     private var crossfadeDurationMs: Int = 0
     private var gaplessEnabled: Boolean = true
 
@@ -144,6 +147,8 @@ class MusicService : MediaLibraryService() {
             .setSkipSilenceEnabled(false)
             .build()
 
+        scrobbleTracker.attach(player, scope)
+
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 // Only tracks that finished on their own count toward a track-based sleep
@@ -171,7 +176,17 @@ class MusicService : MediaLibraryService() {
                 pushWidgetState()
             }
 
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                // The fade watcher sleeps until the fade window; a seek moves that window.
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) scheduleCrossfade()
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playingState.value = isPlaying
                 if (isPlaying) {
                     preloadUpcomingTracks()
                     startWidgetProgressUpdates()
@@ -234,7 +249,7 @@ class MusicService : MediaLibraryService() {
 
     companion object {
         private const val PRELOAD_AHEAD = 2
-        private const val WIDGET_PROGRESS_INTERVAL_MS = 5_000L
+        private const val WIDGET_PROGRESS_INTERVAL_MS = 10_000L
         private const val EXTRA_STASHED_ARTWORK = "resonance.stashedArtworkUri"
         // How often scheduleCrossfade's poll loop checks player.duration/currentPosition while
         // the duration isn't known yet (e.g. some streamed/transcoded tracks briefly report no
@@ -356,10 +371,24 @@ class MusicService : MediaLibraryService() {
             }
         }
 
+        // Audio focus is always handled (calls, other players). The ducking preference only
+        // decides what happens on a "may duck" focus loss: lower the volume, or pause. Media3
+        // pauses instead of ducking for speech content, so that's how "don't duck" is expressed.
         scope.launch {
             prefs.duckAudioOnFocusLoss.collect { duckAudio ->
-                val currentAttrs = player.audioAttributes
-                player.setAudioAttributes(currentAttrs, duckAudio)
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(if (duckAudio) C.AUDIO_CONTENT_TYPE_MUSIC else C.AUDIO_CONTENT_TYPE_SPEECH)
+                    .build()
+                player.setAudioAttributes(attrs, /* handleAudioFocus= */ true)
+            }
+        }
+
+        // Keep the CPU (and, for streams, Wi-Fi) awake only while actually playing; Media3
+        // holds and releases the locks with the playback state.
+        scope.launch {
+            prefs.musicSource.collect { source ->
+                player.setWakeMode(if (source == MusicSource.NAVIDROME) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
             }
         }
 
@@ -445,10 +474,25 @@ class MusicService : MediaLibraryService() {
 
         crossfadeJob = scope.launch {
             while (isActive) {
+                // Nothing to do while paused: wait for playback instead of polling.
+                if (!player.isPlaying) {
+                    playingState.first { it }
+                    continue
+                }
                 val duration = player.duration
                 val position = player.currentPosition
                 if (duration > 0 && position > 0) {
                     val remaining = duration - position
+                    val untilFade = remaining - fadeDurationMs
+                    if (untilFade > 1_000) {
+                        // Far from the end: one long sleep until just before the fade window
+                        // (re-checked at least every 30 s; seeks restart this job).
+                        val target = computeTargetVolume()
+                        if (player.volume < target * 0.95f) player.volume = target
+                        val speed = player.playbackParameters.speed.coerceAtLeast(0.1f)
+                        delay(((untilFade - 500) / speed).toLong().coerceIn(50L, 30_000L))
+                        continue
+                    }
                     if (remaining in 1..fadeDurationMs) {
                         val fadeProgress = 1f - (remaining.toFloat() / fadeDurationMs)
                         player.volume = computeTargetVolume() * (1f - fadeProgress)
@@ -958,8 +1002,13 @@ class MusicService : MediaLibraryService() {
     private fun startWidgetProgressUpdates() {
         widgetProgressJob?.cancel()
         widgetProgressJob = scope.launch {
+            // Only the progress bar needs ticking, and only when someone can see it: stop if
+            // there are no widgets, and don't wake up while the screen is off.
+            val widgets = androidx.glance.appwidget.GlanceAppWidgetManager(this@MusicService)
+            if (widgets.getGlanceIds(ResonanceWidget::class.java).isEmpty()) return@launch
+            val power = getSystemService(android.os.PowerManager::class.java)
             while (isActive) {
-                pushWidgetState()
+                if (power?.isInteractive != false) pushWidgetState()
                 delay(WIDGET_PROGRESS_INTERVAL_MS)
             }
         }

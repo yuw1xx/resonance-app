@@ -44,6 +44,10 @@ interface SongDao {
     @Upsert
     suspend fun upsertSongs(songs: List<SongEntity>)
 
+    /** Just what a MediaStore sync needs to diff against, plus the per-song state it must keep. */
+    @Query("SELECT id, dateModified, size, path, listenCount, lastListened, replayGainTrack, replayGainAlbum FROM songs")
+    suspend fun getSyncKeys(): List<SongSyncKey>
+
     @Query("UPDATE songs SET replayGainTrack = :track, replayGainAlbum = :album WHERE id = :id")
     suspend fun updateReplayGain(id: Long, track: Float?, album: Float?)
 
@@ -486,3 +490,14 @@ interface NavidromeAlbumDao {
     @Query("DELETE FROM navidrome_albums")
     suspend fun deleteAll()
 }
+
+data class SongSyncKey(
+    val id: Long,
+    val dateModified: Long,
+    val size: Long,
+    val path: String,
+    val listenCount: Int,
+    val lastListened: Long,
+    val replayGainTrack: Float?,
+    val replayGainAlbum: Float?,
+)

@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -44,9 +45,9 @@ fun EqualizerScreen(
     onBack: () -> Unit,
     viewModel: EqualizerViewModel = hiltViewModel(),
 ) {
-    val capabilities by viewModel.capabilities.collectAsState()
-    val bandLevels by viewModel.bandLevels.collectAsState()
-    val enabled by viewModel.enabled.collectAsState()
+    val capabilities by viewModel.capabilities.collectAsStateWithLifecycle()
+    val bandLevels by viewModel.bandLevels.collectAsStateWithLifecycle()
+    val enabled by viewModel.enabled.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {

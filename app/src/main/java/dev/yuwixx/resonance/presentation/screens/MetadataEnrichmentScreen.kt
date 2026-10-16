@@ -2,6 +2,7 @@
 // Done. TagEditor.writeTags is only ever reached from the "Apply Selected" button in Reviewing.
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
@@ -34,8 +35,8 @@ fun MetadataEnrichmentScreen(
     onBack: () -> Unit,
     viewModel: MetadataEnrichmentViewModel = hiltViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val checkedIndices by viewModel.checkedIndices.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val checkedIndices by viewModel.checkedIndices.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -179,7 +180,7 @@ private fun ReviewingContent(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            itemsIndexed(changes) { index, change ->
+            itemsIndexed(changes, key = { _, c -> "${c.song.id}:${c.field}" }) { index, change ->
                 ChangeRow(
                     change = change,
                     checked = index in checkedIndices,

@@ -216,21 +216,19 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setLastFmScrobbleOffline(v) }
     }
 
-    private val _pendingScrobbles = MutableStateFlow(0)
-    val pendingScrobbles: StateFlow<Int> = _pendingScrobbles.asStateFlow()
-
-    private val _malojaPending = MutableStateFlow(0)
-    val malojaPending: StateFlow<Int> = _malojaPending.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            while (true) {
-                _pendingScrobbles.value = lastFmRepository.pendingScrobbleCount
-                _malojaPending.value = malojaRepository.pendingCount
-                kotlinx.coroutines.delay(5000)
-            }
+    // Pending queues live in memory in the repositories; poll them only while the Settings
+    // UI is actually showing the counts.
+    private fun pollWhileSubscribed(read: () -> Int): StateFlow<Int> = kotlinx.coroutines.flow.flow {
+        while (true) {
+            emit(read())
+            kotlinx.coroutines.delay(5000)
         }
-    }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(1_000), 0)
+
+    val pendingScrobbles: StateFlow<Int> = pollWhileSubscribed { lastFmRepository.pendingScrobbleCount }
+
+    val malojaPending: StateFlow<Int> = pollWhileSubscribed { malojaRepository.pendingCount }
+
 
     fun lastFmLogin(username: String, password: String) {
         viewModelScope.launch { lastFmRepository.authenticate(username, password) }

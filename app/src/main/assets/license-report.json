@@ -1442,13 +1442,6 @@
             "moduleLicenseUrl": "https://www.apache.org/licenses/LICENSE-2.0.txt"
         },
         {
-            "moduleName": "com.squareup.moshi:moshi-kotlin",
-            "moduleUrl": "https://github.com/square/moshi/",
-            "moduleVersion": "1.15.2",
-            "moduleLicense": "The Apache Software License, Version 2.0",
-            "moduleLicenseUrl": "https://www.apache.org/licenses/LICENSE-2.0.txt"
-        },
-        {
             "moduleName": "com.squareup.okhttp3:logging-interceptor",
             "moduleUrl": "https://square.github.io/okhttp/",
             "moduleVersion": "4.12.0",
@@ -1559,13 +1552,6 @@
             "moduleVersion": "3.43.0",
             "moduleLicense": "The MIT License",
             "moduleLicenseUrl": "http://opensource.org/licenses/MIT"
-        },
-        {
-            "moduleName": "org.jetbrains.kotlin:kotlin-reflect",
-            "moduleUrl": "https://kotlinlang.org/",
-            "moduleVersion": "1.8.21",
-            "moduleLicense": "The Apache License, Version 2.0",
-            "moduleLicenseUrl": "http://www.apache.org/licenses/LICENSE-2.0.txt"
         },
         {
             "moduleName": "org.jetbrains.kotlin:kotlin-stdlib",

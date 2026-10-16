@@ -2,6 +2,7 @@
 // page (Appearance, Playback, Audio, Library, Navidrome, Last.fm, History, Data, About, …).
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -248,7 +249,7 @@ private fun MainSection(
     settingsViewModel: SettingsViewModel,
     onCategoryClick: (SettingsCategory) -> Unit,
 ) {
-    val partyMode by settingsViewModel.partyMode.collectAsState()
+    val partyMode by settingsViewModel.partyMode.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var easterEggTaps by remember { mutableIntStateOf(0) }
     var showEasterEgg by remember { mutableStateOf(false) }
@@ -452,7 +453,7 @@ private fun MainSection(
 
 @Composable
 private fun UpdatesSection(settingsViewModel: SettingsViewModel) {
-    val updateFreq by settingsViewModel.updateFrequency.collectAsState()
+    val updateFreq by settingsViewModel.updateFrequency.collectAsStateWithLifecycle()
     var showDisableWarning by remember { mutableStateOf(false) }
 
     SectionCard(icon = Icons.Rounded.SystemUpdate, title = "Updates", modifier = Modifier.padding(horizontal = 8.dp)) {
@@ -498,30 +499,30 @@ private fun UpdatesSection(settingsViewModel: SettingsViewModel) {
 @Composable
 private fun AppearanceSection(prefs: ResonancePreferences) {
     val scope = rememberCoroutineScope()
-    val dynamicColor by prefs.dynamicColorEnabled.collectAsState(initial = true)
-    val presetColorInt by prefs.presetColor.collectAsState(initial = null)
-    val darkTheme by prefs.darkTheme.collectAsState(initial = "SYSTEM")
-    val cornerRadius by prefs.cornerRadius.collectAsState(initial = 28)
-    val seekbarStyle by prefs.seekbarStyle.collectAsState(initial = "WAVEFORM")
-    val blurBackground by prefs.blurArtworkBackground.collectAsState(initial = true)
-    val blurStrength by prefs.blurStrength.collectAsState(initial = 0.3f)
-    val artworkAnimation by prefs.artworkAnimation.collectAsState(initial = true)
-    val hapticFeedback by prefs.hapticFeedback.collectAsState(initial = true)
-    val showBitrateInfo by prefs.showBitrateInfo.collectAsState(initial = false)
-    val albumGridCols by prefs.albumGridColumns.collectAsState(initial = 2)
-    val hiddenNavTabs by prefs.hiddenNavTabs.collectAsState(initial = emptySet())
-    val amoledMode by prefs.amoledBlackTheme.collectAsState(initial = false)
-    val compactList by prefs.compactListMode.collectAsState(initial = false)
-    val showDurationList by prefs.showDurationInList.collectAsState(initial = false)
-    val playerArtworkShape by prefs.playerArtworkShape.collectAsState(initial = "ROUNDED")
-    val seekbarColor by prefs.seekbarColor.collectAsState(initial = "PRIMARY")
-    val tintedNavBar by prefs.tintedNavBar.collectAsState(initial = false)
-    val floatingNavBar by prefs.floatingNavBar.collectAsState(initial = false)
-    val navLabelVisibility by prefs.navLabelVisibility.collectAsState(initial = "ALWAYS")
-    val playlistGridCols by prefs.playlistGridColumns.collectAsState(initial = 2)
-    val showAlbumInList by prefs.showAlbumInList.collectAsState(initial = false)
-    val listArtworkSize by prefs.listArtworkSize.collectAsState(initial = "MEDIUM")
-    val defaultSongsSort by prefs.defaultSongsSort.collectAsState(initial = "TITLE")
+    val dynamicColor by prefs.dynamicColorEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val presetColorInt by prefs.presetColor.collectAsStateWithLifecycle(initialValue = null)
+    val darkTheme by prefs.darkTheme.collectAsStateWithLifecycle(initialValue = "SYSTEM")
+    val cornerRadius by prefs.cornerRadius.collectAsStateWithLifecycle(initialValue = 28)
+    val seekbarStyle by prefs.seekbarStyle.collectAsStateWithLifecycle(initialValue = "WAVEFORM")
+    val blurBackground by prefs.blurArtworkBackground.collectAsStateWithLifecycle(initialValue = true)
+    val blurStrength by prefs.blurStrength.collectAsStateWithLifecycle(initialValue = 0.3f)
+    val artworkAnimation by prefs.artworkAnimation.collectAsStateWithLifecycle(initialValue = true)
+    val hapticFeedback by prefs.hapticFeedback.collectAsStateWithLifecycle(initialValue = true)
+    val showBitrateInfo by prefs.showBitrateInfo.collectAsStateWithLifecycle(initialValue = false)
+    val albumGridCols by prefs.albumGridColumns.collectAsStateWithLifecycle(initialValue = 2)
+    val hiddenNavTabs by prefs.hiddenNavTabs.collectAsStateWithLifecycle(initialValue = emptySet())
+    val amoledMode by prefs.amoledBlackTheme.collectAsStateWithLifecycle(initialValue = false)
+    val compactList by prefs.compactListMode.collectAsStateWithLifecycle(initialValue = false)
+    val showDurationList by prefs.showDurationInList.collectAsStateWithLifecycle(initialValue = false)
+    val playerArtworkShape by prefs.playerArtworkShape.collectAsStateWithLifecycle(initialValue = "ROUNDED")
+    val seekbarColor by prefs.seekbarColor.collectAsStateWithLifecycle(initialValue = "PRIMARY")
+    val tintedNavBar by prefs.tintedNavBar.collectAsStateWithLifecycle(initialValue = false)
+    val floatingNavBar by prefs.floatingNavBar.collectAsStateWithLifecycle(initialValue = false)
+    val navLabelVisibility by prefs.navLabelVisibility.collectAsStateWithLifecycle(initialValue = "ALWAYS")
+    val playlistGridCols by prefs.playlistGridColumns.collectAsStateWithLifecycle(initialValue = 2)
+    val showAlbumInList by prefs.showAlbumInList.collectAsStateWithLifecycle(initialValue = false)
+    val listArtworkSize by prefs.listArtworkSize.collectAsStateWithLifecycle(initialValue = "MEDIUM")
+    val defaultSongsSort by prefs.defaultSongsSort.collectAsStateWithLifecycle(initialValue = "TITLE")
 
     var showNavTabsDialog by remember { mutableStateOf(false) }
     val visibleCount = navItems.count { it.screen.route !in hiddenNavTabs }
@@ -680,10 +681,10 @@ private fun AppearanceSection(prefs: ResonancePreferences) {
 @Composable
 private fun HomeSection(prefs: ResonancePreferences) {
     val scope = rememberCoroutineScope()
-    val mixesLocation by prefs.mixesLocation.collectAsState(initial = "BOTH")
-    val homeShowMostPlayed by prefs.homeShowMostPlayed.collectAsState(initial = true)
-    val homeShowRecentlyAdded by prefs.homeShowRecentlyAdded.collectAsState(initial = true)
-    val homeRecentlyAddedCount by prefs.homeRecentlyAddedCount.collectAsState(initial = 20)
+    val mixesLocation by prefs.mixesLocation.collectAsStateWithLifecycle(initialValue = "BOTH")
+    val homeShowMostPlayed by prefs.homeShowMostPlayed.collectAsStateWithLifecycle(initialValue = true)
+    val homeShowRecentlyAdded by prefs.homeShowRecentlyAdded.collectAsStateWithLifecycle(initialValue = true)
+    val homeRecentlyAddedCount by prefs.homeRecentlyAddedCount.collectAsStateWithLifecycle(initialValue = 20)
 
     SectionCard(icon = Icons.Rounded.Home, title = "Home Screen Sections", modifier = Modifier.padding(horizontal = 8.dp)) {
         SegmentedSettingsItem(
@@ -716,18 +717,18 @@ private fun HomeSection(prefs: ResonancePreferences) {
 @Composable
 private fun PlayerSection(prefs: ResonancePreferences) {
     val scope = rememberCoroutineScope()
-    val playerLayout by prefs.playerLayout.collectAsState(initial = "STANDARD")
-    val miniPlayerStyle by prefs.miniPlayerStyle.collectAsState(initial = "CARD")
-    val showLyricsBtn by prefs.showLyricsButton.collectAsState(initial = true)
-    val lyricsFontScale by prefs.lyricsFontScale.collectAsState(initial = 1.0f)
-    val lyricAlignment by prefs.lyricAlignment.collectAsState(initial = "CENTER")
-    val lyricsLineSpacing by prefs.lyricsLineSpacing.collectAsState(initial = "NORMAL")
-    val lyricsFontFamily by prefs.lyricsFontFamily.collectAsState(initial = "DEFAULT")
-    val showRemainingTime by prefs.showRemainingTime.collectAsState(initial = false)
-    val showNextSongInPlayer by prefs.showNextSongInPlayer.collectAsState(initial = false)
-    val showEqualizerInPlayer by prefs.showEqualizerInPlayer.collectAsState(initial = true)
-    val miniPlayerShowProgress by prefs.miniPlayerShowProgress.collectAsState(initial = true)
-    val miniPlayerShowSkipBtn by prefs.miniPlayerShowSkipBtn.collectAsState(initial = true)
+    val playerLayout by prefs.playerLayout.collectAsStateWithLifecycle(initialValue = "STANDARD")
+    val miniPlayerStyle by prefs.miniPlayerStyle.collectAsStateWithLifecycle(initialValue = "CARD")
+    val showLyricsBtn by prefs.showLyricsButton.collectAsStateWithLifecycle(initialValue = true)
+    val lyricsFontScale by prefs.lyricsFontScale.collectAsStateWithLifecycle(initialValue = 1.0f)
+    val lyricAlignment by prefs.lyricAlignment.collectAsStateWithLifecycle(initialValue = "CENTER")
+    val lyricsLineSpacing by prefs.lyricsLineSpacing.collectAsStateWithLifecycle(initialValue = "NORMAL")
+    val lyricsFontFamily by prefs.lyricsFontFamily.collectAsStateWithLifecycle(initialValue = "DEFAULT")
+    val showRemainingTime by prefs.showRemainingTime.collectAsStateWithLifecycle(initialValue = false)
+    val showNextSongInPlayer by prefs.showNextSongInPlayer.collectAsStateWithLifecycle(initialValue = false)
+    val showEqualizerInPlayer by prefs.showEqualizerInPlayer.collectAsStateWithLifecycle(initialValue = true)
+    val miniPlayerShowProgress by prefs.miniPlayerShowProgress.collectAsStateWithLifecycle(initialValue = true)
+    val miniPlayerShowSkipBtn by prefs.miniPlayerShowSkipBtn.collectAsStateWithLifecycle(initialValue = true)
 
     SectionCard(icon = Icons.Rounded.MusicNote, title = "Player", modifier = Modifier.padding(horizontal = 8.dp)) {
         SegmentedSettingsItem(
@@ -799,15 +800,15 @@ private fun PlayerSection(prefs: ResonancePreferences) {
 @Composable
 private fun PlaybackSection(prefs: ResonancePreferences) {
     val scope = rememberCoroutineScope()
-    val gapless by prefs.gaplessEnabled.collectAsState(initial = true)
-    val skipSilence by prefs.skipSilence.collectAsState(initial = false)
-    val crossfadeMs by prefs.crossfadeDurationMs.collectAsState(initial = 0)
-    val playbackSpeed by prefs.playbackSpeed.collectAsState(initial = 1.0f)
-    val playbackPitch by prefs.playbackPitch.collectAsState(initial = 1.0f)
-    val resumeOnHeadphones by prefs.resumeOnHeadphones.collectAsState(initial = true)
-    val pauseOnHeadphonesOut by prefs.pauseOnHeadphonesOut.collectAsState(initial = true)
-    val duckAudio by prefs.duckAudioOnFocusLoss.collectAsState(initial = true)
-    val smartShuffle by prefs.smartShuffleEnabled.collectAsState(initial = false)
+    val gapless by prefs.gaplessEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val skipSilence by prefs.skipSilence.collectAsStateWithLifecycle(initialValue = false)
+    val crossfadeMs by prefs.crossfadeDurationMs.collectAsStateWithLifecycle(initialValue = 0)
+    val playbackSpeed by prefs.playbackSpeed.collectAsStateWithLifecycle(initialValue = 1.0f)
+    val playbackPitch by prefs.playbackPitch.collectAsStateWithLifecycle(initialValue = 1.0f)
+    val resumeOnHeadphones by prefs.resumeOnHeadphones.collectAsStateWithLifecycle(initialValue = true)
+    val pauseOnHeadphonesOut by prefs.pauseOnHeadphonesOut.collectAsStateWithLifecycle(initialValue = true)
+    val duckAudio by prefs.duckAudioOnFocusLoss.collectAsStateWithLifecycle(initialValue = true)
+    val smartShuffle by prefs.smartShuffleEnabled.collectAsStateWithLifecycle(initialValue = false)
 
     SectionCard(icon = Icons.Rounded.PlayCircle, title = "Playback", modifier = Modifier.padding(horizontal = 8.dp)) {
         SettingsToggleRow("Gapless Playback", "Smooth transition between tracks", gapless) {
@@ -870,9 +871,9 @@ private fun PlaybackSection(prefs: ResonancePreferences) {
 @Composable
 private fun AudioSection(prefs: ResonancePreferences, onNavigateToEqualizer: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val replayGainMode by prefs.replayGainMode.collectAsState(initial = "TRACK")
-    val replayGainPreamp by prefs.replayGainPreampDb.collectAsState(initial = 0f)
-    val volumeNorm by prefs.volumeNormalization.collectAsState(initial = false)
+    val replayGainMode by prefs.replayGainMode.collectAsStateWithLifecycle(initialValue = "TRACK")
+    val replayGainPreamp by prefs.replayGainPreampDb.collectAsStateWithLifecycle(initialValue = 0f)
+    val volumeNorm by prefs.volumeNormalization.collectAsStateWithLifecycle(initialValue = false)
 
     SectionCard(icon = Icons.Rounded.GraphicEq, title = "Audio", modifier = Modifier.padding(horizontal = 8.dp)) {
         SegmentedSettingsItem(
@@ -907,17 +908,17 @@ private fun AudioSection(prefs: ResonancePreferences, onNavigateToEqualizer: () 
 @Composable
 private fun LibrarySection(libraryViewModel: LibraryViewModel, prefs: ResonancePreferences) {
     val scope = rememberCoroutineScope()
-    val isSyncing by libraryViewModel.isSyncing.collectAsState()
-    val allFolders by libraryViewModel.allFolders.collectAsState()
-    val minDurationMs by prefs.minTrackDurationMs.collectAsState(initial = 30_000L)
-    val artistDelimiter by prefs.artistDelimiter.collectAsState(initial = ",;/&")
-    val showArtworkList by prefs.showArtworkInList.collectAsState(initial = true)
-    val groupByAlbumArtist by prefs.groupByAlbumArtist.collectAsState(initial = true)
-    val showFilenameTitle by prefs.showFilenameAsTitle.collectAsState(initial = false)
-    val ignoreArticles by prefs.ignoreArticles.collectAsState(initial = true)
-    val autoScanHours by prefs.autoScanIntervalHours.collectAsState(initial = 0)
-    val excludedFolders by prefs.excludedFolders.collectAsState(initial = emptySet())
-    val includedFolders by prefs.includedFolders.collectAsState(initial = emptySet())
+    val isSyncing by libraryViewModel.isSyncing.collectAsStateWithLifecycle()
+    val allFolders by libraryViewModel.allFolders.collectAsStateWithLifecycle()
+    val minDurationMs by prefs.minTrackDurationMs.collectAsStateWithLifecycle(initialValue = 30_000L)
+    val artistDelimiter by prefs.artistDelimiter.collectAsStateWithLifecycle(initialValue = ",;/&")
+    val showArtworkList by prefs.showArtworkInList.collectAsStateWithLifecycle(initialValue = true)
+    val groupByAlbumArtist by prefs.groupByAlbumArtist.collectAsStateWithLifecycle(initialValue = true)
+    val showFilenameTitle by prefs.showFilenameAsTitle.collectAsStateWithLifecycle(initialValue = false)
+    val ignoreArticles by prefs.ignoreArticles.collectAsStateWithLifecycle(initialValue = true)
+    val autoScanHours by prefs.autoScanIntervalHours.collectAsStateWithLifecycle(initialValue = 0)
+    val excludedFolders by prefs.excludedFolders.collectAsStateWithLifecycle(initialValue = emptySet())
+    val includedFolders by prefs.includedFolders.collectAsStateWithLifecycle(initialValue = emptySet())
 
     var showDelimiterDialog by remember { mutableStateOf(false) }
     var showIncludedDialog by remember { mutableStateOf(false) }
@@ -1041,14 +1042,14 @@ private fun LibrarySection(libraryViewModel: LibraryViewModel, prefs: ResonanceP
 
 @Composable
 private fun NavidromeSettingsSection(settingsViewModel: SettingsViewModel) {
-    val currentMusicSource by settingsViewModel.musicSource.collectAsState()
-    val navidromeServerUrl by settingsViewModel.navidromeServerUrl.collectAsState()
-    val navidromeUsername by settingsViewModel.navidromeUsername.collectAsState()
-    val navidromeConnectionState by settingsViewModel.navidromeConnectionState.collectAsState()
-    val navidromeSyncState by settingsViewModel.navidromeSyncState.collectAsState()
-    val downloadWifiOnly by settingsViewModel.downloadWifiOnly.collectAsState()
-    val downloadsStorageUsed by settingsViewModel.downloadsStorageUsed.collectAsState()
-    val downloadedSongCount by settingsViewModel.downloadedSongCount.collectAsState()
+    val currentMusicSource by settingsViewModel.musicSource.collectAsStateWithLifecycle()
+    val navidromeServerUrl by settingsViewModel.navidromeServerUrl.collectAsStateWithLifecycle()
+    val navidromeUsername by settingsViewModel.navidromeUsername.collectAsStateWithLifecycle()
+    val navidromeConnectionState by settingsViewModel.navidromeConnectionState.collectAsStateWithLifecycle()
+    val navidromeSyncState by settingsViewModel.navidromeSyncState.collectAsStateWithLifecycle()
+    val downloadWifiOnly by settingsViewModel.downloadWifiOnly.collectAsStateWithLifecycle()
+    val downloadsStorageUsed by settingsViewModel.downloadsStorageUsed.collectAsStateWithLifecycle()
+    val downloadedSongCount by settingsViewModel.downloadedSongCount.collectAsStateWithLifecycle()
 
     NavidromeSection(
         currentSource = currentMusicSource,
@@ -1085,24 +1086,24 @@ private fun OnlineServicesSettingsSection(
     snackbarHostState: SnackbarHostState,
 ) {
     val scope = rememberCoroutineScope()
-    val fetchLyrics by prefs.fetchLyrics.collectAsState(initial = false)
-    val fetchArtistImages by prefs.fetchArtistImages.collectAsState(initial = false)
-    val fetchAlbumArt by prefs.fetchAlbumArt.collectAsState(initial = false)
-    val discogsApiToken by prefs.discogsApiToken.collectAsState(initial = "")
-    val lastFmEnabled by settingsViewModel.lastFmEnabled.collectAsState()
-    val lastFmNowPlaying by settingsViewModel.lastFmNowPlaying.collectAsState()
-    val lastFmOnlyWifi by settingsViewModel.lastFmOnlyWifi.collectAsState()
-    val lastFmScrobblePct by settingsViewModel.lastFmScrobblePct.collectAsState()
-    val lastFmScrobbleMinSecs by settingsViewModel.lastFmScrobbleMinSecs.collectAsState()
-    val lastFmOfflineQueue by settingsViewModel.lastFmOfflineQueue.collectAsState()
-    val lastFmAuthState by settingsViewModel.lastFmAuthState.collectAsState()
-    val lastFmPending by settingsViewModel.pendingScrobbles.collectAsState()
-    val malojaEnabled by settingsViewModel.malojaEnabled.collectAsState()
-    val malojaServerUrl by settingsViewModel.malojaServerUrl.collectAsState()
-    val malojaTestState by settingsViewModel.malojaTestState.collectAsState()
-    val malojaPending by settingsViewModel.malojaPending.collectAsState()
-    val remoteShareServerUrl by settingsViewModel.remoteShareServerUrl.collectAsState()
-    val remoteShareUploadToken by settingsViewModel.remoteShareUploadToken.collectAsState()
+    val fetchLyrics by prefs.fetchLyrics.collectAsStateWithLifecycle(initialValue = false)
+    val fetchArtistImages by prefs.fetchArtistImages.collectAsStateWithLifecycle(initialValue = false)
+    val fetchAlbumArt by prefs.fetchAlbumArt.collectAsStateWithLifecycle(initialValue = false)
+    val discogsApiToken by prefs.discogsApiToken.collectAsStateWithLifecycle(initialValue = "")
+    val lastFmEnabled by settingsViewModel.lastFmEnabled.collectAsStateWithLifecycle()
+    val lastFmNowPlaying by settingsViewModel.lastFmNowPlaying.collectAsStateWithLifecycle()
+    val lastFmOnlyWifi by settingsViewModel.lastFmOnlyWifi.collectAsStateWithLifecycle()
+    val lastFmScrobblePct by settingsViewModel.lastFmScrobblePct.collectAsStateWithLifecycle()
+    val lastFmScrobbleMinSecs by settingsViewModel.lastFmScrobbleMinSecs.collectAsStateWithLifecycle()
+    val lastFmOfflineQueue by settingsViewModel.lastFmOfflineQueue.collectAsStateWithLifecycle()
+    val lastFmAuthState by settingsViewModel.lastFmAuthState.collectAsStateWithLifecycle()
+    val lastFmPending by settingsViewModel.pendingScrobbles.collectAsStateWithLifecycle()
+    val malojaEnabled by settingsViewModel.malojaEnabled.collectAsStateWithLifecycle()
+    val malojaServerUrl by settingsViewModel.malojaServerUrl.collectAsStateWithLifecycle()
+    val malojaTestState by settingsViewModel.malojaTestState.collectAsStateWithLifecycle()
+    val malojaPending by settingsViewModel.malojaPending.collectAsStateWithLifecycle()
+    val remoteShareServerUrl by settingsViewModel.remoteShareServerUrl.collectAsStateWithLifecycle()
+    val remoteShareUploadToken by settingsViewModel.remoteShareUploadToken.collectAsStateWithLifecycle()
 
     var showDiscogsDialog by remember { mutableStateOf(false) }
 
@@ -1224,8 +1225,8 @@ private fun OnlineServicesSettingsSection(
 @Composable
 private fun NotificationSection(prefs: ResonancePreferences) {
     val scope = rememberCoroutineScope()
-    val lockscreenArtwork by prefs.lockscreenArtwork.collectAsState(initial = true)
-    val showSkipButtons by prefs.showSkipButtons.collectAsState(initial = true)
+    val lockscreenArtwork by prefs.lockscreenArtwork.collectAsStateWithLifecycle(initialValue = true)
+    val showSkipButtons by prefs.showSkipButtons.collectAsStateWithLifecycle(initialValue = true)
 
     SectionCard(icon = Icons.Rounded.Notifications, title = "Notification & Lock Screen", modifier = Modifier.padding(horizontal = 8.dp)) {
         SettingsToggleRow("Show Artwork on Lock Screen", "Display album art on lock screen controls", lockscreenArtwork) {
@@ -1240,10 +1241,10 @@ private fun NotificationSection(prefs: ResonancePreferences) {
 @Composable
 private fun HistorySection(prefs: ResonancePreferences) {
     val scope = rememberCoroutineScope()
-    val historyEnabled by prefs.historyEnabled.collectAsState(initial = true)
-    val minListenSecs by prefs.minListenSeconds.collectAsState(initial = 30)
-    val minListenPct by prefs.minListenPercentage.collectAsState(initial = 0.5f)
-    val maxHistory by prefs.maxHistoryItems.collectAsState(initial = 1000)
+    val historyEnabled by prefs.historyEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val minListenSecs by prefs.minListenSeconds.collectAsStateWithLifecycle(initialValue = 30)
+    val minListenPct by prefs.minListenPercentage.collectAsStateWithLifecycle(initialValue = 0.5f)
+    val maxHistory by prefs.maxHistoryItems.collectAsStateWithLifecycle(initialValue = 1000)
 
     SectionCard(icon = Icons.Rounded.History, title = "Listening History", modifier = Modifier.padding(horizontal = 8.dp)) {
         SettingsToggleRow("Track Play History", "Record which tracks you've listened to", historyEnabled) {
@@ -1303,11 +1304,11 @@ private fun HistorySection(prefs: ResonancePreferences) {
 private fun DataSection(libraryViewModel: LibraryViewModel, snackbarHostState: SnackbarHostState) {
     val scope = rememberCoroutineScope()
     val backupViewModel: BackupViewModel = hiltViewModel()
-    val backupState by backupViewModel.state.collectAsState()
+    val backupState by backupViewModel.state.collectAsStateWithLifecycle()
     val shareViewModel: ShareViewModel = hiltViewModel()
-    val diagState by shareViewModel.diagnosticState.collectAsState()
+    val diagState by shareViewModel.diagnosticState.collectAsStateWithLifecycle()
     var showClearHistoryDialog by remember { mutableStateOf(false) }
-    val isClearingHistory by libraryViewModel.isClearingHistory.collectAsState()
+    val isClearingHistory by libraryViewModel.isClearingHistory.collectAsStateWithLifecycle()
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")

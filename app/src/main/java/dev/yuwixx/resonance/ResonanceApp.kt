@@ -18,7 +18,12 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
-class ResonanceApp : Application(), Configuration.Provider {
+class ResonanceApp : Application(), Configuration.Provider, coil.ImageLoaderFactory {
+    // AsyncImage/rememberAsyncImagePainter use Coil's singleton loader; hand it the configured
+    // one (cache sizes, stable Navidrome cache keys) instead of a default per-process loader.
+    @Inject lateinit var imageLoader: coil.ImageLoader
+    override fun newImageLoader(): coil.ImageLoader = imageLoader
+
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var autoScanManager: AutoScanManager
     @Inject lateinit var mixGeneratorManager: MixGeneratorManager

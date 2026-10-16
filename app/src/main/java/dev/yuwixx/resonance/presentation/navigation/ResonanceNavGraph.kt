@@ -2,6 +2,7 @@
 // and wires every composable destination to its screen composable.
 package dev.yuwixx.resonance.presentation.navigation
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
@@ -102,41 +103,41 @@ fun ResonanceNavGraph(
     val navController = rememberNavController()
     val libraryViewModel: LibraryViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
-    val isFirstRun by libraryViewModel.prefs.isFirstRun.collectAsState(initial = null)
+    val isFirstRun by libraryViewModel.prefs.isFirstRun.collectAsStateWithLifecycle(initialValue = null)
     val scope = rememberCoroutineScope()
-    val musicSource by settingsViewModel.musicSource.collectAsState()
+    val musicSource by settingsViewModel.musicSource.collectAsStateWithLifecycle()
 
-    val currentSong by playerViewModel.currentSong.collectAsState()
-    val isPlaying by playerViewModel.isPlaying.collectAsState()
-    val allPlaylists by libraryViewModel.allPlaylists.collectAsState()
+    val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
+    val isPlaying by playerViewModel.isPlaying.collectAsStateWithLifecycle()
+    val allPlaylists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
 
-    val miniPlayerStyle by playerViewModel.miniPlayerStyle.collectAsState()
+    val miniPlayerStyle by playerViewModel.miniPlayerStyle.collectAsStateWithLifecycle()
 
-    val hiddenNavTabs by libraryViewModel.prefs.hiddenNavTabs.collectAsState(initial = emptySet())
+    val hiddenNavTabs by libraryViewModel.prefs.hiddenNavTabs.collectAsStateWithLifecycle(initialValue = emptySet())
     val visibleNavItems = remember(hiddenNavTabs) {
         navItems.filter { it.screen.route !in hiddenNavTabs }
     }
 
-    val compactList by libraryViewModel.prefs.compactListMode.collectAsState(initial = false)
-    val showDuration by libraryViewModel.prefs.showDurationInList.collectAsState(initial = false)
-    val artworkShape by libraryViewModel.prefs.playerArtworkShape.collectAsState(initial = "ROUNDED")
-    val lyricAlign by libraryViewModel.prefs.lyricAlignment.collectAsState(initial = "CENTER")
-    val seekbarClr by libraryViewModel.prefs.seekbarColor.collectAsState(initial = "PRIMARY")
-    val tintedNav by libraryViewModel.prefs.tintedNavBar.collectAsState(initial = false)
-    val floatingNav by libraryViewModel.prefs.floatingNavBar.collectAsState(initial = false)
-    val navLabelVis by libraryViewModel.prefs.navLabelVisibility.collectAsState(initial = "ALWAYS")
-    val playlistCols by libraryViewModel.prefs.playlistGridColumns.collectAsState(initial = 2)
-    val showAlbumInList by libraryViewModel.prefs.showAlbumInList.collectAsState(initial = false)
-    val listArtworkSize by libraryViewModel.prefs.listArtworkSize.collectAsState(initial = "MEDIUM")
-    val showRemainingTime by libraryViewModel.prefs.showRemainingTime.collectAsState(initial = false)
-    val showNextSongInPlayer by libraryViewModel.prefs.showNextSongInPlayer.collectAsState(initial = false)
-    val lyricsLineSpacing by libraryViewModel.prefs.lyricsLineSpacing.collectAsState(initial = "NORMAL")
-    val miniPlayerShowProgress by libraryViewModel.prefs.miniPlayerShowProgress.collectAsState(initial = true)
-    val miniPlayerShowSkipBtn by libraryViewModel.prefs.miniPlayerShowSkipBtn.collectAsState(initial = true)
-    val showEqualizerInPlayer by libraryViewModel.prefs.showEqualizerInPlayer.collectAsState(initial = true)
-    val hapticEnabled by libraryViewModel.prefs.hapticFeedback.collectAsState(initial = true)
-    val showBitrateInfo by libraryViewModel.prefs.showBitrateInfo.collectAsState(initial = false)
-    val lyricsFontFamily by libraryViewModel.prefs.lyricsFontFamily.collectAsState(initial = "DEFAULT")
+    val compactList by libraryViewModel.prefs.compactListMode.collectAsStateWithLifecycle(initialValue = false)
+    val showDuration by libraryViewModel.prefs.showDurationInList.collectAsStateWithLifecycle(initialValue = false)
+    val artworkShape by libraryViewModel.prefs.playerArtworkShape.collectAsStateWithLifecycle(initialValue = "ROUNDED")
+    val lyricAlign by libraryViewModel.prefs.lyricAlignment.collectAsStateWithLifecycle(initialValue = "CENTER")
+    val seekbarClr by libraryViewModel.prefs.seekbarColor.collectAsStateWithLifecycle(initialValue = "PRIMARY")
+    val tintedNav by libraryViewModel.prefs.tintedNavBar.collectAsStateWithLifecycle(initialValue = false)
+    val floatingNav by libraryViewModel.prefs.floatingNavBar.collectAsStateWithLifecycle(initialValue = false)
+    val navLabelVis by libraryViewModel.prefs.navLabelVisibility.collectAsStateWithLifecycle(initialValue = "ALWAYS")
+    val playlistCols by libraryViewModel.prefs.playlistGridColumns.collectAsStateWithLifecycle(initialValue = 2)
+    val showAlbumInList by libraryViewModel.prefs.showAlbumInList.collectAsStateWithLifecycle(initialValue = false)
+    val listArtworkSize by libraryViewModel.prefs.listArtworkSize.collectAsStateWithLifecycle(initialValue = "MEDIUM")
+    val showRemainingTime by libraryViewModel.prefs.showRemainingTime.collectAsStateWithLifecycle(initialValue = false)
+    val showNextSongInPlayer by libraryViewModel.prefs.showNextSongInPlayer.collectAsStateWithLifecycle(initialValue = false)
+    val lyricsLineSpacing by libraryViewModel.prefs.lyricsLineSpacing.collectAsStateWithLifecycle(initialValue = "NORMAL")
+    val miniPlayerShowProgress by libraryViewModel.prefs.miniPlayerShowProgress.collectAsStateWithLifecycle(initialValue = true)
+    val miniPlayerShowSkipBtn by libraryViewModel.prefs.miniPlayerShowSkipBtn.collectAsStateWithLifecycle(initialValue = true)
+    val showEqualizerInPlayer by libraryViewModel.prefs.showEqualizerInPlayer.collectAsStateWithLifecycle(initialValue = true)
+    val hapticEnabled by libraryViewModel.prefs.hapticFeedback.collectAsStateWithLifecycle(initialValue = true)
+    val showBitrateInfo by libraryViewModel.prefs.showBitrateInfo.collectAsStateWithLifecycle(initialValue = false)
+    val lyricsFontFamily by libraryViewModel.prefs.lyricsFontFamily.collectAsStateWithLifecycle(initialValue = "DEFAULT")
 
     val appearanceConfig = remember(compactList, showDuration, artworkShape, lyricAlign, seekbarClr, tintedNav, floatingNav, navLabelVis, playlistCols, showAlbumInList, listArtworkSize, showRemainingTime, showNextSongInPlayer, lyricsLineSpacing, miniPlayerShowProgress, miniPlayerShowSkipBtn, showEqualizerInPlayer, hapticEnabled, showBitrateInfo, lyricsFontFamily) {
         AppearanceConfig(
@@ -226,6 +227,7 @@ fun ResonanceNavGraph(
     CompositionLocalProvider(
         LocalAppearanceConfig provides appearanceConfig,
         LocalContentColor provides MaterialTheme.colorScheme.onSurface,
+        dev.yuwixx.resonance.presentation.components.LocalPlaybackActive provides isPlaying,
     ) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         if (isFirstRun != null) {
