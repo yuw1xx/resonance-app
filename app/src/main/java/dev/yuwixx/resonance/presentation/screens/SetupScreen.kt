@@ -2,6 +2,7 @@
 
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.compose.runtime.saveable.rememberSaveable
 import dev.yuwixx.resonance.presentation.components.EmphasizedAccelerate
 import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,8 +48,8 @@ private const val TOTAL_STEPS = 5
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun SetupScreen(onComplete: () -> Unit) {
-    var currentStep by remember { mutableIntStateOf(0) }
-    var chosenSource by remember { mutableStateOf(MusicSource.LOCAL) }
+    var currentStep by rememberSaveable { mutableIntStateOf(0) }
+    var chosenSource by rememberSaveable { mutableStateOf(MusicSource.LOCAL) }
 
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val lastFmAuthState by settingsViewModel.lastFmAuthState.collectAsStateWithLifecycle()
@@ -431,9 +432,11 @@ private fun NavidromeStep(
     onSave: (String, String, String) -> Unit,
     onResetSync: () -> Unit,
 ) {
-    var serverUrl by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var serverUrl by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    // Only a connection tested on this screen may be saved (not a leftover "connected" state).
+    var testedHere by rememberSaveable { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
 
     // Flip immediately when the connection succeeds — don't derive from syncState (which
@@ -442,7 +445,9 @@ private fun NavidromeStep(
     var showSyncDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(connectionState) {
-        if (connectionState is NavidromeConnectionState.Connected) {
+        if (connectionState is NavidromeConnectionState.Connected && testedHere &&
+            serverUrl.isNotBlank() && username.isNotBlank()
+        ) {
             onResetSync()
             showSyncDialog = true
             onSave(serverUrl, username, password)
@@ -611,7 +616,7 @@ private fun NavidromeStep(
 
         if (connectionState !is NavidromeConnectionState.Connected) {
             Button(
-                onClick = { onTest(serverUrl, username, password) },
+                onClick = { testedHere = true; onTest(serverUrl, username, password) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
                 enabled = serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()

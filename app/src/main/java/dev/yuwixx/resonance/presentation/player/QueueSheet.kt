@@ -67,10 +67,40 @@ fun QueueSheet(
             items.addAll(orderedQueue)
         }
     }
-    // Start scrolled to the playing song.
+    // Start scrolled to the playing song (item 0 is the header).
     LaunchedEffect(Unit) {
         val pos = orderedQueue.indexOfFirst { it.index == currentIndex }
-        if (pos > 0) listState.scrollToItem(pos)
+        if (pos > 0) listState.scrollToItem(pos + 1)
+    }
+
+    // Runs in the sheet's scope: the removed row leaves composition, which would cancel the
+    // snackbar if it were shown from the row itself.
+    fun removeWithUndo(entry: PlayerViewModel.QueueEntry, onFailed: () -> Unit) {
+        val removed = playerViewModel.removeFromQueueForUndo(entry.index)
+        if (removed == null) {
+            onFailed()
+            return
+        }
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            val result = snackbar.showSnackbar(
+                message = "Removed “${removed.second.title}”",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                playerViewModel.restoreQueueItem(removed.first, removed.second)
+            }
+        }
+    }
+
+    // Song ID plus occurrence: stays the same for every row when an earlier row is removed.
+    fun rowKeys(entries: List<PlayerViewModel.QueueEntry>): List<String> {
+        val seen = HashMap<Long, Int>()
+        return entries.map { e ->
+            val n = seen.merge(e.song.id, 1, Int::plus)!!
+            "${e.song.id}#$n"
+        }
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -119,23 +149,14 @@ fun QueueSheet(
                     }
                 }
 
-                itemsIndexed(items, key = { _, e -> "${e.index}_${e.song.id}" }) { _, entry ->
-                    val key = "${entry.index}_${entry.song.id}"
+                val keys = rowKeys(items)
+                itemsIndexed(items, key = { i, _ -> keys[i] }) { i, entry ->
+                    val key = keys[i]
                     val isCurrent = entry.index == currentIndex
                     val dismissState = rememberSwipeToDismissBoxState()
                     LaunchedEffect(dismissState.currentValue) {
                         if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
-                            val removed = playerViewModel.removeFromQueueForUndo(entry.index)
-                            if (removed != null) {
-                                val result = snackbar.showSnackbar(
-                                    message = "Removed “${removed.second.title}”",
-                                    actionLabel = "Undo",
-                                    duration = SnackbarDuration.Short,
-                                )
-                                if (result == SnackbarResult.ActionPerformed) {
-                                    playerViewModel.restoreQueueItem(removed.first, removed.second)
-                                }
-                            }
+                            removeWithUndo(entry) { scope.launch { dismissState.reset() } }
                         }
                     }
                     SwipeToDismissBox(

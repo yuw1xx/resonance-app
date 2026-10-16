@@ -595,7 +595,7 @@ private fun AppearanceSection(prefs: ResonancePreferences) {
             value = cornerRadius.toFloat(),
             range = 0f..40f,
             label = "${cornerRadius}dp",
-            steps = 40,
+            steps = 39,
             onValueChange = { scope.launch { prefs.setCornerRadius(it.roundToInt()) } },
         )
         SettingsSliderItem(
@@ -833,7 +833,7 @@ private fun PlaybackSection(prefs: ResonancePreferences) {
             value = crossfadeMs.toFloat(),
             range = 0f..10000f,
             label = if (crossfadeMs == 0) "Disabled" else "${crossfadeMs / 1000}s",
-            steps = 10,
+            steps = 9,
             onValueChange = { newValue ->
                 val step = 1000f
                 val rounded = (newValue / step).roundToInt() * step
@@ -845,7 +845,7 @@ private fun PlaybackSection(prefs: ResonancePreferences) {
             value = playbackSpeed,
             range = 0.5f..2.0f,
             label = "${playbackSpeed}x",
-            steps = 6,
+            steps = 5,
             onValueChange = { newValue ->
                 val step = 0.25f
                 val rounded = (newValue / step).roundToInt() * step
@@ -857,7 +857,7 @@ private fun PlaybackSection(prefs: ResonancePreferences) {
             value = playbackPitch,
             range = 0.5f..2.0f,
             label = "${playbackPitch}x",
-            steps = 6,
+            steps = 5,
             onValueChange = { newValue ->
                 val step = 0.25f
                 val rounded = (newValue / step).roundToInt() * step
@@ -947,7 +947,7 @@ private fun LibrarySection(libraryViewModel: LibraryViewModel, prefs: ResonanceP
             value = (minDurationMs / 1000f),
             range = 0f..300f,
             label = if (minDurationMs == 0L) "No filter" else "${minDurationMs / 1000}s",
-            steps = 30,
+            steps = 29,
             onValueChange = { newValue ->
                 val step = 10f
                 val rounded = (newValue / step).roundToInt() * step
@@ -1275,7 +1275,7 @@ private fun HistorySection(prefs: ResonancePreferences) {
                     value = minListenSecs.toFloat(),
                     range = 10f..120f,
                     label = "${minListenSecs}s",
-                    steps = 11,
+                    steps = 10,
                     onValueChange = { newValue ->
                         val step = 10f
                         val rounded = (newValue / step).roundToInt() * step
@@ -1301,7 +1301,7 @@ private fun HistorySection(prefs: ResonancePreferences) {
                     value = maxHistory.toFloat(),
                     range = 100f..5000f,
                     label = "$maxHistory items",
-                    steps = 49,
+                    steps = 48,
                     onValueChange = { newValue ->
                         val step = 100f
                         val rounded = (newValue / step).roundToInt() * step
@@ -1723,7 +1723,7 @@ private fun LastFmSection(
                     value = scrobbleMinSecs.toFloat(),
                     range = 10f..120f,
                     label = "${scrobbleMinSecs}s",
-                    steps = 11,
+                    steps = 10,
                     onValueChange = { onScrobbleMinSecsChange((it / 10f).roundToInt() * 10) },
                     compact = true,
                 )
@@ -2193,17 +2193,20 @@ private fun SettingsSliderItem(
                 fontWeight = FontWeight.SemiBold,
             )
         }
-        // Smooths non-drag-driven jumps (e.g. a reset button) into a glide; live drag already
-        // reports every intermediate value through onValueChange, so this tracks it closely
-        // enough to feel 1:1 while still catching real jumps.
+        // The thumb follows the finger locally; the setting is saved once, on release.
+        var dragValue by remember { mutableStateOf<Float?>(null) }
         val animatedValue by animateFloatAsState(
             targetValue = value,
             animationSpec = tween(200, easing = EmphasizedDecelerate),
             label = "settings_slider_value",
         )
         Slider(
-            value = animatedValue,
-            onValueChange = onValueChange,
+            value = dragValue ?: animatedValue,
+            onValueChange = { dragValue = it },
+            onValueChangeFinished = {
+                dragValue?.let(onValueChange)
+                dragValue = null
+            },
             valueRange = range,
             steps = steps,
             modifier = Modifier.padding(top = 0.dp),

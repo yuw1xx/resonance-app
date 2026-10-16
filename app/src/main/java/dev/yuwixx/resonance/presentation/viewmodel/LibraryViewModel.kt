@@ -34,6 +34,7 @@ class LibraryViewModel @Inject constructor(
     val prefs: ResonancePreferences,
     private val artworkRepository: ArtworkRepository,
     private val navidromeRepository: NavidromeRepository,
+    private val activeLibrary: dev.yuwixx.resonance.data.repository.ActiveLibrary,
     private val navidromeSyncRepository: dev.yuwixx.resonance.data.repository.NavidromeSyncRepository,
     private val playlistFolderSync: dev.yuwixx.resonance.data.playlist.PlaylistFolderSync,
     private val navidromeDownloadRepository: NavidromeDownloadRepository,
@@ -182,14 +183,13 @@ class LibraryViewModel @Inject constructor(
     fun updateSearch(query: String) { _searchQuery.value = query }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val allSongs: StateFlow<List<Song>> = prefs.musicSource
-        .flatMapLatest { source ->
-            when (source) {
-                MusicSource.LOCAL     -> musicRepository.allSongs
-                MusicSource.NAVIDROME -> navidromeRepository.cachedSongs
-            }
-        }
+    val allSongs: StateFlow<List<Song>> = activeLibrary.songs
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** False until the active library's first emission, so screens don't flash "empty" on launch. */
+    val libraryLoaded: StateFlow<Boolean> = activeLibrary.songs
+        .map { true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val allAlbums: StateFlow<List<Album>> = prefs.musicSource

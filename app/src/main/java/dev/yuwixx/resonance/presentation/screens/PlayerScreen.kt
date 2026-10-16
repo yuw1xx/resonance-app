@@ -3,6 +3,7 @@
 // artwork background.
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.net.Uri
 import androidx.compose.animation.*
@@ -97,10 +98,10 @@ fun PlayerScreen(
     val song = currentSong ?: return
     val shareViewModel: ShareViewModel = hiltViewModel()
 
-    var showLyricsOverlay by remember { mutableStateOf(false) }
-    var showQueueSheet by remember { mutableStateOf(false) }
-    var showSleepTimerDialog by remember { mutableStateOf(false) }
-    var showOptionsSheet by remember { mutableStateOf(false) }
+    var showLyricsOverlay by rememberSaveable { mutableStateOf(false) }
+    var showQueueSheet by rememberSaveable { mutableStateOf(false) }
+    var showSleepTimerDialog by rememberSaveable { mutableStateOf(false) }
+    var showOptionsSheet by rememberSaveable { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -826,7 +827,7 @@ private fun SeekBarAndTimeLabels(
         )
         Text(
             if (showRemainingTime && durationMs > 0)
-                "-${formatDuration(durationMs - positionSec * 1000)}"
+                "-${formatDuration((durationMs - positionSec * 1000).coerceAtLeast(0))}"
             else formatDuration(durationMs),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -877,12 +878,15 @@ private fun PlayerFooter(
                     MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
                 else Color.Transparent,
                 modifier = Modifier
+                    .minimumInteractiveComponentSize()
                     .size(40.dp)
                     .scale(lyricsScale)
                     .combinedClickable(
                         interactionSource = lyricsInteraction,
                         indication = null,
+                        onClickLabel = "Show lyrics",
                         onClick = onLyricsClick,
+                        onLongClickLabel = "Edit lyrics",
                         onLongClick = onLyricsEdit,
                     ),
             ) {
@@ -893,7 +897,7 @@ private fun PlayerFooter(
                     } else {
                         Icon(
                             imageVector = if (hasLyrics) Icons.Rounded.MicExternalOn else Icons.Rounded.MicExternalOff,
-                            contentDescription = "Lyrics — tap to view, long-press to edit",
+                            contentDescription = "Lyrics",
                             modifier = Modifier.size(22.dp),
                             tint = if (hasLyrics) MaterialTheme.colorScheme.onSecondaryContainer
                             else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),

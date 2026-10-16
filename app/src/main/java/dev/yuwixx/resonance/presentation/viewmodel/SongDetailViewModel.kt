@@ -22,6 +22,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SongDetailViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
+    private val activeLibrary: dev.yuwixx.resonance.data.repository.ActiveLibrary,
     private val lyricsRepository: LyricsRepository,
     private val historyDao: HistoryDao,
     private val artworkRepository: ArtworkRepository,
@@ -45,7 +46,7 @@ class SongDetailViewModel @Inject constructor(
         if (loadedSongId == songId) return
         loadedSongId = songId
         viewModelScope.launch {
-            val s = musicRepository.allSongs.first().find { it.id == songId } ?: return@launch
+            val s = activeLibrary.songs.first().find { it.id == songId } ?: return@launch
             _song.value = s
             _playCount.value = historyDao.getPlayCountForSong(songId)
             _totalListenedMs.value = historyDao.getTotalListenTimeForSong(songId)

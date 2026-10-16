@@ -2,6 +2,7 @@
 
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.compose.runtime.saveable.rememberSaveable
 import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.*
@@ -43,16 +44,19 @@ fun LyricsEditorScreen(
     val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
     val isCurrent = currentSong?.id == song.id
 
-    var lrcText by remember { mutableStateOf("") }
+    var lrcText by rememberSaveable { mutableStateOf("") }
+    var loaded by rememberSaveable { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var savedSnackbar by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Loaded once; after a rotation the (possibly edited) text is kept.
     LaunchedEffect(song.id) {
-        val raw = lyricsRepository.getRawLyrics(song.id)
-        if (raw != null) lrcText = raw
+        if (loaded) return@LaunchedEffect
+        lyricsRepository.getRawLyrics(song.id)?.let { lrcText = it }
+        loaded = true
     }
 
     LaunchedEffect(savedSnackbar) {
@@ -85,7 +89,7 @@ fun LyricsEditorScreen(
                     // the next line that doesn't have a timestamp yet.
                     if (isCurrent && lrcText.isNotBlank()) {
                         IconButton(onClick = {
-                            lrcText = stampNextLine(lrcText, playerViewModel.positionMs.value)
+                            lrcText = stampNextLine(lrcText, playerViewModel.currentPositionMs())
                         }) {
                             Icon(Icons.Rounded.Timer, "Stamp next line with the current time")
                         }

@@ -72,15 +72,16 @@ fun LibraryScreen(
     val sections = remember(showFolders) {
         LibrarySection.entries.filter { showFolders || it != LibrarySection.Folders }
     }
-    if (section !in sections) section = LibrarySection.Songs
+    // Folders disappears when switching to Navidrome; fall back without writing state here.
+    val shown = if (section in sections) section else LibrarySection.Songs
 
     val switcher: @Composable () -> Unit = {
-        LibrarySectionSwitcher(sections = sections, selected = section, onSelect = { section = it })
+        LibrarySectionSwitcher(sections = sections, selected = shown, onSelect = { section = it })
     }
     val motion = MaterialTheme.motionScheme
     CompositionLocalProvider(LocalLibrarySections provides switcher) {
         AnimatedContent(
-            targetState = section,
+            targetState = shown,
             transitionSpec = { fadeIn(motion.defaultEffectsSpec()) togetherWith fadeOut(motion.fastEffectsSpec()) },
             label = "library_section",
         ) { content(it) }

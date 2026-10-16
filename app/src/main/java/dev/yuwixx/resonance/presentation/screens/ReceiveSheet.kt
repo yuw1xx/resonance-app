@@ -212,6 +212,12 @@ private fun ReceiveTransferContent(
     var state by remember { mutableStateOf<ReceiveState>(ReceiveState.Connecting("Preparing…")) }
     val scope   = rememberCoroutineScope()
 
+    // However the sheet goes away (swipe, back, Done), leave the sender's network: otherwise
+    // the whole app stays bound to a Wi-Fi Direct network without internet.
+    DisposableEffect(Unit) {
+        onDispose { releaseNetwork(context) }
+    }
+
     LaunchedEffect(params) {
         state = if (params.mode == "p2p") {
             ReceiveState.Connecting("Tap ‘Allow’ if your phone asks to switch Wi-Fi…")
@@ -288,6 +294,8 @@ private fun ReceiveTransferContent(
         AnimatedContent(
             targetState = state,
             transitionSpec = { (fadeIn(tween(280)) + slideInVertically { it / 4 }).togetherWith(fadeOut(tween(210))) },
+            // Animate between kinds of state, not on every progress update.
+            contentKey = { it::class },
             label = "receive_state",
         ) { s ->
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -305,7 +313,7 @@ private fun ReceiveTransferContent(
                                 onClick = {
                                     scope.launch {
                                         performReject(params)
-                                        releaseNetwork(context, s.network)
+                                        releaseNetwork(context)
                                         onDismiss()
                                     }
                                 },
@@ -575,10 +583,9 @@ private suspend fun connectToP2pNetwork(context: Context, params: ReceiveParams)
                 if (!resumed) { resumed = true; cont.resume(null) }
             }
         }
+        activeP2pCallback = callback
         cm.requestNetwork(request, callback, 60_000)
-        cont.invokeOnCancellation {
-            try { cm.unregisterNetworkCallback(callback) } catch (_: Exception) {}
-        }
+        cont.invokeOnCancellation { releaseNetwork(context) }
     }
 }
 
@@ -654,10 +661,10 @@ private suspend fun performDownloadTask(
 ): ReceiveState = withContext(Dispatchers.IO) {
     try {
         val destFile = downloadToStorage(context, network, params.downloadUrl, params.title, params.ext, params.mimeType, onProgress)
-        releaseNetwork(context, network)
+        releaseNetwork(context)
         ReceiveState.Done(destFile)
     } catch (e: Exception) {
-        releaseNetwork(context, network)
+        releaseNetwork(context)
         ReceiveState.Error(e.message ?: "Transfer failed")
     }
 }
@@ -684,9 +691,20 @@ private suspend fun performReject(params: ReceiveParams) = withContext(Dispatche
     } catch (e: Exception) { /* ignore */ }
 }
 
-private fun releaseNetwork(context: Context, network: Network?) {
-    if (network != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        (context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).bindProcessToNetwork(null)
+// The callback of the Wi-Fi Direct network request; unregistering it is what actually lets
+// the phone leave the sender's network.
+private var activeP2pCallback: ConnectivityManager.NetworkCallback? = null
+
+private fun releaseNetwork(context: Context) {
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) cm.bindProcessToNetwork(null)
+    activeP2pCallback?.let { callback ->
+        activeP2pCallback = null
+        try {
+            cm.unregisterNetworkCallback(callback)
+        } catch (e: IllegalArgumentException) {
+            // Already unregistered.
+        }
     }
 }
 

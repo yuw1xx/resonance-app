@@ -175,6 +175,9 @@ class MainActivity : ComponentActivity() {
                             AlertDialog(
                                 onDismissRequest = {},
                                 title = { Text("Downloading Update") },
+                                dismissButton = {
+                                    TextButton(onClick = { settingsViewModel.cancelUpdateDownload() }) { Text("Cancel") }
+                                },
                                 text = {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         LinearProgressIndicator(

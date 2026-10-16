@@ -1,5 +1,7 @@
 package dev.yuwixx.resonance.presentation.components
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -55,7 +57,11 @@ fun SleepTimerDialog(
         icon = { Icon(Icons.Rounded.Bedtime, null) },
         title = { Text("Sleep timer") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Scrolls in landscape, where the options don't fit.
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
                 AnimatedVisibility(
                     visible = currentTimer !is SleepTimer.Off,
                     enter = expandVertically(motion.defaultSpatialSpec()) + fadeIn(motion.defaultEffectsSpec()),

@@ -1,5 +1,14 @@
 package dev.yuwixx.resonance.presentation.components
 
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.foundation.gestures.horizontalDrag
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import android.annotation.SuppressLint
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -371,37 +380,58 @@ private fun rememberAnimatedProgress(position: State<Long>, durationMs: Long): S
     return progress.asState()
 }
 
-/** Shared tap/drag handling for the seekbars: the thumb follows the finger live, but the actual
- *  seek is issued once on release (seeking on every move event flooded the player with seeks). */
+/** Exposes the seekbar to TalkBack as an adjustable slider, updated once a second. */
+@Composable
+private fun Modifier.seekSemantics(position: State<Long>, durationMs: Long, onSeek: (Long) -> Unit): Modifier {
+    val seconds by remember(position) { derivedStateOf { position.value / 1000 } }
+    val fraction = if (durationMs > 0) (seconds * 1000f / durationMs).coerceIn(0f, 1f) else 0f
+    return semantics {
+        contentDescription = "Seek"
+        progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
+        setProgress { target ->
+            if (durationMs <= 0) return@setProgress false
+            onSeek((target.coerceIn(0f, 1f) * durationMs).toLong())
+            true
+        }
+    }
+}
+
+/**
+ * Tap or horizontal drag to seek. The thumb follows the finger, and one seek is issued on release.
+ * Vertical swipes are left alone so they reach the player sheet (swipe down to close).
+ */
 private fun Modifier.seekGestures(
     durationMs: () -> Long,
     onDragChange: (dragging: Boolean, fraction: Float) -> Unit,
     onSeek: () -> (Long) -> Unit,
     onTick: () -> Unit,
 ): Modifier = pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) {
-            val down = awaitPointerEvent()
-            val first = down.changes.firstOrNull() ?: continue
-            if (!first.pressed) continue
-            var fraction = (first.position.x / size.width).coerceIn(0f, 1f)
-            onDragChange(true, fraction)
-            onTick()
-            while (true) {
-                val event = awaitPointerEvent()
-                val change = event.changes.firstOrNull { it.id == first.id } ?: break
-                val newFraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                if (newFraction != fraction) {
-                    fraction = newFraction
-                    onDragChange(true, fraction)
-                }
-                change.consume()
-                if (!change.pressed) break
+    fun fractionAt(x: Float) = (x / size.width).coerceIn(0f, 1f)
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+        if (slop == null) {
+            // Released without moving: a tap. Anything else was a vertical gesture.
+            val up = currentEvent.changes.firstOrNull { it.id == down.id }
+            if (up != null && !up.pressed && !up.isConsumed) {
+                val fraction = fractionAt(down.position.x)
+                onTick()
+                onSeek()((fraction * durationMs()).toLong())
+                onDragChange(false, fraction)
             }
-            onSeek()((fraction * durationMs()).toLong())
-            onTick()
-            onDragChange(false, fraction)
+            return@awaitEachGesture
         }
+        var fraction = fractionAt(slop.position.x)
+        onDragChange(true, fraction)
+        onTick()
+        horizontalDrag(slop.id) { change ->
+            fraction = fractionAt(change.position.x)
+            onDragChange(true, fraction)
+            change.consume()
+        }
+        onSeek()((fraction * durationMs()).toLong())
+        onTick()
+        onDragChange(false, fraction)
     }
 }
 
@@ -446,6 +476,7 @@ fun MaterialYou3Seekbar(
         modifier = modifier
             .fillMaxWidth()
             .height(48.dp)
+            .seekSemantics(position, durationMs) { currentOnSeek(it) }
             .seekGestures(
                 durationMs = { currentDuration },
                 onDragChange = { dragging, fraction -> isDragging = dragging; dragProgress.floatValue = fraction },
@@ -552,6 +583,7 @@ fun WaveformSeekbar(
         modifier = modifier
             .fillMaxWidth()
             .height(64.dp)
+            .seekSemantics(position, durationMs) { currentOnSeek(it) }
             .seekGestures(
                 durationMs = { currentDuration },
                 onDragChange = { dragging, fraction -> isDragging = dragging; dragProgress.floatValue = fraction },
@@ -700,7 +732,7 @@ fun SongCard(
                     } else {
                         ArtworkImage(
                             uri = song.artworkUri,
-                            contentDescription = song.album,
+                            contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             cornerRadius = 12.dp,
                             isAnimating = isPlaying,

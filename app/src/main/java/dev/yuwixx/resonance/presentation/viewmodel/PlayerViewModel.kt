@@ -36,6 +36,7 @@ import javax.inject.Inject
 class PlayerViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val musicRepository: MusicRepository,
+    private val activeLibrary: dev.yuwixx.resonance.data.repository.ActiveLibrary,
     val lyricsRepository: LyricsRepository,
     private val likedSongsDao: LikedSongsDao,
     private val lastFmRepository: LastFmRepository,
@@ -54,9 +55,8 @@ class PlayerViewModel @Inject constructor(
 
     private var _controller: MediaController? = null
 
-    // id → Song for the whole library, rebuilt only when the library changes. Track changes and
-    // queue syncs used to re-query and re-map every song (allSongs.first()) each time.
-    private val songMap: StateFlow<Map<Long, Song>> = musicRepository.allSongs
+    // id → Song for the active library (local or Navidrome), rebuilt only when it changes.
+    private val songMap: StateFlow<Map<Long, Song>> = activeLibrary.songs
         .map { songs -> songs.associateBy { it.id } }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
@@ -288,6 +288,14 @@ class PlayerViewModel @Inject constructor(
                 controller.addListener(playerListener)
                 applySessionExtras(controller.sessionExtras)
                 syncStateWithController()
+                // Preferences emit only on change; the first value may have arrived before
+                // the controller existed.
+                viewModelScope.launch {
+                    controller.playbackParameters = PlaybackParameters(
+                        prefs.playbackSpeed.first(),
+                        prefs.playbackPitch.first(),
+                    )
+                }
             },
             // Main thread: the listener touches the controller, which must be used on its
             // application looper.
@@ -494,6 +502,11 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /** The live position from the player, for when the UI ticker isn't running. */
+    fun currentPositionMs(): Long =
+        if (castManager.isCasting.value) castManager.getCurrentPosition()
+        else _controller?.currentPosition?.coerceAtLeast(0) ?: _positionMs.value
+
     fun seekTo(position: Long) {
         if (castManager.isCasting.value) {
             castManager.seekTo(position)
@@ -600,6 +613,27 @@ class PlayerViewModel @Inject constructor(
         }
         viewModelScope.launch(Dispatchers.IO) { extractWaveform(song.id, song.uri) }
         prefetchReplayGain(song)
+    }
+
+    /** Plays [songs] next, in the given order, as one queue change. */
+    fun addToQueueNext(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        _controller?.let { ctrl ->
+            val insertIndex = (ctrl.currentMediaItemIndex + 1).coerceAtMost(ctrl.mediaItemCount)
+            ctrl.addMediaItems(insertIndex, songs.map { it.toMediaItem() })
+            songs.forEachIndexed { i, song ->
+                offerUndo(song.title, "plays next") { removeQueuedSong(song.id, insertIndex + i) }
+            }
+        }
+        songs.forEach(::prefetchReplayGain)
+    }
+
+    /** Appends [songs] to the queue, in the given order, as one queue change. */
+    fun addToQueueEnd(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        _controller?.addMediaItems(songs.map { it.toMediaItem() })
+        songs.forEach { song -> offerUndo(song.title, "added to queue") { removeQueuedSong(song.id) } }
+        songs.forEach(::prefetchReplayGain)
     }
 
     private val _queue = MutableStateFlow<List<Song>>(emptyList())
@@ -817,7 +851,17 @@ class PlayerViewModel @Inject constructor(
         @OptIn(UnstableApi::class)
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             syncStateWithController()
-            val songId = mediaItem?.mediaId?.toLongOrNull()
+            // The new track starts from its own position, even while paused (no ticker runs).
+            _positionMs.value = _controller?.currentPosition?.coerceAtLeast(0) ?: 0L
+            if (mediaItem == null || (_controller?.mediaItemCount ?: 0) == 0) {
+                // The queue was cleared.
+                _currentSong.value = null
+                _waveformData.value = null
+                _lyricsResult.value = dev.yuwixx.resonance.data.repository.LyricsResult.NotFound
+                _activeLyricIndex.value = -1
+                return
+            }
+            val songId = mediaItem.mediaId.toLongOrNull()
             if (songId != null) {
                 viewModelScope.launch {
                     val song = lookupSong(songId)
@@ -1004,6 +1048,10 @@ class PlayerViewModel @Inject constructor(
         val extras = android.os.Bundle().apply {
             trackGain?.let { putFloat("replayGainTrack", it) }
             albumGain?.let { putFloat("replayGainAlbum", it) }
+            // Read back by MediaItem.toSong() when a song isn't in the library map.
+            putLong(EXTRA_DURATION, duration)
+            putLong(EXTRA_ALBUM_ID, albumId)
+            navidromeId?.let { putString(EXTRA_NAVIDROME_ID, it) }
         }
 
         // Play the downloaded local copy instead of streaming, when one exists (no-op for
@@ -1064,9 +1112,9 @@ private fun MediaItem.toSong(): Song? {
         artists       = listOf(artist),
         albumArtist   = meta.albumArtist?.toString() ?: artist,
         album         = meta.albumTitle?.toString() ?: "",
-        albumId       = 0L,
+        albumId       = extras?.getLong(EXTRA_ALBUM_ID) ?: 0L,
         genre         = "",
-        duration      = 0L,
+        duration      = extras?.getLong(EXTRA_DURATION) ?: 0L,
         size          = 0L,
         bitrate       = 0,
         sampleRate    = 0,
@@ -1081,5 +1129,10 @@ private fun MediaItem.toSong(): Song? {
         replayGainTrack = extras?.getFloat("replayGainTrack").takeIf { extras?.containsKey("replayGainTrack") == true },
         replayGainAlbum = extras?.getFloat("replayGainAlbum").takeIf { extras?.containsKey("replayGainAlbum") == true },
         artworkUri    = meta.artworkUri,
+        navidromeId   = extras?.getString(EXTRA_NAVIDROME_ID),
     )
 }
+
+private const val EXTRA_DURATION = "resonance.duration"
+private const val EXTRA_ALBUM_ID = "resonance.albumId"
+private const val EXTRA_NAVIDROME_ID = "resonance.navidromeId"

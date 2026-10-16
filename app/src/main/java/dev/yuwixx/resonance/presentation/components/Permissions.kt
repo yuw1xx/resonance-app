@@ -1,5 +1,13 @@
 package dev.yuwixx.resonance.presentation.components
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import android.provider.Settings
+import android.net.Uri
+import android.content.Intent
 import android.Manifest
 import android.os.Build
 import androidx.compose.foundation.layout.*
@@ -27,7 +35,11 @@ fun PermissionWrapper(
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
 
-    val permissionState = rememberPermissionState(permission)
+    val context = LocalContext.current
+    var requested by rememberSaveable { mutableStateOf(false) }
+    val permissionState = rememberPermissionState(permission) { requested = true }
+    // Asked before and Android no longer shows the prompt: only the system settings can grant it.
+    val permanentlyDenied = requested && !permissionState.status.isGranted && !permissionState.status.shouldShowRationale
 
     AnimatedPermissionGate(
         granted = permissionState.status.isGranted,
@@ -60,11 +72,24 @@ fun PermissionWrapper(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(24.dp))
-                    Button(
-                        onClick = { permissionState.launchPermissionRequest() },
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Text("Grant Permission")
+                    if (permanentlyDenied) {
+                        Button(
+                            onClick = {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                                )
+                            },
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text("Open settings")
+                        }
+                    } else {
+                        Button(
+                            onClick = { permissionState.launchPermissionRequest() },
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text("Grant Permission")
+                        }
                     }
                 }
             }

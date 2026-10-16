@@ -110,7 +110,7 @@ fun HomeScreen(
                         title = "Your Mixes",
                         icon = Icons.Rounded.AutoAwesome,
                         trailing = {
-                            IconButton(onClick = { libraryViewModel.refreshMixes() }, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = { libraryViewModel.refreshMixes() }) {
                                 Icon(
                                     Icons.Rounded.Refresh,
                                     contentDescription = "Refresh mixes",

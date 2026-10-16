@@ -200,7 +200,9 @@ fun ResonanceNavGraph(
     }
 
     LaunchedEffect(visibleNavItems, currentRoute) {
+        // Search stays reachable from the search buttons even when its tab is hidden.
         val onHiddenTab = currentRoute != null
+            && currentRoute != Screen.Search.route
             && navItems.any { it.screen.route == currentRoute }
             && visibleNavItems.none { it.screen.route == currentRoute }
         if (onHiddenTab) navigateToTab(Screen.Home.route)
@@ -358,7 +360,8 @@ fun ResonanceNavGraph(
                     TagEditorScreen(
                         songId = songId,
                         libraryViewModel = libraryViewModel,
-                        onBack = { navController.popBackStack() }
+                        // The save result can arrive after the user already left; only pop this screen.
+                        onBack = { if (navController.currentBackStackEntry == backStackEntry) navController.popBackStack() }
                     )
                 }
 
@@ -424,7 +427,6 @@ fun ResonanceNavGraph(
                 }
 
                 composable(Screen.Settings.route) {
-                    val settingsViewModel: SettingsViewModel = hiltViewModel()
                     SettingsScreen(
                         onBack = { navController.popBackStack() },
                         onNavigateToLicenses = { navController.navigate(Screen.Licenses.route) },

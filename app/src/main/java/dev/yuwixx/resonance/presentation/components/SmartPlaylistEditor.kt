@@ -37,6 +37,10 @@ fun SmartPlaylistEditor(
     var name by remember { mutableStateOf(initialName) }
     var matchAll by remember { mutableStateOf(initialRules.matchAll) }
     val rules: SnapshotStateList<SmartRule> = remember { initialRules.rules.toMutableStateList() }
+    // Rules have no identity of their own; these keys keep each row's text field state attached
+    // to the right rule when an earlier one is removed.
+    var nextKey by remember { mutableIntStateOf(initialRules.rules.size) }
+    val ruleKeys: SnapshotStateList<Int> = remember { List(initialRules.rules.size) { it }.toMutableStateList() }
     var sort by remember { mutableStateOf(initialRules.sort) }
     var limitText by remember { mutableStateOf(initialRules.limit?.toString().orEmpty()) }
 
@@ -106,16 +110,22 @@ fun SmartPlaylistEditor(
                         ) { Text("Match any") }
                     }
                 }
-                itemsIndexed(rules) { index, rule ->
+                itemsIndexed(rules, key = { index, _ -> ruleKeys[index] }) { index, rule ->
                     RuleRow(
                         rule = rule,
                         onChange = { rules[index] = it },
-                        onRemove = { rules.removeAt(index) },
+                        onRemove = {
+                            rules.removeAt(index)
+                            ruleKeys.removeAt(index)
+                        },
                     )
                 }
                 item {
                     OutlinedButton(
-                        onClick = { rules += SmartRule(SmartField.ARTIST, SmartOp.CONTAINS, "") },
+                        onClick = {
+                            rules += SmartRule(SmartField.ARTIST, SmartOp.CONTAINS, "")
+                            ruleKeys += nextKey++
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Rounded.Add, contentDescription = null)

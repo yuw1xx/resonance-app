@@ -4,6 +4,7 @@
 // AlbumDetail, ArtistDetail, PlaylistDetail, Queue, and the TagEditor screen.
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.presentation.screens.library.LocalLibrarySections
 import dev.yuwixx.resonance.presentation.screens.library.LibraryTitle
@@ -75,9 +76,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.presentation.navigation.Screen
 import dev.yuwixx.resonance.ui.theme.PresetColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -88,6 +91,7 @@ fun SongsScreen(
     onNavigateToPlayer: () -> Unit,
     onNavigateToTagEditor: (Long) -> Unit,
 ) {
+    val libraryLoaded by libraryViewModel.libraryLoaded.collectAsStateWithLifecycle()
     val rawSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
     val defaultSongsSort by libraryViewModel.prefs.defaultSongsSort.collectAsStateWithLifecycle(initialValue = "TITLE")
     val songs = remember(rawSongs, defaultSongsSort) {
@@ -108,6 +112,8 @@ fun SongsScreen(
 
     var selectedSongs by remember { mutableStateOf(setOf<Song>()) }
     val isSelectionMode = selectedSongs.isNotEmpty()
+    // Back clears the selection before it leaves the screen.
+    androidx.activity.compose.BackHandler(enabled = isSelectionMode) { selectedSongs = emptySet() }
 
     val shareViewModel: ShareViewModel = hiltViewModel()
     var showShareSheet by remember { mutableStateOf(false) }
@@ -161,13 +167,13 @@ fun SongsScreen(
                                 }
                             }
                             IconButton(onClick = {
-                                selectedSongs.forEach { playerViewModel.addToQueueEnd(it) }
+                                playerViewModel.addToQueueEnd(songs.filter { it in selectedSongs })
                                 selectedSongs = emptySet()
                             }) {
                                 Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Add to Queue")
                             }
                             IconButton(onClick = {
-                                selectedSongs.forEach { playerViewModel.addToQueueNext(it) }
+                                playerViewModel.addToQueueNext(songs.filter { it in selectedSongs })
                                 selectedSongs = emptySet()
                             }) {
                                 Icon(Icons.Rounded.SkipNext, "Play Next")
@@ -236,7 +242,7 @@ fun SongsScreen(
             if (navSyncState is NavidromeSyncState.Syncing && songs.isEmpty()) {
                 NavidromeSyncingView(navSyncState = navSyncState)
             } else if (songs.isEmpty()) {
-                EmptyLibraryView(onScan = { libraryViewModel.syncLibrary() })
+                if (libraryLoaded) EmptyLibraryView(onScan = { libraryViewModel.syncLibrary() })
             } else {
                 val listState = rememberLazyListState()
                 LazyColumnWithScrollbar(
@@ -533,6 +539,7 @@ fun AlbumsScreen(
     onAlbumClick: (Album) -> Unit,
     onSearchClick: () -> Unit,
 ) {
+    val libraryLoaded by libraryViewModel.libraryLoaded.collectAsStateWithLifecycle()
     val albums by libraryViewModel.allAlbums.collectAsStateWithLifecycle()
 
     Scaffold(
@@ -554,7 +561,7 @@ fun AlbumsScreen(
         }
     ) { padding ->
         if (albums.isEmpty()) {
-            EmptyLibraryView(onScan = { libraryViewModel.syncLibrary() })
+            if (libraryLoaded) EmptyLibraryView(onScan = { libraryViewModel.syncLibrary() })
         } else {
             val gridState = rememberLazyGridState()
             LazyGridWithScrollbar(
@@ -636,6 +643,7 @@ fun ArtistsScreen(
     onArtistClick: (Artist) -> Unit,
     onSearchClick: () -> Unit,
 ) {
+    val libraryLoaded by libraryViewModel.libraryLoaded.collectAsStateWithLifecycle()
     val artists by libraryViewModel.allArtists.collectAsStateWithLifecycle()
 
     Scaffold(
@@ -657,7 +665,7 @@ fun ArtistsScreen(
         }
     ) { padding ->
         if (artists.isEmpty()) {
-            EmptyLibraryView(onScan = { libraryViewModel.syncLibrary() })
+            if (libraryLoaded) EmptyLibraryView(onScan = { libraryViewModel.syncLibrary() })
         } else {
             val fetchImages by libraryViewModel.prefs.fetchArtistImages.collectAsStateWithLifecycle(initialValue = false)
             val listState = rememberLazyListState()
@@ -1254,8 +1262,8 @@ fun ArtistHeader(
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     modifier = Modifier
                         .size(160.dp)
-                        .clip(CircleShape)
-                        .shadow(8.dp, CircleShape),
+                        .shadow(8.dp, CircleShape)
+                        .clip(CircleShape),
                 )
             } else {
                 Surface(
@@ -1317,7 +1325,7 @@ fun PlaylistDetailScreen(
 
     val playlist = remember(playlists, playlistId) { playlists.find { it.id == playlistId } }
 
-    var sortOrder by remember { mutableStateOf(SortOrder.NATURAL) }
+    var sortOrder by rememberSaveable { mutableStateOf(SortOrder.NATURAL) }
     val playlistSongs: List<Song> = remember(allSongs, playlist, sortOrder) {
         val base = playlist?.songs ?: emptyList()
         when (sortOrder) {
@@ -1344,7 +1352,9 @@ fun PlaylistDetailScreen(
 
     // Manual drag-to-reorder only makes sense under Natural order — any other sort re-derives
     // playlistSongs from a comparator (above) that would immediately override a manual drag.
-    val canReorder = sortOrder == SortOrder.NATURAL
+    // Smart playlists and generated mixes are read-only: their songs come from rules or listening.
+    val editable = playlist?.isReadOnly != true
+    val canReorder = editable && sortOrder == SortOrder.NATURAL
     val localOrder = remember { mutableStateListOf<Song>() }
     var draggedSongId by remember { mutableStateOf<Long?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
@@ -1425,6 +1435,7 @@ fun PlaylistDetailScreen(
                             onDismissRequest = { showOverflowMenu = false }
                         ) {
                             val smart = playlist?.isSmart == true
+                            val mix = playlist?.isMix == true
                             if (smart) {
                                 DropdownMenuItem(
                                     text = { Text("Edit rules") },
@@ -1439,24 +1450,24 @@ fun PlaylistDetailScreen(
                                         playlist?.let { libraryViewModel.convertSmartToStatic(it) }
                                     }
                                 )
-                            } else {
+                            } else if (!mix) {
                                 DropdownMenuItem(
                                     text = { Text("Rename") },
                                     leadingIcon = { Icon(Icons.Rounded.Edit, null) },
                                     onClick = { showOverflowMenu = false; showRenameDialog = true }
                                 )
                             }
-                            DropdownMenuItem(
+                            if (editable) DropdownMenuItem(
                                 text = { Text("Change Cover") },
                                 leadingIcon = { Icon(Icons.Rounded.Image, null) },
                                 onClick = { showOverflowMenu = false; imagePicker.launch("image/*") }
                             )
-                            if (!smart) DropdownMenuItem(
+                            if (editable) DropdownMenuItem(
                                 text = { Text("Sort by…") },
                                 leadingIcon = { Icon(Icons.AutoMirrored.Rounded.Sort, null) },
                                 onClick = { showOverflowMenu = false; showSortDialog = true }
                             )
-                            if (!smart) DropdownMenuItem(
+                            if (editable) DropdownMenuItem(
                                 text = { Text("Remove Duplicates") },
                                 leadingIcon = { Icon(Icons.Rounded.FilterList, null) },
                                 onClick = {
@@ -1513,7 +1524,7 @@ fun PlaylistDetailScreen(
                     PlaylistHeader(
                         playlist = it,
                         songs = playlistSongs,
-                        onChangeCover = { imagePicker.launch("image/*") },
+                        onChangeCover = { if (editable) imagePicker.launch("image/*") },
                         onPlayClick = {
                             if (playlistSongs.isNotEmpty()) {
                                 playerViewModel.play(playlistSongs, 0)
@@ -1554,7 +1565,7 @@ fun PlaylistDetailScreen(
                         },
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = {
+                                if (editable) IconButton(onClick = {
                                     libraryViewModel.removeSongsFromPlaylist(playlistId, listOf(song.id)) { undo ->
                                         scope.launch {
                                             snackbarHostState.currentSnackbarData?.dismiss()
@@ -1567,7 +1578,7 @@ fun PlaylistDetailScreen(
                                 }) {
                                     Icon(Icons.Rounded.RemoveCircleOutline, "Remove")
                                 }
-                                Icon(
+                                if (editable) Icon(
                                     Icons.Rounded.DragHandle,
                                     contentDescription = "Reorder",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = handleAlpha),
@@ -2226,14 +2237,17 @@ fun SongInfoBottomSheet(
                     )
                 }
 
-                ListItem(
-                    modifier = Modifier.clickable {
-                        onEditTags()
-                        onDismiss()
-                    },
-                    headlineContent = { Text("Edit Tags") },
-                    leadingContent = { Icon(Icons.Rounded.Edit, null) }
-                )
+                // Streamed songs have no local file to write tags to.
+                if (song.navidromeId == null) {
+                    ListItem(
+                        modifier = Modifier.clickable {
+                            onEditTags()
+                            onDismiss()
+                        },
+                        headlineContent = { Text("Edit Tags") },
+                        leadingContent = { Icon(Icons.Rounded.Edit, null) }
+                    )
+                }
             }
         }
     }
@@ -2247,6 +2261,7 @@ fun LikedSongsScreen(
     onBack: () -> Unit,
     onNavigateToPlayer: () -> Unit,
 ) {
+    val libraryLoaded by libraryViewModel.libraryLoaded.collectAsStateWithLifecycle()
     val allSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
     val likedIds by playerViewModel.likedSongIds.collectAsStateWithLifecycle(initialValue = emptyList())
     val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
@@ -2258,6 +2273,8 @@ fun LikedSongsScreen(
 
     var selectedSongs by remember { mutableStateOf(setOf<Song>()) }
     val isSelectionMode = selectedSongs.isNotEmpty()
+    // Back clears the selection before it leaves the screen.
+    androidx.activity.compose.BackHandler(enabled = isSelectionMode) { selectedSongs = emptySet() }
 
     val shareViewModel: ShareViewModel = hiltViewModel()
     var showShareSheet by remember { mutableStateOf(false) }
@@ -2300,13 +2317,13 @@ fun LikedSongsScreen(
                                 Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "Add to Playlist")
                             }
                             IconButton(onClick = {
-                                selectedSongs.forEach { playerViewModel.addToQueueEnd(it) }
+                                playerViewModel.addToQueueEnd(likedSongs.filter { it in selectedSongs })
                                 selectedSongs = emptySet()
                             }) {
                                 Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Add to Queue")
                             }
                             IconButton(onClick = {
-                                selectedSongs.forEach { playerViewModel.addToQueueNext(it) }
+                                playerViewModel.addToQueueNext(likedSongs.filter { it in selectedSongs })
                                 selectedSongs = emptySet()
                             }) {
                                 Icon(Icons.Rounded.SkipNext, "Play Next")
@@ -2357,7 +2374,7 @@ fun LikedSongsScreen(
         },
     ) { padding ->
         if (likedSongs.isEmpty()) {
-            Box(
+            if (libraryLoaded) Box(
                 Modifier
                     .fillMaxSize()
                     .padding(padding),
@@ -2411,31 +2428,9 @@ fun LikedSongsScreen(
                     }
                 }
                 itemsIndexed(likedSongs, key = { _, s -> s.id }) { index, song ->
-                    // animateFloatAsState only animates on a target *change* — seeding it with
-                    // 1f from the first frame meant there was never a lower value to animate
-                    // from, so this silently never played. Start below target, then flip once
-                    // composed so it genuinely animates in.
-                    var animationStarted by remember { mutableStateOf(false) }
-                    LaunchedEffect(Unit) { animationStarted = true }
-                    val animatedAlpha by animateFloatAsState(
-                        targetValue = if (animationStarted) 1f else 0f,
-                        animationSpec = tween(700, delayMillis = (index * 40).coerceAtMost(400), easing = EmphasizedDecelerate),
-                        label = "item_alpha_$index",
-                    )
-                    val animatedScale by animateFloatAsState(
-                        targetValue = if (animationStarted) 1f else 0.92f,
-                        animationSpec = tween(700, delayMillis = (index * 40).coerceAtMost(400), easing = EmphasizedDecelerate),
-                        label = "item_scale_$index",
-                    )
                     SongCard(
                         song = song,
-                        modifier = Modifier
-                            .animateItem()
-                            .graphicsLayer {
-                                alpha = animatedAlpha
-                                scaleX = animatedScale
-                                scaleY = animatedScale
-                            },
+                        modifier = Modifier.animateItem().staggeredEntrance(index),
                         isSelected = selectedSongs.contains(song),
                         onClick = {
                             if (isSelectionMode) {
@@ -2515,33 +2510,39 @@ fun SearchScreen(
     val allArtists by libraryViewModel.allArtists.collectAsStateWithLifecycle()
     val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
 
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     val trimmed = query.trim()
 
-    val filteredSongs = remember(trimmed, allSongs) {
-        if (trimmed.isBlank()) emptyList()
-        else allSongs.filter {
-            it.title.contains(trimmed, ignoreCase = true) ||
+    // Filtered off the main thread, after a short pause in typing.
+    var filteredSongs by remember { mutableStateOf(emptyList<Song>()) }
+    var filteredAlbums by remember { mutableStateOf(emptyList<Album>()) }
+    var filteredArtists by remember { mutableStateOf(emptyList<Artist>()) }
+    LaunchedEffect(trimmed, allSongs, allAlbums, allArtists) {
+        if (trimmed.isBlank()) {
+            filteredSongs = emptyList(); filteredAlbums = emptyList(); filteredArtists = emptyList()
+            return@LaunchedEffect
+        }
+        delay(120)
+        withContext(Dispatchers.Default) {
+            val songs = allSongs.filter {
+                it.title.contains(trimmed, ignoreCase = true) ||
                     it.artist.contains(trimmed, ignoreCase = true) ||
                     it.album.contains(trimmed, ignoreCase = true)
+            }
+            val albums = allAlbums.filter {
+                it.title.contains(trimmed, ignoreCase = true) || it.artist.contains(trimmed, ignoreCase = true)
+            }
+            val artists = allArtists.filter { it.name.contains(trimmed, ignoreCase = true) }
+            filteredSongs = songs; filteredAlbums = albums; filteredArtists = artists
         }
-    }
-    val filteredAlbums = remember(trimmed, allAlbums) {
-        if (trimmed.isBlank()) emptyList()
-        else allAlbums.filter {
-            it.title.contains(trimmed, ignoreCase = true) ||
-                    it.artist.contains(trimmed, ignoreCase = true)
-        }
-    }
-    val filteredArtists = remember(trimmed, allArtists) {
-        if (trimmed.isBlank()) emptyList()
-        else allArtists.filter { it.name.contains(trimmed, ignoreCase = true) }
     }
 
     val hasResults = filteredSongs.isNotEmpty() || filteredAlbums.isNotEmpty() || filteredArtists.isNotEmpty()
 
     var selectedSongs by remember { mutableStateOf(setOf<Song>()) }
     val isSelectionMode = selectedSongs.isNotEmpty()
+    // Back clears the selection before it leaves the screen.
+    androidx.activity.compose.BackHandler(enabled = isSelectionMode) { selectedSongs = emptySet() }
 
     val shareViewModel: ShareViewModel = hiltViewModel()
     var showShareSheet by remember { mutableStateOf(false) }
@@ -2583,13 +2584,13 @@ fun SearchScreen(
                                 Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "Add to Playlist")
                             }
                             IconButton(onClick = {
-                                selectedSongs.forEach { playerViewModel.addToQueueEnd(it) }
+                                playerViewModel.addToQueueEnd(filteredSongs.filter { it in selectedSongs })
                                 selectedSongs = emptySet()
                             }) {
                                 Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Add to Queue")
                             }
                             IconButton(onClick = {
-                                selectedSongs.forEach { playerViewModel.addToQueueNext(it) }
+                                playerViewModel.addToQueueNext(filteredSongs.filter { it in selectedSongs })
                                 selectedSongs = emptySet()
                             }) {
                                 Icon(Icons.Rounded.SkipNext, "Play Next")
@@ -2849,14 +2850,14 @@ fun TagEditorScreen(
 
     if (song == null) return
 
-    var title       by remember { mutableStateOf(song.title) }
-    var artist      by remember { mutableStateOf(song.artist) }
-    var albumArtist by remember { mutableStateOf(song.albumArtist) }
-    var album       by remember { mutableStateOf(song.album) }
-    var genre       by remember { mutableStateOf(song.genre) }
-    var year        by remember { mutableStateOf(if (song.year > 0) song.year.toString() else "") }
-    var track       by remember { mutableStateOf(if (song.trackNumber > 0) song.trackNumber.toString() else "") }
-    var disc        by remember { mutableStateOf(if (song.discNumber > 0) song.discNumber.toString() else "") }
+    var title by rememberSaveable { mutableStateOf(song.title) }
+    var artist by rememberSaveable { mutableStateOf(song.artist) }
+    var albumArtist by rememberSaveable { mutableStateOf(song.albumArtist) }
+    var album by rememberSaveable { mutableStateOf(song.album) }
+    var genre by rememberSaveable { mutableStateOf(song.genre) }
+    var year by rememberSaveable { mutableStateOf(if (song.year > 0) song.year.toString() else "") }
+    var track by rememberSaveable { mutableStateOf(if (song.trackNumber > 0) song.trackNumber.toString() else "") }
+    var disc by rememberSaveable { mutableStateOf(if (song.discNumber > 0) song.discNumber.toString() else "") }
 
     var isSaving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()

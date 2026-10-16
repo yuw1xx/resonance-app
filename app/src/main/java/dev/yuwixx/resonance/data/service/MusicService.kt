@@ -231,20 +231,18 @@ class MusicService : MediaLibraryService() {
                 if (currentIds != lastKnownMediaItemIds) {
                     val previousIds = lastKnownMediaItemIds
                     lastKnownMediaItemIds = currentIds
-                    // A pure addition (e.g. "Play Next"/Smart Queue inserting one or more songs
-                    // into an already-shuffled queue) must NOT trigger a full reshuffle — that
-                    // would scatter the just-inserted item to a random spot, defeating "play
-                    // next" entirely. Only re-randomize on a genuine wholesale replacement (a new
-                    // playlist via setMediaItems, or a removal); ExoPlayer's own default
-                    // ShuffleOrder.cloneAndInsert already places pure additions sensibly without
-                    // disturbing the rest of the order.
-                    // Known limitation: this can't distinguish "pure addition" from "addition +
-                    // manual reorder" — not reachable today since nothing calls moveMediaItem(),
-                    // but a future drag-to-reorder queue feature would need to special-case this.
+                    // Additions and removals keep the existing shuffle order (additions are placed
+                    // where the user asked); only a new queue gets a fresh shuffle.
                     val currentSet = currentIds.toHashSet()
+                    val previousSet = previousIds.toHashSet()
                     val isPureAddition = currentIds.size > previousIds.size && previousIds.all { it in currentSet }
-                    if (!isPureAddition && player.shuffleModeEnabled) {
-                        applyShuffleOrder()
+                    val isPureRemoval = currentIds.size < previousIds.size && currentIds.all { it in previousSet }
+                    if (player.shuffleModeEnabled) {
+                        when {
+                            isPureAddition -> placeAdditionsInShuffle(previousIds, currentIds)
+                            isPureRemoval -> Unit
+                            else -> applyShuffleOrder()
+                        }
                     }
                 }
             }
@@ -896,6 +894,46 @@ class MusicService : MediaLibraryService() {
         player.setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(count, System.currentTimeMillis()))
         if (smartShuffleEnabled) {
             scope.launch { applySmartShuffleOrder() }
+        }
+    }
+
+    // ExoPlayer scatters inserted items randomly in the shuffle order; put them where the user
+    // asked for them instead.
+    private fun placeAdditionsInShuffle(previousIds: List<Long>, currentIds: List<Long>) {
+        // Window indices of the new items: walk both lists, skipping matches in order.
+        val inserted = ArrayList<Int>()
+        var p = 0
+        currentIds.forEachIndexed { i, id ->
+            if (p < previousIds.size && previousIds[p] == id) p++ else inserted += i
+        }
+        if (inserted.isEmpty()) return
+        val timeline = player.currentTimeline
+        val playOrder = ArrayList<Int>()
+        var idx = timeline.getFirstWindowIndex(true)
+        while (idx != C.INDEX_UNSET) {
+            playOrder += idx
+            idx = timeline.getNextWindowIndex(idx, Player.REPEAT_MODE_OFF, true)
+        }
+        // "Play next" inserts right after the current window, "add to queue" at the end; other
+        // insertions (an undo restoring a song mid-queue) keep ExoPlayer's placement.
+        val current = player.currentMediaItemIndex
+        val insertedSet = inserted.toHashSet()
+        // The run of new windows directly after the current one…
+        val afterCurrent = ArrayList<Int>()
+        var next = current + 1
+        while (next in insertedSet) afterCurrent += next++
+        // …and the run at the very end of the queue.
+        val atEnd = ArrayList<Int>()
+        var last = currentIds.lastIndex
+        while (last in insertedSet && last !in afterCurrent) atEnd.add(0, last--)
+        val moved = (afterCurrent + atEnd).toHashSet()
+        if (moved.isEmpty()) return
+        playOrder.removeAll(moved)
+        val currentPos = playOrder.indexOf(current)
+        playOrder.addAll(if (currentPos >= 0) currentPos + 1 else 0, afterCurrent)
+        playOrder.addAll(atEnd)
+        if (playOrder.size == currentIds.size) {
+            player.setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(playOrder.toIntArray(), System.currentTimeMillis()))
         }
     }
 

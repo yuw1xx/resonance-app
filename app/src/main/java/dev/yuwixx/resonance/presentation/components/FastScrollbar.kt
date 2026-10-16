@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.components
 
+import kotlin.math.roundToInt
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -71,13 +72,14 @@ fun LazyColumnWithScrollbar(
             visible = true
         } else if (!isDragging) {
             delay(hideDelayMs)
-            visible = false
+            // Re-checked after the wait: a drag may have started meanwhile.
+            if (!isDragging && !state.isScrollInProgress) visible = false
         }
     }
     LaunchedEffect(isDragging) {
         if (!isDragging && !isScrollInProgress) {
             delay(hideDelayMs)
-            visible = false
+            if (!isDragging && !state.isScrollInProgress) visible = false
         }
     }
     LaunchedEffect(canScroll) {
@@ -90,17 +92,18 @@ fun LazyColumnWithScrollbar(
         label = "scrollbar_alpha",
     )
 
-    val thumbOffsetFraction by remember {
+    // Where the thumb is along its track, 0 (top) to 1 (bottom).
+    val thumbPosition by remember {
         derivedStateOf {
-            val info  = state.layoutInfo
-            val total = info.totalItemsCount.coerceAtLeast(1)
-            val first = state.firstVisibleItemIndex
-            val itemFraction = first.toFloat() / total
-            itemFraction.coerceIn(0f, 1f - thumbHeightFraction)
+            val info = state.layoutInfo
+            val scrollable = info.totalItemsCount - info.visibleItemsInfo.size
+            if (scrollable <= 0) 0f else (state.firstVisibleItemIndex.toFloat() / scrollable).coerceIn(0f, 1f)
         }
     }
 
     var lastHapticItem by remember { mutableIntStateOf(-1) }
+    // Drag position kept as a float, so slow drags (less than an item per event) add up.
+    var dragPosition by remember { mutableFloatStateOf(0f) }
 
     val thumbModifier = Modifier
         .fillMaxHeight()
@@ -113,6 +116,7 @@ fun LazyColumnWithScrollbar(
                 onDragStart = {
                     isDragging = true
                     visible = true
+                    dragPosition = thumbPosition
                     if (config.hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 },
                 onDragEnd = {
@@ -126,10 +130,10 @@ fun LazyColumnWithScrollbar(
                     val thumbTravel = trackHeightPx * (1f - thumbHeightFraction)
                     if (thumbTravel <= 0f) return@detectVerticalDragGestures
 
-                    val delta = dragAmount / thumbTravel
-                    val total = state.layoutInfo.totalItemsCount
-                    val newFirst = ((state.firstVisibleItemIndex + delta * total)
-                        .toInt()).coerceIn(0, (total - 1).coerceAtLeast(0))
+                    dragPosition = (dragPosition + dragAmount / thumbTravel).coerceIn(0f, 1f)
+                    val info = state.layoutInfo
+                    val scrollable = (info.totalItemsCount - info.visibleItemsInfo.size).coerceAtLeast(0)
+                    val newFirst = (dragPosition * scrollable).roundToInt()
 
                     if (newFirst != lastHapticItem) {
                         if (config.hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -158,7 +162,7 @@ fun LazyColumnWithScrollbar(
                 .then(thumbModifier)
                 .drawBehind {
                     val thumbH = size.height * thumbHeightFraction
-                    val thumbTop = (size.height - thumbH) * thumbOffsetFraction
+                    val thumbTop = (size.height - thumbH) * thumbPosition
                     val w = 4.dp.toPx()
                     val x = size.width - w - 2.dp.toPx()
                     drawRoundRect(
@@ -208,13 +212,13 @@ fun LazyGridWithScrollbar(
             visible = true
         } else if (!isDragging) {
             delay(hideDelayMs)
-            visible = false
+            if (!isDragging && !state.isScrollInProgress) visible = false
         }
     }
     LaunchedEffect(isDragging) {
         if (!isDragging && !isScrollInProgress) {
             delay(hideDelayMs)
-            visible = false
+            if (!isDragging && !state.isScrollInProgress) visible = false
         }
     }
     LaunchedEffect(canScroll) {
@@ -227,17 +231,22 @@ fun LazyGridWithScrollbar(
         label = "grid_scrollbar_alpha",
     )
 
-    val thumbOffsetFraction by remember {
+    // Rows that can scroll out of view; the thumb position is 0 (top) to 1 (bottom) over them.
+    fun scrollableRows(): Int {
+        val info = state.layoutInfo
+        val totalRows = (info.totalItemsCount + columnCount - 1) / columnCount
+        val visibleRows = (info.visibleItemsInfo.size + columnCount - 1) / columnCount
+        return (totalRows - visibleRows).coerceAtLeast(0)
+    }
+    val thumbPosition by remember {
         derivedStateOf {
-            val info = state.layoutInfo
-            val totalItems = info.totalItemsCount.coerceAtLeast(1)
-            val totalRows = ((totalItems + columnCount - 1) / columnCount).coerceAtLeast(1)
-            val firstRow = state.firstVisibleItemIndex / columnCount
-            (firstRow.toFloat() / totalRows).coerceIn(0f, 1f - thumbHeightFraction)
+            val scrollable = scrollableRows()
+            if (scrollable == 0) 0f else (state.firstVisibleItemIndex / columnCount).toFloat().div(scrollable).coerceIn(0f, 1f)
         }
     }
 
     var lastHapticRow by remember { mutableIntStateOf(-1) }
+    var dragPosition by remember { mutableFloatStateOf(0f) }
 
     val thumbModifier = Modifier
         .fillMaxHeight()
@@ -250,6 +259,7 @@ fun LazyGridWithScrollbar(
                 onDragStart = {
                     isDragging = true
                     visible = true
+                    dragPosition = thumbPosition
                     if (config.hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 },
                 onDragEnd   = { isDragging = false },
@@ -259,12 +269,9 @@ fun LazyGridWithScrollbar(
                     val thumbTravel = trackHeightPx * (1f - thumbHeightFraction)
                     if (thumbTravel <= 0f) return@detectVerticalDragGestures
 
-                    val delta = dragAmount / thumbTravel
+                    dragPosition = (dragPosition + dragAmount / thumbTravel).coerceIn(0f, 1f)
                     val totalItems = state.layoutInfo.totalItemsCount
-                    val totalRows = ((totalItems + columnCount - 1) / columnCount).coerceAtLeast(1)
-                    val currentRow = state.firstVisibleItemIndex / columnCount
-                    val newRow = (currentRow + (delta * totalRows).toInt())
-                        .coerceIn(0, (totalRows - 1).coerceAtLeast(0))
+                    val newRow = (dragPosition * scrollableRows()).roundToInt()
                     val newItem = (newRow * columnCount).coerceIn(0, (totalItems - 1).coerceAtLeast(0))
 
                     if (newRow != lastHapticRow) {
@@ -294,7 +301,7 @@ fun LazyGridWithScrollbar(
                 .then(thumbModifier)
                 .drawBehind {
                     val thumbH = size.height * thumbHeightFraction
-                    val thumbTop = (size.height - thumbH) * thumbOffsetFraction
+                    val thumbTop = (size.height - thumbH) * thumbPosition
                     val w = 4.dp.toPx()
                     val x = size.width - w - 2.dp.toPx()
                     drawRoundRect(

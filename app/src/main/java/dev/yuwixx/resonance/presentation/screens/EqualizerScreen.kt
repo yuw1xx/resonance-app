@@ -1,5 +1,11 @@
 package dev.yuwixx.resonance.presentation.screens
 
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -205,6 +211,19 @@ private fun BandSlider(
             modifier = Modifier
                 .weight(1f)
                 .width(40.dp)
+                // Readable and adjustable with TalkBack, like a regular slider.
+                .semantics(mergeDescendants = true) {
+                    contentDescription = "$freqLabel band, $dbLabel"
+                    progressBarRangeInfo = ProgressBarRangeInfo(level.toFloat(), min.toFloat()..max.toFloat())
+                    if (enabled) {
+                        setProgress { target ->
+                            onLevelChange(target.roundToInt().coerceIn(min.toInt(), max.toInt()).toShort())
+                            true
+                        }
+                    } else {
+                        disabled()
+                    }
+                }
                 .pointerInput(enabled, min, max) {
                     if (!enabled) return@pointerInput
                     awaitEachGesture {

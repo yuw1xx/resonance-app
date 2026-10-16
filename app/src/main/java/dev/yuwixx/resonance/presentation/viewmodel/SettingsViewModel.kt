@@ -1,5 +1,9 @@
 package dev.yuwixx.resonance.presentation.viewmodel
 
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.Job
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -146,39 +150,50 @@ class SettingsViewModel @Inject constructor(
         return false
     }
 
+    private var downloadJob: Job? = null
+
     fun downloadUpdate(context: Context, url: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        val file = File(context.cacheDir, "resonance_update.apk")
+        downloadJob?.cancel()
+        downloadJob = viewModelScope.launch(Dispatchers.IO) {
             _updateState.value = UpdateState.Downloading(0f)
             try {
-                val request = Request.Builder().url(url).build()
-                val response = okHttpClient.newCall(request).execute()
-                if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
-                val body = response.body ?: throw Exception("Empty response body")
-
-                val file = File(context.cacheDir, "resonance_update.apk")
-                if (file.exists()) file.delete()
-
-                val totalBytes = body.contentLength()
-                var downloadedBytes = 0L
-
-                body.byteStream().use { input ->
-                    file.outputStream().use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        var read: Int
-                        while (input.read(buffer).also { read = it } != -1) {
-                            output.write(buffer, 0, read)
-                            downloadedBytes += read
-                            if (totalBytes > 0) {
-                                _updateState.value = UpdateState.Downloading(downloadedBytes.toFloat() / totalBytes)
+                file.delete()
+                okHttpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                    if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+                    val body = response.body ?: throw IOException("Empty response body")
+                    val totalBytes = body.contentLength()
+                    var downloadedBytes = 0L
+                    body.byteStream().use { input ->
+                        file.outputStream().use { output ->
+                            val buffer = ByteArray(64 * 1024)
+                            var read: Int
+                            while (input.read(buffer).also { read = it } != -1) {
+                                ensureActive()
+                                output.write(buffer, 0, read)
+                                downloadedBytes += read
+                                if (totalBytes > 0) {
+                                    _updateState.value = UpdateState.Downloading(downloadedBytes.toFloat() / totalBytes)
+                                }
                             }
                         }
                     }
                 }
                 _updateState.value = UpdateState.ReadyToInstall(file)
+            } catch (e: CancellationException) {
+                file.delete()
+                throw e
             } catch (e: Exception) {
+                file.delete()
                 _updateState.value = UpdateState.Error(e.message ?: "Download failed")
             }
         }
+    }
+
+    fun cancelUpdateDownload() {
+        downloadJob?.cancel()
+        downloadJob = null
+        _updateState.value = UpdateState.Idle
     }
 
     val lastFmAuthState: StateFlow<LastFmAuthState> = lastFmRepository.authState

@@ -64,7 +64,13 @@ fun ShareSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     LaunchedEffect(currentSongs) { viewModel.preselectSongs(currentSongs) }
-    DisposableEffect(Unit) { onDispose { viewModel.clearSelection() } }
+    // However the sheet goes away, stop Nearby scanning/advertising (it drains the battery).
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.disconnectNearby()
+            viewModel.clearSelection()
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = {
