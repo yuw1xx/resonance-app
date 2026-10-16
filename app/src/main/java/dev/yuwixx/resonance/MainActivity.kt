@@ -86,7 +86,8 @@ class MainActivity : ComponentActivity() {
         castManager.initialize()
         mediaStoreWriteBroker.bind(writeRequestLauncher)
 
-        receiveUri.value = intent?.data
+        // Only for a fresh launch: after a rotation the share link was already handled.
+        if (savedInstanceState == null) receiveUri.value = intent?.data
 
         setContent {
             val playerViewModel: PlayerViewModel = hiltViewModel()

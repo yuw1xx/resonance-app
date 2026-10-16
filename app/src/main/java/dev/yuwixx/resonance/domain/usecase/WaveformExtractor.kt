@@ -84,15 +84,15 @@ class WaveformExtractor @Inject constructor(
                 val format = extractor.getTrackFormat(audioTrack)
                 val mime = format.getString(MediaFormat.KEY_MIME) ?: return@withContext null
                 val totalUs = format.getLong(MediaFormat.KEY_DURATION)
-                val sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-                val channelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                var sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                var channelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
 
                 codec = MediaCodec.createDecoderByType(mime)
                 codec.configure(format, null, null, 0)
                 codec.start()
 
                 val amplitudes = FloatArray(resolution)
-                val samplesPerBucket = ((totalUs / 1_000_000f) * sampleRate / resolution).toLong()
+                var samplesPerBucket = ((totalUs / 1_000_000f) * sampleRate / resolution).toLong()
                     .coerceAtLeast(1L)
 
                 var currentBucket = 0
@@ -120,7 +120,14 @@ class WaveformExtractor @Inject constructor(
                     }
 
                     val outputIdx = codec.dequeueOutputBuffer(bufferInfo, DEQUEUE_TIMEOUT_US)
-                    if (outputIdx >= 0) {
+                    if (outputIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        // The decoder's real output can differ from the container's description
+                        // (HE-AAC doubles the rate and may change the channel count).
+                        val out = codec.outputFormat
+                        sampleRate = out.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        channelCount = out.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
+                        samplesPerBucket = ((totalUs / 1_000_000f) * sampleRate / resolution).toLong().coerceAtLeast(1L)
+                    } else if (outputIdx >= 0) {
                         if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
                         val outBuf = codec.getOutputBuffer(outputIdx)
                         if (outBuf != null && bufferInfo.size > 0) {

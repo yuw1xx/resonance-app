@@ -6,6 +6,8 @@
 // launcher/callback.
 package dev.yuwixx.resonance.data.service
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import android.content.Context
 import android.net.Uri
 import android.os.Build
@@ -55,7 +57,10 @@ class MediaStoreWriteBroker @Inject constructor() {
         val pendingIntent = MediaStore.createWriteRequest(context.contentResolver, uris)
         val deferred = CompletableDeferred<Boolean>()
         pending = deferred
-        activeLauncher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
+        // Activity result launchers must be used on the main thread.
+        withContext(Dispatchers.Main) {
+            activeLauncher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
+        }
         deferred.await()
     }
 }

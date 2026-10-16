@@ -4,6 +4,7 @@
 // the metadata enrichment scan's genre proposals.
 package dev.yuwixx.resonance.data.repository
 
+import kotlinx.coroutines.CancellationException
 import dev.yuwixx.resonance.data.database.dao.ArtistInfoDao
 import dev.yuwixx.resonance.data.database.entity.ArtistInfoEntity
 import dev.yuwixx.resonance.data.network.ApiRateLimiter
@@ -48,11 +49,23 @@ class ArtistInfoRepository @Inject constructor(
             return@withContext cached.toArtistInfo()
         }
 
-        val mb = runCatching { mbLimiter.withRateLimit { fetchMusicBrainz(artistName) } }.getOrNull()
-        val lfm = runCatching { fetchLastFm(artistName) }.getOrNull()
+        // A source that fails (offline, rate limited) is different from one with no data:
+        // only results where every lookup got an answer are cached.
+        var lookupFailed = false
+        suspend fun <T> attempt(block: suspend () -> T?): T? = try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            lookupFailed = true
+            null
+        }
+
+        val mb = attempt { mbLimiter.withRateLimit { fetchMusicBrainz(artistName) } }
+        val lfm = attempt { fetchLastFm(artistName) }
         val token = prefs.discogsApiToken.first()
         val discogs = if (token.isNotBlank()) {
-            runCatching { discogsLimiter.withRateLimit { fetchDiscogs(artistName, token) } }.getOrNull()
+            attempt { discogsLimiter.withRateLimit { fetchDiscogs(artistName, token) } }
         } else null
 
         val info = ArtistInfo(
@@ -70,7 +83,7 @@ class ArtistInfoRepository @Inject constructor(
                 "Discogs".takeIf { discogs != null },
             ),
         )
-        artistInfoDao.upsert(info.toEntity())
+        if (!lookupFailed) artistInfoDao.upsert(info.toEntity())
         info
     }
 

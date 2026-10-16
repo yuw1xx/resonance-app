@@ -1,5 +1,7 @@
 package dev.yuwixx.resonance.data.repository
 
+import dev.yuwixx.resonance.data.util.sha256Hex
+import dev.yuwixx.resonance.data.util.md5Hex
 import android.net.Uri
 import androidx.room.withTransaction
 import dev.yuwixx.resonance.data.database.ResonanceDatabase
@@ -14,7 +16,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -172,9 +173,9 @@ class NavidromeRepository @Inject constructor(
             val existingSongs = navidromeSongDao.getAllSongsList().associateBy { it.navidromeId }
             val newSongs = songs.distinctBy { it.id }.map { song ->
                 val entity = song.toEntity(creds)
-                // Keep the original "added" time when the server doesn't report one.
+                // Keep the original "added" time when the server's date is missing or unreadable.
                 val old = existingSongs[entity.navidromeId]
-                if (song.created == null && old != null) entity.copy(cachedAt = old.cachedAt) else entity
+                if (parseIsoMillis(song.created) == null && old != null) entity.copy(cachedAt = old.cachedAt) else entity
             }
             val changedSongs = newSongs.filter { existingSongs[it.navidromeId] != it }
             val removedSongs = existingSongs.keys - newSongs.mapTo(HashSet()) { it.navidromeId }
@@ -291,12 +292,25 @@ class NavidromeRepository @Inject constructor(
 
     suspend fun notifyNowPlaying(songId: String) {
         val api = navidromeApiProvider.currentApi() ?: return
-        runCatching { api.scrobble(id = songId, submission = false) }
+        try {
+            api.scrobble(id = songId, submission = false).ok
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("NavidromeRepository", "Now playing failed: ${e.message}")
+        }
     }
 
+    /** Updates the song's play count and "recently played" on the server. */
     suspend fun submitScrobble(songId: String, playedAtMs: Long) {
         val api = navidromeApiProvider.currentApi() ?: return
-        runCatching { api.scrobble(id = songId, timeMs = playedAtMs, submission = true) }
+        try {
+            api.scrobble(id = songId, timeMs = playedAtMs, submission = true).ok
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.w("NavidromeRepository", "Scrobble failed: ${e.message}")
+        }
     }
 
     // Untranscoded original (rest/download), not rest/stream — the right choice for a
@@ -313,13 +327,8 @@ class NavidromeRepository @Inject constructor(
 // rewrite every row with fresh salts and image/audio caches keep hitting across launches.
 // (API calls still get a fresh salt per request from NavidromeAuthInterceptor.)
 private fun authQuery(serverUrl: String, username: String, password: String): String {
-    val salt = MessageDigest.getInstance("SHA-256")
-        .digest("resonance|${serverUrl.trimEnd('/')}|$username".toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
-        .take(12)
-    val token = MessageDigest.getInstance("MD5")
-        .digest("$password$salt".toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
+    val salt = sha256Hex("resonance|${serverUrl.trimEnd('/')}|$username").take(12)
+    val token = md5Hex("$password$salt")
     return "u=${Uri.encode(username)}&t=$token&s=$salt&v=1.16.1&c=Resonance&f=json"
 }
 
@@ -349,8 +358,12 @@ internal fun stableLongId(s: String): Long {
     return hash
 }
 
-private fun parseIsoMillis(iso: String?): Long? =
-    iso?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+// Accepts both "2025-03-26T22:26:35Z" and offset forms like "2025-03-26T22:26:35+00:00".
+private fun parseIsoMillis(iso: String?): Long? {
+    if (iso.isNullOrBlank()) return null
+    return runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }.getOrNull()
+        ?: runCatching { java.time.Instant.parse(iso).toEpochMilli() }.getOrNull()
+}
 
 private fun SubsonicSong.toEntity(creds: NavidromeApiProvider.Credentials): NavidromeSongEntity {
     val streamUrl = buildStreamUrl(creds.serverUrl, creds.username, creds.password, id)

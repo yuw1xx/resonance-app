@@ -69,6 +69,7 @@ class CastManager @Inject constructor(
     // Must be called from the main thread (MainActivity.onCreate).
     // Safe to call on every Activity recreation — listener is only registered once.
     private var initializing = false
+    private val initExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     fun initialize() {
         if (_castContext != null || initializing) return
@@ -76,7 +77,7 @@ class CastManager @Inject constructor(
         // Async init: the Play Services setup happens off the main thread so it doesn't
         // delay the first frame; the listeners below run back on the main thread.
         try {
-            CastContext.getSharedInstance(context, java.util.concurrent.Executors.newSingleThreadExecutor())
+            CastContext.getSharedInstance(context, initExecutor)
                 .addOnSuccessListener { castContext ->
                     _castContext = castContext
                     val sessionManager = castContext.sessionManager

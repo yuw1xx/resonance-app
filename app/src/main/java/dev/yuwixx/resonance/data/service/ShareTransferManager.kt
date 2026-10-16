@@ -1,5 +1,10 @@
 package dev.yuwixx.resonance.data.service
 
+import kotlinx.coroutines.CancellationException
+import kotlin.coroutines.resumeWithException
+import okhttp3.Response
+import okhttp3.Callback
+import okhttp3.Call
 import android.annotation.SuppressLint
 import android.content.Context
 import android.net.ConnectivityManager
@@ -119,7 +124,10 @@ class ShareTransferManager @Inject constructor(
         return try {
             val appContext = context.applicationContext
             val manager = appContext.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
-            if (manager == null) return false
+            if (manager == null) {
+                _state.value = TransferState.Error("Wi-Fi Direct isn't available on this device")
+                return false
+            }
 
             val channel = manager.initialize(appContext, Looper.getMainLooper()) {
                 if (_state.value is TransferState.Ready || _state.value is TransferState.Serving) {
@@ -215,7 +223,7 @@ class ShareTransferManager @Inject constructor(
     }
 
     /** Uploads one file to the relay's /upload endpoint and returns its per-file download token. */
-    private fun uploadOneFile(song: Song, file: File, ttlHours: Int, config: RelayConfig, onProgress: (Float) -> Unit = {}): String {
+    private suspend fun uploadOneFile(song: Song, file: File, ttlHours: Int, config: RelayConfig, onProgress: (Float) -> Unit = {}): String {
         val mediaType = song.mimeType.ifBlank { "application/octet-stream" }.toMediaTypeOrNull()
         val request = Request.Builder()
             // ext lets the server name the download properly (song.mp3 instead of "song").
@@ -225,17 +233,18 @@ class ShareTransferManager @Inject constructor(
             .post(ProgressRequestBody(file.asRequestBody(mediaType), onProgress))
             .build()
 
-        val response = relayClient.newCall(request).execute()
-        if (!response.isSuccessful) {
-            val message = when (response.code) {
-                429 -> "The share server is rate-limiting you right now — try again in a bit."
-                413 -> "That file is too large for the share server."
-                507 -> "The share server is out of space right now — try again later."
-                else -> "Upload failed for '${song.title}': HTTP ${response.code}"
+        val body = relayClient.newCall(request).await().use { response ->
+            if (!response.isSuccessful) {
+                val message = when (response.code) {
+                    429 -> "The share server is rate-limiting you right now. Try again in a bit."
+                    413 -> "That file is too large for the share server."
+                    507 -> "The share server is out of space right now. Try again later."
+                    else -> "Upload failed for '${song.title}': HTTP ${response.code}"
+                }
+                throw Exception(message)
             }
-            throw Exception(message)
+            response.body?.string() ?: throw Exception("Empty response uploading '${song.title}'")
         }
-        val body = response.body?.string() ?: throw Exception("Empty response uploading '${song.title}'")
         return try {
             JSONObject(body).getString("token")
         } catch (e: Exception) {
@@ -258,6 +267,8 @@ class ShareTransferManager @Inject constructor(
                 append("&mime=").append(Uri.encode(song.mimeType)).append("&ext=").append(file.extension)
             }
             _state.value = TransferState.Ready(qrContent, "remote")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             _state.value = TransferState.Error(e.message ?: "Upload failed")
         }
@@ -341,16 +352,17 @@ class ShareTransferManager @Inject constructor(
                 .post(manifestBody)
                 .build()
 
-            val manifestResponse = relayClient.newCall(manifestRequest).execute()
-            if (!manifestResponse.isSuccessful) {
-                val message = when (manifestResponse.code) {
-                    429 -> "The share server is rate-limiting you right now — try again in a bit."
-                    else -> "Failed to create share link: HTTP ${manifestResponse.code}"
+            val body = relayClient.newCall(manifestRequest).await().use { response ->
+                if (!response.isSuccessful) {
+                    throw Exception(
+                        when (response.code) {
+                            429 -> "The share server is rate-limiting you right now. Try again in a bit."
+                            else -> "Failed to create share link: HTTP ${response.code}"
+                        }
+                    )
                 }
-                _state.value = TransferState.Error(message)
-                return@withContext
+                response.body?.string() ?: throw Exception("Empty response")
             }
-            val body = manifestResponse.body?.string() ?: throw Exception("Empty response")
             val manifestToken = try {
                 JSONObject(body).getString("token")
             } catch (e: Exception) {
@@ -363,6 +375,8 @@ class ShareTransferManager @Inject constructor(
                 append("&manifest=").append(manifestToken)
             }
             _state.value = TransferState.Ready(qrContent, "remote-multi")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             _state.value = TransferState.Error(e.message ?: "Upload failed")
         }
@@ -515,4 +529,15 @@ class ShareTransferManager @Inject constructor(
         if (p2pSsid != null)       append("&ssid=").append(Uri.encode(p2pSsid))
         if (p2pPassphrase != null) append("&pass=").append(Uri.encode(p2pPassphrase))
     }
+}
+
+/** Runs the call without blocking a thread; cancelling the coroutine cancels the request. */
+private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
+    cont.invokeOnCancellation { cancel() }
+    enqueue(object : Callback {
+        override fun onResponse(call: Call, response: Response) = cont.resume(response) { _, _, _ -> response.close() }
+        override fun onFailure(call: Call, e: java.io.IOException) {
+            if (!cont.isCancelled) cont.resumeWithException(e)
+        }
+    })
 }

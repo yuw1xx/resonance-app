@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.cast
 
+import dev.yuwixx.resonance.data.util.toHex
 import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -159,7 +160,7 @@ class LocalAudioServer @Inject constructor(
 
     private fun newToken(): String {
         val bytes = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        return bytes.joinToString("") { "%02x".format(it) }
+        return bytes.toHex()
     }
 
     // The Wi-Fi address, so the Cast device on the same LAN can reach us.

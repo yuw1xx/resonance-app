@@ -2,6 +2,11 @@
 // bar, and playback controls. Receives state pushes from MusicService via updateState().
 package dev.yuwixx.resonance.ui.glancewidget
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -88,15 +93,12 @@ class ResonanceWidget : GlanceAppWidget() {
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        // Load artwork before entering the reactive content block.
-        // We use our own app's ContentResolver (not the launcher's), so content:// URIs work,
-        // and fetch http(s) URIs ourselves too — Navidrome album art is always a network URL,
-        // which this widget silently failed to show before.
+        // Artwork is decoded here with the app's own ContentResolver (the launcher can't read
+        // our content:// URIs). The first image is loaded up front so the first frame has it;
+        // later track changes reload it inside the content below.
         val prefs = getAppWidgetState<Preferences>(context, PreferencesGlanceStateDefinition, id)
-        val artworkUriStr = prefs[KEY_ARTWORK_URI] ?: ""
-        val artworkBitmap: Bitmap? = withContext(Dispatchers.IO) {
-            loadArtwork(context, artworkUriStr)
-        }
+        val initialUri = prefs[KEY_ARTWORK_URI] ?: ""
+        val initialBitmap: Bitmap? = withContext(Dispatchers.IO) { loadArtwork(context, initialUri) }
 
         val glanceColors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
             ColorProviders(
@@ -122,6 +124,15 @@ class ResonanceWidget : GlanceAppWidget() {
                 val isLiked       = state[KEY_IS_LIKED]    ?: false
                 val cornerRadius  = (state[KEY_CORNER_RADIUS] ?: 28).dp
                 val size          = LocalSize.current
+                val artworkUri    = state[KEY_ARTWORK_URI] ?: ""
+                var artworkBitmap by remember { mutableStateOf(initialBitmap) }
+                var loadedUri by remember { mutableStateOf(initialUri) }
+                LaunchedEffect(artworkUri) {
+                    if (artworkUri != loadedUri) {
+                        artworkBitmap = withContext(Dispatchers.IO) { loadArtwork(context, artworkUri) }
+                        loadedUri = artworkUri
+                    }
+                }
 
                 WidgetContent(
                     hasSong        = hasSong,

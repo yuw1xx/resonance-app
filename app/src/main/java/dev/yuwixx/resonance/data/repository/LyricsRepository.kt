@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.data.repository
 
+import java.util.Locale
 import dev.yuwixx.resonance.data.network.ok
 import android.net.Uri
 import dev.yuwixx.resonance.data.database.dao.LyricsDao
@@ -108,7 +109,7 @@ class LyricsRepository @Inject constructor(
                         val offset = best.offset ?: 0L
                         best.line.joinToString("\n") { line ->
                             val t = ((line.start ?: 0L) + offset).coerceAtLeast(0L)
-                            "[%02d:%02d.%02d]%s".format(t / 60_000, (t / 1000) % 60, (t / 10) % 100, line.value)
+                            String.format(Locale.ROOT, "[%02d:%02d.%02d]%s", t / 60_000, (t / 1000) % 60, (t / 10) % 100, line.value)
                         }
                     } else best.line.joinToString("\n") { it.value }
                 }

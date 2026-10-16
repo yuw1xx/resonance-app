@@ -56,6 +56,7 @@ class MusicService : MediaLibraryService() {
     @Inject lateinit var navidromeSongDao: NavidromeSongDao
     @Inject lateinit var playlistDao: PlaylistDao
     @Inject lateinit var likedSongsDao: LikedSongsDao
+    @Inject lateinit var navidromeSyncRepository: dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
     @Inject lateinit var navidromeDownloadRepository: NavidromeDownloadRepository
     @Inject lateinit var replayGainProcessor: ReplayGainProcessor
     @Inject lateinit var navidromePreloader: NavidromePreloader
@@ -104,7 +105,8 @@ class MusicService : MediaLibraryService() {
     private var widgetActionsReceiver: BroadcastReceiver? = null
     private var widgetProgressJob: kotlinx.coroutines.Job? = null
 
-    private var savedShuffleOrder: ShuffleOrder? = null
+    // True while restoreQueue applies the saved shuffle order, which must not be reshuffled.
+    private var restoringShuffle = false
     private var smartShuffleEnabled: Boolean = false
     // Tracks the actual playlist contents (by id, in window-index order) so a fresh
     // setMediaItems() call can be told apart from a shuffle-order-only Timeline update —
@@ -166,9 +168,11 @@ class MusicService : MediaLibraryService() {
 
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                // Only tracks that finished on their own count toward a track-based sleep
-                // timer — manual skips used to count too.
-                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && sleepTracksLeft > 0) {
+                // Only tracks that finished on their own (including repeat-one) count toward a
+                // track-based sleep timer; manual skips don't.
+                val finishedOnItsOwn = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO ||
+                    reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT
+                if (finishedOnItsOwn && sleepTracksLeft > 0) {
                     sleepTracksLeft--
                     if (sleepTracksLeft == 0) {
                         player.pause()
@@ -180,14 +184,18 @@ class MusicService : MediaLibraryService() {
                 }
                 persistQueue()
                 applyVolumeForCurrentItem()
-                scheduleCrossfade()
+                // After a crossfade-out, bring the next track in from silence.
+                scheduleCrossfade(fadeIn = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO)
                 applyLockscreenArtwork()
                 refreshWidgetLikeState()
                 preloadUpcomingTracks()
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) persistQueue()
+                if (playbackState == Player.STATE_ENDED) {
+                    persistQueue()
+                    if (sleepTracksLeft > 0) clearSleepTimer()
+                }
                 pushWidgetState()
             }
 
@@ -214,7 +222,7 @@ class MusicService : MediaLibraryService() {
             }
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-                if (shuffleModeEnabled) applyShuffleOrder()
+                if (shuffleModeEnabled && !restoringShuffle) applyShuffleOrder()
             }
 
             override fun onTimelineChanged(timeline: Timeline, reason: Int) {
@@ -247,16 +255,16 @@ class MusicService : MediaLibraryService() {
         })
     }
 
-        private fun preloadUpcomingTracks() {
-        val currentIndex = player.currentMediaItemIndex
-        val count        = player.mediaItemCount
-        if (count == 0) return
-
+    // Follows the actual play order (shuffle and repeat included).
+    private fun preloadUpcomingTracks() {
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return
         val upcoming = mutableListOf<String>()
-        for (i in 1..PRELOAD_AHEAD) {
-            val idx = currentIndex + i
-            if (idx >= count) break
-            val uri = player.getMediaItemAt(idx).localConfiguration?.uri?.toString() ?: continue
+        var idx = player.currentMediaItemIndex
+        repeat(PRELOAD_AHEAD) {
+            idx = timeline.getNextWindowIndex(idx, player.repeatMode, player.shuffleModeEnabled)
+            if (idx == C.INDEX_UNSET) return@repeat
+            val uri = player.getMediaItemAt(idx).localConfiguration?.uri?.toString() ?: return@repeat
             if (uri.contains("/rest/stream")) upcoming += uri
         }
         if (upcoming.isNotEmpty()) navidromePreloader.preload(upcoming)
@@ -348,16 +356,9 @@ class MusicService : MediaLibraryService() {
 
     private fun applyInitialPreferences() {
         scope.launch {
+            // Repeat and shuffle come back with the saved queue (restoreQueue).
             player.skipSilenceEnabled = prefs.skipSilence.first()
-
-            val repeat = prefs.repeatMode.first()
-            player.repeatMode = when (repeat) {
-                dev.yuwixx.resonance.data.model.RepeatMode.ONE -> Player.REPEAT_MODE_ONE
-                dev.yuwixx.resonance.data.model.RepeatMode.ALL -> Player.REPEAT_MODE_ALL
-                else -> Player.REPEAT_MODE_OFF
-            }
             smartShuffleEnabled       = prefs.smartShuffleEnabled.first()
-            player.shuffleModeEnabled = prefs.shuffleEnabled.first()
 
             gaplessEnabled            = prefs.gaplessEnabled.first()
             crossfadeDurationMs       = prefs.crossfadeDurationMs.first()
@@ -475,7 +476,7 @@ class MusicService : MediaLibraryService() {
 
     // ─── Crossfade & Volume ───
 
-        private fun scheduleCrossfade() {
+    private fun scheduleCrossfade(fadeIn: Boolean = false) {
         crossfadeJob?.cancel()
 
         val fadeDurationMs = when {
@@ -490,6 +491,7 @@ class MusicService : MediaLibraryService() {
         }
 
         crossfadeJob = scope.launch {
+            if (fadeIn && crossfadeDurationMs > 0) rampVolumeUp(fadeDurationMs, computeTargetVolume())
             while (isActive) {
                 // Nothing to do while paused: wait for playback instead of polling.
                 if (!player.isPlaying) {
@@ -514,7 +516,7 @@ class MusicService : MediaLibraryService() {
                         val fadeProgress = 1f - (remaining.toFloat() / fadeDurationMs)
                         player.volume = computeTargetVolume() * (1f - fadeProgress)
                     } else if (remaining <= 0 || player.playbackState == Player.STATE_ENDED) {
-                        fadeIn(fadeDurationMs, computeTargetVolume())
+                        // The next track's transition starts the fade-in.
                         break
                     } else {
                         val target = computeTargetVolume()
@@ -528,15 +530,14 @@ class MusicService : MediaLibraryService() {
         }
     }
 
-    private suspend fun fadeIn(durationMs: Int, targetVolume: Float) {
+    private suspend fun rampVolumeUp(durationMs: Int, targetVolume: Float) {
         player.volume = 0f
         val steps = (durationMs / 50).coerceAtLeast(1)
         for (i in 0..steps) {
             player.volume = targetVolume * (i.toFloat() / steps)
-            delay(50)  // throws CancellationException if crossfadeJob is cancelled
+            delay(50)
         }
         player.volume = targetVolume
-        scheduleCrossfade()
     }
 
         // ReplayGain multiplier: convert dB gain tag → linear amplitude, fall back to -3 dBFS
@@ -820,10 +821,10 @@ class MusicService : MediaLibraryService() {
                     val startPositionMs = if (mediaItems.size == songIds.size) queueEntity.positionMs else 0L
                     player.setMediaItems(mediaItems, startIndex, startPositionMs)
                     player.repeatMode = repeatMode
-                    player.shuffleModeEnabled = queueEntity.shuffleEnabled
 
                     // Restore the saved shuffle order so next/previous follow the same sequence.
                     val savedOrder = queueEntity.originalOrder
+                    var restoredShuffle = false
                     if (queueEntity.shuffleEnabled && savedOrder.isNotEmpty()) {
                         val shuffledIds = savedOrder.split(",").mapNotNull { it.trim().toLongOrNull() }
                         // A list (not map) of positions per ID so a duplicate song in the queue
@@ -832,11 +833,13 @@ class MusicService : MediaLibraryService() {
                             .mapValues { (_, indices) -> ArrayDeque(indices) }
                         val shuffleTable = shuffledIds.mapNotNull { idToPositions[it]?.removeFirstOrNull() }.toIntArray()
                         if (shuffleTable.size == mediaItems.size) {
-                            val restoredOrder = ShuffleOrder.DefaultShuffleOrder(shuffleTable, 0L)
-                            savedShuffleOrder = restoredOrder
-                            player.setShuffleOrder(restoredOrder)
+                            player.setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(shuffleTable, 0L))
+                            restoredShuffle = true
                         }
                     }
+                    restoringShuffle = restoredShuffle
+                    player.shuffleModeEnabled = queueEntity.shuffleEnabled
+                    restoringShuffle = false
 
                     player.prepare()
                 }
@@ -890,9 +893,7 @@ class MusicService : MediaLibraryService() {
     private fun applyShuffleOrder() {
         val count = player.mediaItemCount
         if (count == 0) return
-        val order = ShuffleOrder.DefaultShuffleOrder(count, System.currentTimeMillis())
-        savedShuffleOrder = order
-        player.setShuffleOrder(order)
+        player.setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(count, System.currentTimeMillis()))
         if (smartShuffleEnabled) {
             scope.launch { applySmartShuffleOrder() }
         }
@@ -919,19 +920,20 @@ class MusicService : MediaLibraryService() {
         // The playlist may have changed while the DB lookup was in flight; bail rather than
         // hand ExoPlayer a shuffled-index array whose length no longer matches mediaItemCount.
         if (player.mediaItemCount != count) return
-        val order = ShuffleOrder.DefaultShuffleOrder(shuffledIndices, System.currentTimeMillis())
-        savedShuffleOrder = order
-        player.setShuffleOrder(order)
+        player.setShuffleOrder(ShuffleOrder.DefaultShuffleOrder(shuffledIndices, System.currentTimeMillis()))
     }
 
+    // The play order as the player has it now, so inserts and removals made since the last
+    // shuffle are included.
     private fun buildShuffledOrder(ids: List<Long>, shuffle: Boolean): String {
         if (!shuffle) return ""
-        val order = savedShuffleOrder ?: return ""
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return ""
         val result = mutableListOf<Long>()
-        var idx = order.getFirstIndex()
+        var idx = timeline.getFirstWindowIndex(true)
         while (idx != C.INDEX_UNSET) {
             result.add(ids.getOrElse(idx) { 0L })
-            idx = order.getNextIndex(idx)
+            idx = timeline.getNextWindowIndex(idx, Player.REPEAT_MODE_OFF, true)
         }
         return result.joinToString(",")
     }
@@ -1064,10 +1066,15 @@ class MusicService : MediaLibraryService() {
                         if (songId != null) {
                             scope.launch {
                                 val isLiked = likedSongsDao.isLiked(songId) > 0
+                                // Same as liking in the app: Navidrome songs are (un)starred too,
+                                // or the next sync would undo this.
+                                val navidromeId = navidromeSongDao.getSongByNumericId(songId)?.navidromeId
                                 if (isLiked) {
                                     likedSongsDao.unlikeSong(songId)
+                                    navidromeId?.let { navidromeSyncRepository.unstar(songId, it) }
                                 } else {
                                     likedSongsDao.likeSong(LikedSongEntity(songId = songId, likedAt = System.currentTimeMillis()))
+                                    navidromeId?.let { navidromeSyncRepository.star(songId, it) }
                                 }
                                 widgetIsLiked = !isLiked
                                 pushWidgetState()
@@ -1265,7 +1272,11 @@ class MusicService : MediaLibraryService() {
         )
 
         private suspend fun buildSongItems(): List<MediaItem> =
-            songDao.getAllSongsList().map { it.toAutoMediaItem() }
+            if (prefs.musicSource.first() == MusicSource.NAVIDROME) {
+                navidromeSongDao.getAllSongsList().map { it.toAutoMediaItem() }
+            } else {
+                songDao.getAllSongsList().map { it.toAutoMediaItem() }
+            }
 
         private suspend fun buildPlaylistItems(): List<MediaItem> =
             playlistDao.getAllPlaylistsList().map { playlist ->

@@ -2,6 +2,8 @@
 // with offline queue, and track love/unlove. Uses its own DataStore separate from main prefs.
 package dev.yuwixx.resonance.data.repository
 
+import dev.yuwixx.resonance.data.util.md5Hex
+import kotlinx.coroutines.CancellationException
 import dev.yuwixx.resonance.BuildConfig
 import android.content.Context
 import android.util.Log
@@ -19,7 +21,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -238,24 +239,30 @@ class LastFmRepository @Inject constructor(
             if (!nowPlayingOn) return@launch
             if (!isNetworkAllowedForScrobble()) return@launch
             try {
+                // The signature must cover exactly the parameters that are sent.
+                val album = song.album.takeIf { it.isNotBlank() }
+                val duration = (song.duration / 1000).toInt().takeIf { it > 0 }
+                val trackNumber = song.trackNumber.takeIf { it > 0 }
                 val (apiKey, sk, sig) = buildSignedParams(
                     "track.updateNowPlaying",
-                    mapOf(
-                        "artist" to song.displayArtist,
-                        "track"  to song.title,
-                        "album"  to song.album,
-                    )
+                    buildMap {
+                        put("artist", song.displayArtist)
+                        put("track", song.title)
+                        album?.let { put("album", it) }
+                        duration?.let { put("duration", it.toString()) }
+                        trackNumber?.let { put("trackNumber", it.toString()) }
+                    },
                 ) ?: return@launch
 
                 api.updateNowPlaying(
-                    artist      = song.displayArtist,
-                    track       = song.title,
-                    album       = song.album.takeIf { it.isNotBlank() },
-                    duration    = (song.duration / 1000).toInt(),
-                    trackNumber = song.trackNumber.takeIf { it > 0 },
-                    apiKey      = apiKey,
-                    sessionKey  = sk,
-                    apiSig      = sig,
+                    artist = song.displayArtist,
+                    track = song.title,
+                    album = album,
+                    duration = duration,
+                    trackNumber = trackNumber,
+                    apiKey = apiKey,
+                    sessionKey = sk,
+                    apiSig = sig,
                 )
             } catch (e: Exception) {
                 Log.w(TAG, "updateNowPlaying failed: ${e.message}")
@@ -288,26 +295,31 @@ class LastFmRepository @Inject constructor(
 
         for (p in toFlush) {
             try {
+                val album = p.album.takeIf { it.isNotBlank() }
+                val duration = p.duration.takeIf { it > 0 }
+                val trackNumber = p.trackNumber.takeIf { it > 0 }
                 val (apiKey, sk, sig) = buildSignedParams(
                     "track.scrobble",
-                    mapOf(
-                        "artist[0]"    to p.artist,
-                        "track[0]"     to p.track,
-                        "timestamp[0]" to p.timestamp.toString(),
-                        "album[0]"     to p.album,
-                    )
+                    buildMap {
+                        put("artist[0]", p.artist)
+                        put("track[0]", p.track)
+                        put("timestamp[0]", p.timestamp.toString())
+                        album?.let { put("album[0]", it) }
+                        duration?.let { put("duration[0]", it.toString()) }
+                        trackNumber?.let { put("trackNumber[0]", it.toString()) }
+                    },
                 ) ?: continue
 
                 val response = api.scrobble(
-                    artist      = p.artist,
-                    track       = p.track,
-                    timestamp   = p.timestamp,
-                    album       = p.album.takeIf { it.isNotBlank() },
-                    duration    = p.duration.takeIf { it > 0 },
-                    trackNumber = p.trackNumber.takeIf { it > 0 },
-                    apiKey      = apiKey,
-                    sessionKey  = sk,
-                    apiSig      = sig,
+                    artist = p.artist,
+                    track = p.track,
+                    timestamp = p.timestamp,
+                    album = album,
+                    duration = duration,
+                    trackNumber = trackNumber,
+                    apiKey = apiKey,
+                    sessionKey = sk,
+                    apiSig = sig,
                 )
 
                 if (response.error != null) {
@@ -318,6 +330,9 @@ class LastFmRepository @Inject constructor(
                 } else {
                     Log.d(TAG, "Scrobbled: ${p.artist} – ${p.track}")
                 }
+            } catch (e: CancellationException) {
+                pendingScrobbles.add(p)
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Scrobble network error, re-queuing: ${e.message}")
                 val offlineQueueEnabled = mainPrefs.lastFmScrobbleOffline.firstOrNull() ?: true
@@ -389,9 +404,7 @@ class LastFmRepository @Inject constructor(
         val payload = params.entries
             .sortedBy { it.key }
             .joinToString("") { (k, v) -> k + v } + secret
-        return MessageDigest.getInstance("MD5")
-            .digest(payload.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
+        return md5Hex(payload)
     }
 
     val pendingScrobbleCount: Int get() = pendingScrobbles.size

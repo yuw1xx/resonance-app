@@ -11,8 +11,8 @@ import javax.inject.Singleton
 @Singleton
 class LocalFileServer @Inject constructor() {
 
-    private var serverSocket: ServerSocket? = null
-    private var serveJob: Job? = null
+    @Volatile private var serverSocket: ServerSocket? = null
+    @Volatile private var serveJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     data class ServeHandle(val token: String, val port: Int)
@@ -33,9 +33,8 @@ class LocalFileServer @Inject constructor() {
             serverSocket = it
         }
 
-        // Keeps accepting until the real transfer (or a reject) happens: a stray request with
-        // the wrong token — a browser's favicon fetch, a port scan — used to consume the only
-        // accept() and shut the server down before the receiver ever connected.
+        // Keeps accepting until the real transfer (or a reject) happens, so a stray request
+        // with the wrong token (a favicon fetch, a port scan) doesn't end the share.
         serveJob = scope.launch {
             val deadline = System.currentTimeMillis() + timeoutMs
             try {
@@ -52,9 +51,13 @@ class LocalFileServer @Inject constructor() {
                     if (outcome != Outcome.Ignored) break
                 }
             } catch (_: SocketTimeoutException) {
-            } catch (_: Exception) {
+                // Nobody came in time; the share expires.
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
             } finally {
-                stop()
+                // Only this share's socket: a newer serve() may already have its own.
+                runCatching { socket.close() }
+                if (serverSocket === socket) serverSocket = null
             }
         }
 
@@ -116,7 +119,7 @@ class LocalFileServer @Inject constructor() {
                 append("HTTP/1.1 200 OK\r\n")
                 append("Content-Type: ${mimeType.ifBlank { "application/octet-stream" }}\r\n")
                 append("Content-Length: $fileSize\r\n")
-                append("Content-Disposition: attachment; filename=\"${file.name}\"\r\n")
+                append("Content-Disposition: attachment; filename=\"${file.name.replace(Regex("[\"\\r\\n]"), "_")}\"\r\n")
                 append("Connection: close\r\n")
                 append("\r\n")
             }

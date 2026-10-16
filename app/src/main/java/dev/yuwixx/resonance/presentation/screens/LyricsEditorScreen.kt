@@ -2,6 +2,7 @@
 
 package dev.yuwixx.resonance.presentation.screens
 
+import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -409,7 +410,7 @@ internal fun stampNextLine(text: String, positionMs: Long): String {
         line.isNotBlank() && !leadingStamp.containsMatchIn(line) && !line.trimStart().startsWith("[")
     }
     if (index < 0) return text
-    val stamp = "[%02d:%02d.%02d]".format(positionMs / 60_000, (positionMs / 1000) % 60, (positionMs / 10) % 100)
+    val stamp = String.format(Locale.ROOT, "[%02d:%02d.%02d]", positionMs / 60_000, (positionMs / 1000) % 60, (positionMs / 10) % 100)
     lines[index] = stamp + lines[index].trimStart()
     return lines.joinToString("\n")
 }

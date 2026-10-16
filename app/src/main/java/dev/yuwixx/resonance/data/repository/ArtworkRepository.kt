@@ -60,7 +60,8 @@ class ArtworkRepository @Inject constructor(
                 return@withContext cached.artworkUrl
             }
 
-            val url = spotifyRepository.searchAlbumArt(title, artist)
+            // Only a real answer is cached; a failed lookup is retried next time.
+            val url = spotifyRepository.searchAlbumArt(title, artist).getOrElse { return@withContext cached?.artworkUrl }
             artworkDao.upsertAlbumArtwork(AlbumArtworkEntity(albumId = albumId, artworkUrl = url))
             url
         }
