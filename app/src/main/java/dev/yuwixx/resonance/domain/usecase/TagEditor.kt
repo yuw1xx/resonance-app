@@ -7,13 +7,14 @@ import android.provider.MediaStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.database.dao.SongDao
 import dev.yuwixx.resonance.data.model.Song
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Reads tags with MediaMetadataRetriever. Writes go through AudioTagWriter, like every other tag
@@ -77,6 +78,8 @@ class TagEditor @Inject constructor(
         try {
             val lyrics = AudioFileIO.read(File(path)).tag?.getFirst(FieldKey.LYRICS)
             lyrics?.takeIf { it.isNotBlank() }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }

@@ -157,15 +157,15 @@ private fun ShareMain(
     onPlayNow: (Song) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val nearbyState     by viewModel.nearbyState.collectAsStateWithLifecycle()
-    val devices         by viewModel.nearbyDevices.collectAsStateWithLifecycle()
-    val selectedSongs   by viewModel.selectedSongs.collectAsStateWithLifecycle()
+    val nearbyState by viewModel.nearbyState.collectAsStateWithLifecycle()
+    val devices by viewModel.nearbyDevices.collectAsStateWithLifecycle()
+    val selectedSongs by viewModel.selectedSongs.collectAsStateWithLifecycle()
     val selectedSong = selectedSongs.singleOrNull()
-    val transferState   by viewModel.transferState.collectAsStateWithLifecycle()
-    val allSongs        by viewModel.allSongs.collectAsStateWithLifecycle()
+    val transferState by viewModel.transferState.collectAsStateWithLifecycle()
+    val allSongs by viewModel.allSongs.collectAsStateWithLifecycle()
     val incomingRequest by viewModel.incomingRequest.collectAsStateWithLifecycle()
-    val incomingFile    by viewModel.incomingFile.collectAsStateWithLifecycle()
-    val remoteTtlHours  by viewModel.remoteTtlHours.collectAsStateWithLifecycle()
+    val incomingFile by viewModel.incomingFile.collectAsStateWithLifecycle()
+    val remoteTtlHours by viewModel.remoteTtlHours.collectAsStateWithLifecycle()
 
     val haptic = rememberHaptics()
     var showSongPicker by remember { mutableStateOf(false) }
@@ -181,8 +181,8 @@ private fun ShareMain(
         }
     }
 
-    if (incomingRequest != null) {
-        val req = incomingRequest!!
+    val req = incomingRequest
+    if (req != null) {
         AlertDialog(
             onDismissRequest = { viewModel.rejectNearbyRequest(req.endpointId) },
             title = { Text("Accept incoming song?") },
@@ -192,8 +192,8 @@ private fun ShareMain(
         )
     }
 
-    if (incomingFile != null) {
-        val iFile = incomingFile!!
+    val iFile = incomingFile
+    if (iFile != null) {
         AlertDialog(
             onDismissRequest = { viewModel.clearIncoming() },
             icon = {

@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.yuwixx.resonance.data.repository.MixRepository
+import kotlinx.coroutines.CancellationException
 
 @HiltWorker
 class MixGeneratorWorker @AssistedInject constructor(
@@ -19,6 +20,8 @@ class MixGeneratorWorker @AssistedInject constructor(
         return try {
             mixRepository.generateAndPersistMixes()
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             Result.retry()
         }

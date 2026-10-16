@@ -17,6 +17,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -155,6 +156,8 @@ class NavidromeDownloadRepository @Inject constructor(
                     downloadedAt = System.currentTimeMillis(),
                 )
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             songDownloadDao.updateState(songId, DownloadState.FAILED, e.message)
             throw e

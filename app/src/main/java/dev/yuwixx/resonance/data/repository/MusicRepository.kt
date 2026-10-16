@@ -20,6 +20,7 @@ import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -260,6 +261,8 @@ class MusicRepository @Inject constructor(
             val idsToDelete = existing.keys - foundIds.toHashSet()
             idsToDelete.chunked(900).forEach { chunk -> songDao.deleteSongsByIds(chunk) }
             if (stamp != null) prefs.setMediaStoreSyncStamp(stamp)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("MusicRepository", "Sync failed", e)
         }

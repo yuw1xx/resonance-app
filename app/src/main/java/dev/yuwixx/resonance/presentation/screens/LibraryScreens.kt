@@ -733,7 +733,7 @@ fun PlaylistsScreen(
     val playlists by libraryViewModel.allPlaylists.collectAsStateWithLifecycle()
     val importState by libraryViewModel.m3uImportState.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
-    var showSmartEditor by remember { mutableStateOf(false) }
+    var showSmartEditor by rememberSaveable { mutableStateOf(false) }
     val launchImport = rememberM3uImportLauncher { uris -> libraryViewModel.startM3uImport(uris) }
 
     Scaffold(
@@ -1338,11 +1338,11 @@ fun PlaylistDetailScreen(
         }
     }
 
-    var showDeleteDialog  by remember { mutableStateOf(false) }
-    var showRenameDialog  by remember { mutableStateOf(false) }
-    var showSortDialog    by remember { mutableStateOf(false) }
-    var showOverflowMenu  by remember { mutableStateOf(false) }
-    var showSmartEditor   by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showSortDialog by remember { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
+    var showSmartEditor by rememberSaveable { mutableStateOf(false) }
 
     // Dragging only works in natural order; any other sort would undo it right away. Smart
     // playlists and mixes are read-only.
@@ -1809,7 +1809,7 @@ fun RenamePlaylistDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    var name by remember { mutableStateOf(currentName) }
+    var name by rememberSaveable { mutableStateOf(currentName) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Rename Playlist") },
@@ -1935,7 +1935,7 @@ fun CreatePlaylistDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New Playlist") },
@@ -1969,10 +1969,10 @@ fun BatchTagEditDialog(
     onDismiss: () -> Unit,
     onApply: (albumArtist: String?, album: String?, genre: String?, year: Int?) -> Unit,
 ) {
-    var albumArtist by remember { mutableStateOf("") }
-    var album by remember { mutableStateOf("") }
-    var genre by remember { mutableStateOf("") }
-    var year by remember { mutableStateOf("") }
+    var albumArtist by rememberSaveable { mutableStateOf("") }
+    var album by rememberSaveable { mutableStateOf("") }
+    var genre by rememberSaveable { mutableStateOf("") }
+    var year by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,

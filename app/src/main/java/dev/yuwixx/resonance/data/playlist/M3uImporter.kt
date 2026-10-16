@@ -15,6 +15,7 @@ import dev.yuwixx.resonance.data.repository.PlaylistRepository
 import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -58,6 +59,8 @@ class M3uImporter @Inject constructor(
     suspend fun import(uri: Uri, mode: ConflictMode): Result = withContext(Dispatchers.IO) {
         val parsed = try {
             readPlaylist(uri)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw ImportException("Couldn't read ${displayNameStem(uri)}", e)
         }

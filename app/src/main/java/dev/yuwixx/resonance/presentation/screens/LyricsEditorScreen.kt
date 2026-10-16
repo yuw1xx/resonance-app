@@ -239,8 +239,8 @@ private fun LyricsSearchSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
-    var trackName by remember { mutableStateOf(initialTrackName) }
-    var artistName by remember { mutableStateOf(initialArtistName) }
+    var trackName by rememberSaveable { mutableStateOf(initialTrackName) }
+    var artistName by rememberSaveable { mutableStateOf(initialArtistName) }
     var results by remember { mutableStateOf<List<LrclibResponse>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     var hasSearched by remember { mutableStateOf(false) }

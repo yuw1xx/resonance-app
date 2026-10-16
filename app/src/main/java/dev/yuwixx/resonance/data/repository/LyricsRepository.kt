@@ -82,6 +82,8 @@ class LyricsRepository @Inject constructor(
                 !response.plainLyrics.isNullOrBlank() -> store(songId, response.plainLyrics, SOURCE_LRCLIB)
                 else -> rememberMiss(songId)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             // Network trouble isn't a "no lyrics" answer: don't cache it, offer a retry.
@@ -178,6 +180,8 @@ class LyricsRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             try {
                 lrclibApi.searchLyrics(trackName = trackName, artistName = artistName)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 emptyList()
             }

@@ -133,6 +133,8 @@ class SettingsViewModel @Inject constructor(
                     if (isManual) _updateState.value = UpdateState.UpToDate
                     else _updateState.value = UpdateState.Idle
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (isManual) _updateState.value = UpdateState.Error("Failed to check for updates. Check your connection.")
                 else _updateState.value = UpdateState.Idle

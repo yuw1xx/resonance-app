@@ -1793,7 +1793,7 @@ private fun LastFmLoginDialog(
     onDismiss: () -> Unit,
     onLogin: (String, String) -> Unit,
 ) {
-    var username by remember { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
 
@@ -2615,8 +2615,8 @@ private fun NavidromeConfigPage(
     onSave: (String, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var serverUrl by remember { mutableStateOf(savedServerUrl ?: "") }
-    var username by remember { mutableStateOf(savedUsername ?: "") }
+    var serverUrl by rememberSaveable { mutableStateOf(savedServerUrl ?: "") }
+    var username by rememberSaveable { mutableStateOf(savedUsername ?: "") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     val isEditing = savedServerUrl != null

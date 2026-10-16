@@ -757,7 +757,7 @@ private fun LastFmBadge() {
 
 @Composable
 private fun LastFmLoginDialog(onDismiss: () -> Unit, onLogin: (String, String) -> Unit) {
-    var username by remember { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 

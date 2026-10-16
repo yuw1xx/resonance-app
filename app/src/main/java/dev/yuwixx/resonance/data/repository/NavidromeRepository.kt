@@ -109,6 +109,8 @@ class NavidromeRepository @Inject constructor(
                 val msg = body.error?.message ?: "Server error: ${body.status}"
                 NavidromeConnectionState.Error(msg).also { _connectionState.value = it }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             NavidromeConnectionState.Error(e.message ?: "Connection failed")
                 .also { _connectionState.value = it }
@@ -218,6 +220,8 @@ class NavidromeRepository @Inject constructor(
                 "Sync complete — ${newSongs.size} songs (${changedSongs.size} changed, ${removedSongs.size} removed), " +
                     "${newAlbums.size} albums")
             return true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             _syncState.value = NavidromeSyncState.Error(e.message ?: "Sync failed")
@@ -254,6 +258,8 @@ class NavidromeRepository @Inject constructor(
                     artworkUri = summary.coverArt?.let { Uri.parse(coverArtUrl(creds, it)) },
                 )
             } ?: emptyList()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("NavidromeRepository", "getAllPlaylists failed: ${e.message}", e)
             emptyList()

@@ -27,6 +27,8 @@ class SongDownloadWorker @AssistedInject constructor(
             throw e
         } catch (e: NotDownloadableException) {
             Result.failure()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }

@@ -869,6 +869,8 @@ class MusicService : MediaLibraryService() {
     private suspend fun saveQueueEntity(entity: QueueEntity) {
         try {
             queueDao.saveQueue(entity)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("MusicService", "Failed to persist queue", e)
         }
@@ -1223,6 +1225,8 @@ class MusicService : MediaLibraryService() {
                         items.subList(from, (from + pageSize).coerceAtMost(items.size))
                     } else items
                     future.set(LibraryResult.ofItemList(ImmutableList.copyOf(paged), params))
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     future.set(LibraryResult.ofError(SessionError.ERROR_UNKNOWN))
                 }

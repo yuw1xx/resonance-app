@@ -37,6 +37,8 @@ class SongBatchDownloadWorker @AssistedInject constructor(
                 throw e
             } catch (e: NotDownloadableException) {
                 // Permanent; nothing to retry.
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 retryable = true
             }

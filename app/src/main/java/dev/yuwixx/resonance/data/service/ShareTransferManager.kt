@@ -244,6 +244,8 @@ class ShareTransferManager @Inject constructor(
         }
         return try {
             JSONObject(body).getString("token")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw Exception("Malformed server response uploading '${song.title}'")
         }
@@ -362,6 +364,8 @@ class ShareTransferManager @Inject constructor(
             }
             val manifestToken = try {
                 JSONObject(body).getString("token")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 throw Exception("Malformed server response")
             }

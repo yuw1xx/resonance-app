@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -43,6 +44,8 @@ class ReplayGainProcessor @Inject constructor() {
                 val result = trackGain to albumGain
                 if (trackGain != null || albumGain != null) tagCache[songId] = result
                 result
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w("ReplayGainProcessor", "Failed to read RG tags for $path: ${e.message}")
                 null

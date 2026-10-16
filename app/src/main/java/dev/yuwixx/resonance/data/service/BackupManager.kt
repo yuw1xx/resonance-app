@@ -24,6 +24,7 @@ import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -99,6 +100,8 @@ class BackupManager @Inject constructor(
                 stream.write(adapter.toJson(backup).toByteArray())
             } ?: return@withContext false
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             false
         }
@@ -198,6 +201,8 @@ class BackupManager @Inject constructor(
                 historyRestored = historyRestored,
                 historySkipped = historySkipped,
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             RestoreResult.Error(e.message ?: "Unknown error")
         }

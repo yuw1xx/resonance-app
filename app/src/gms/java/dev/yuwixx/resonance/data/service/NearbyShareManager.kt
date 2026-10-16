@@ -34,6 +34,7 @@ import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -482,12 +483,16 @@ class NearbyShareManager @Inject constructor(
                 file = destFile,
             )
             _state.value = NearbyState.Idle
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             _state.value = NearbyState.Error("Could not save received file: ${e.message}")
         } finally {
             // Nearby leaves its own copy behind; the song now lives in Music/Resonance.
             try {
                 context.contentResolver.delete(tempUri, null, null)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Couldn't delete the Nearby temp file", e)
             }

@@ -5,11 +5,12 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.yuwixx.resonance.data.repository.ArtistInfo
 import dev.yuwixx.resonance.data.repository.ArtistInfoRepository
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 sealed class ArtistInfoState {
     data object Idle : ArtistInfoState()
@@ -35,6 +36,8 @@ class ArtistInfoViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = try {
                 ArtistInfoState.Loaded(artistInfoRepository.getArtistInfo(artistName))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 ArtistInfoState.Error
             }

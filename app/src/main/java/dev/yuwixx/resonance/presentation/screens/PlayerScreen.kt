@@ -1189,7 +1189,7 @@ private fun SheetPlaylistPage(
     onPlaylistSelected: (Playlist) -> Unit,
     onCreatePlaylist: (String) -> Unit,
 ) {
-    var newName by remember { mutableStateOf("") }
+    var newName by rememberSaveable { mutableStateOf("") }
 
     Column(modifier = Modifier.padding(bottom = 28.dp)) {
         Row(

@@ -17,6 +17,7 @@ import dev.yuwixx.resonance.data.network.DeezerApi
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -45,6 +46,8 @@ class ArtworkRepository @Inject constructor(
                 ArtistArtworkEntity(artistName = artistName, artworkUrl = url)
             )
             url
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }

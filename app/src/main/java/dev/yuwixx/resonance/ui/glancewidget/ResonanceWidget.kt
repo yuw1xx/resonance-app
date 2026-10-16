@@ -44,6 +44,7 @@ import dev.yuwixx.resonance.ui.theme.ResonanceSeed
 import dev.yuwixx.resonance.ui.theme.seedColorScheme
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -228,6 +229,8 @@ class ResonanceWidget : GlanceAppWidget() {
                     }
                     ResonanceWidget().update(context, id)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to push widget state", e)
             }

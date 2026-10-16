@@ -122,6 +122,8 @@ class PlaylistFolderSync @Inject constructor(
                             written++
                         }
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Log.w(TAG, "Folder sync failed for ${file.name}", e)
@@ -240,6 +242,8 @@ class PlaylistFolderSyncWorker @AssistedInject constructor(
     override suspend fun doWork(): Result = try {
         folderSync.syncNow()
         Result.success()
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.retry()
     }

@@ -10,6 +10,8 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,15 +34,20 @@ fun SmartPlaylistEditor(
     onDismiss: () -> Unit,
     onSave: (name: String, rules: SmartRules) -> Unit,
 ) {
-    var name by remember { mutableStateOf(initialName) }
-    var matchAll by remember { mutableStateOf(initialRules.matchAll) }
-    val rules: SnapshotStateList<SmartRule> = remember { initialRules.rules.toMutableStateList() }
+    // Saveable so a half-written playlist survives rotation.
+    var name by rememberSaveable { mutableStateOf(initialName) }
+    var matchAll by rememberSaveable { mutableStateOf(initialRules.matchAll) }
+    val rules: SnapshotStateList<SmartRule> = rememberSaveable(saver = RuleListSaver) {
+        initialRules.rules.toMutableStateList()
+    }
     // Rules have no identity of their own; these keys keep each row's text field state attached
     // to the right rule when an earlier one is removed.
-    var nextKey by remember { mutableIntStateOf(initialRules.rules.size) }
-    val ruleKeys: SnapshotStateList<Int> = remember { List(initialRules.rules.size) { it }.toMutableStateList() }
-    var sort by remember { mutableStateOf(initialRules.sort) }
-    var limitText by remember { mutableStateOf(initialRules.limit?.toString().orEmpty()) }
+    var nextKey by rememberSaveable { mutableIntStateOf(initialRules.rules.size) }
+    val ruleKeys: SnapshotStateList<Int> = rememberSaveable(saver = KeyListSaver) {
+        List(initialRules.rules.size) { it }.toMutableStateList()
+    }
+    var sort by rememberSaveable { mutableStateOf(initialRules.sort) }
+    var limitText by rememberSaveable { mutableStateOf(initialRules.limit?.toString().orEmpty()) }
 
     val valid = name.isNotBlank() && rules.all { it.field.kind == SmartFieldKind.BOOLEAN || it.value.isNotBlank() }
 
@@ -245,3 +252,18 @@ private fun <T> EnumDropdown(
         }
     }
 }
+
+// Each rule is saved as three strings: field, operator, value.
+private val RuleListSaver = listSaver<SnapshotStateList<SmartRule>, String>(
+    save = { list -> list.flatMap { listOf(it.field.name, it.op.name, it.value) } },
+    restore = { flat ->
+        flat.chunked(3)
+            .map { (field, op, value) -> SmartRule(SmartField.valueOf(field), SmartOp.valueOf(op), value) }
+            .toMutableStateList()
+    },
+)
+
+private val KeyListSaver = listSaver<SnapshotStateList<Int>, Int>(
+    save = { it.toList() },
+    restore = { it.toMutableStateList() },
+)

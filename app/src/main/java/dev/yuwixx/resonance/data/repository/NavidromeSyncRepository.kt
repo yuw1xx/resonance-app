@@ -115,6 +115,8 @@ class NavidromeSyncRepository @Inject constructor(
                     !shouldBeLiked && isLiked -> likedSongsDao.unlikeSong(entity.numericId)
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // Server unreachable: keep the local state until the next pull.
         }
@@ -131,6 +133,8 @@ class NavidromeSyncRepository @Inject constructor(
             val entity = playlistDao.getPlaylistById(playlistId) ?: return remoteId
             playlistDao.updatePlaylist(entity.copy(navidromePlaylistId = remoteId))
             remoteId
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }
@@ -193,6 +197,8 @@ class NavidromeSyncRepository @Inject constructor(
                     playlistDao.updatePlaylist(local.copy(name = detail.name, dateModified = System.currentTimeMillis()))
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // Server unreachable: keep the local state until the next pull.
         }

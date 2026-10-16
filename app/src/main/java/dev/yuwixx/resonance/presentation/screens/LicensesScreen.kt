@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import dev.yuwixx.resonance.presentation.components.EmphasizedDecelerate
 import dev.yuwixx.resonance.presentation.components.staggeredEntrance
 import org.json.JSONObject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -64,6 +65,8 @@ fun LicensesScreen(onBack: () -> Unit) {
                     )
                 }
                 licenses = list.sortedBy { it.moduleName }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {

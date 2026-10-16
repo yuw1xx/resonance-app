@@ -44,6 +44,8 @@ class SpotifyRepository @Inject constructor(
             // Refresh a minute early so a request never races an about-to-expire token.
             tokenExpiresAtMs = now + (response.expiresInSeconds - 60).coerceAtLeast(0) * 1000L
             response.accessToken
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Failed to obtain Spotify access token: ${e.message}")
             null

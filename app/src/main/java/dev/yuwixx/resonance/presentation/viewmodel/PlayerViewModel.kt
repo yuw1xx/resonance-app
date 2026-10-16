@@ -739,6 +739,8 @@ class PlayerViewModel @Inject constructor(
                 } else {
                     play(result.songs, 0)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _smartQueueError.value = e.message ?: "Failed to load smart queue."
             } finally {

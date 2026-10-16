@@ -191,6 +191,8 @@ class LastFmRepository @Inject constructor(
 
             fetchUserInfo(username)
 
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "authenticate failed", e)
             _authState.value = LastFmAuthState.Error(e.message ?: "Network error — check your connection")
@@ -219,6 +221,8 @@ class LastFmRepository @Inject constructor(
             } else {
                 _authState.value = LastFmAuthState.Authenticated(usr, "–")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             _authState.value = LastFmAuthState.Authenticated(usr, "–")
         }
@@ -256,6 +260,8 @@ class LastFmRepository @Inject constructor(
                     sessionKey = sk,
                     apiSig = sig,
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "updateNowPlaying failed: ${e.message}")
             }

@@ -11,6 +11,7 @@ import android.net.NetworkRequest
 import android.net.Uri
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -248,6 +249,8 @@ private fun ReceiveTransferContent(
                 }
 
                 state = ReceiveState.Prompting(network)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 state = ReceiveState.Error(e.message ?: "Connection failed")
             }
@@ -418,6 +421,8 @@ private fun ReceiveMultiTransferContent(
         state = try {
             val songs = fetchManifest(params.serverUrl, params.manifestToken)
             MultiReceiveState.Ready(songs, songs.associate { it.token to SongDownloadStatus.Pending as SongDownloadStatus })
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             MultiReceiveState.Error(e.message ?: "Could not load song list")
         }
@@ -744,6 +749,8 @@ private suspend fun performDownloadTask(
         val destFile = downloadToStorage(context, network, params.downloadUrl, params.title, params.ext, params.mimeType, onProgress)
         releaseNetwork(context)
         ReceiveState.Done(destFile)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         releaseNetwork(context)
         ReceiveState.Error(e.message ?: "Transfer failed")
@@ -763,12 +770,19 @@ private suspend fun performReject(params: ReceiveParams) = withContext(Dispatche
     // The relay has no reject call; declining just skips the download and the file expires.
     if (params.mode == "remote") return@withContext
     try {
-        val url = URL(params.rejectUrl)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 3000
-        connection.responseCode
-    } catch (e: Exception) { /* ignore */ }
+        val connection = URL(params.rejectUrl).openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
+            connection.responseCode
+        } finally {
+            connection.disconnect()
+        }
+    } catch (e: Exception) {
+        // The sender gives up on its own after a timeout, so a failed reject is harmless.
+        Log.w("ReceiveSheet", "Couldn't notify the sender: ${e.message}")
+    }
 }
 
 // The callback of the Wi-Fi Direct network request; unregistering it is what actually lets

@@ -396,8 +396,14 @@ class LibraryViewModel @Inject constructor(
                 val hasMixes = playlistRepository.allPlaylists.first().any { it.isMix }
                 if (!hasMixes) {
                     viewModelScope.launch {
-                        try { mixRepository.generateAndPersistMixes() }
-                        catch (_: Exception) { mixGeneratorManager.triggerNow() }
+                        try {
+                            mixRepository.generateAndPersistMixes()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // Let WorkManager retry later.
+                            mixGeneratorManager.triggerNow()
+                        }
                     }
                 }
             }

@@ -55,6 +55,8 @@ class LocalFileServer @Inject constructor() {
                 }
             } catch (_: SocketTimeoutException) {
                 // Nobody came in time; the share expires.
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
             } finally {
