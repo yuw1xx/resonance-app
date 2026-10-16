@@ -1,0 +1,8 @@
+Resonance 3.0
+• Material 3 Expressive redesign: draggable Now Playing sheet, new Home · Library · Playlists · Search navigation
+• Much lighter on battery; reliable background playback and scrobbling
+• Navidrome only re-syncs when your server changed; cached covers and streams
+• Better lyrics: more sources, word-by-word highlighting, translations
+• Smart playlists, M3U import and folder sync
+• Undo for queue and playlist edits
+• Many fixes, including lost play counts

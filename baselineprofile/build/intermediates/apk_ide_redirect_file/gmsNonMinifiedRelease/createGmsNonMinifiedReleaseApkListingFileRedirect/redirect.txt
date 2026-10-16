@@ -1,0 +1,2 @@
+#- File Locator -
+listingFile=../../../../outputs/apk/gms/nonMinifiedRelease/output-metadata.json

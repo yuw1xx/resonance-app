@@ -1,0 +1,72 @@
+INSTRUMENTATION_STATUS: class=dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator:
+INSTRUMENTATION_STATUS: test=generate
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stack=androidx.test.uiautomator.StaleObjectException
+at androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)
+at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:984)
+at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:973)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate$lambda$0(BaselineProfileGenerator.kt:42)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)
+at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:78)
+at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:76)
+at androidx.benchmark.macro.CompilationMode$Partial.compileImpl$benchmark_macro(CompilationMode.kt:359)
+at androidx.benchmark.macro.CompilationMode.resetAndCompile$benchmark_macro(CompilationMode.kt:126)
+at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:76)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:21)
+
+INSTRUMENTATION_STATUS: stream=
+Error in generate(dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator):
+androidx.test.uiautomator.StaleObjectException
+at androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)
+at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:984)
+at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:973)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate$lambda$0(BaselineProfileGenerator.kt:42)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)
+at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:78)
+at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:76)
+at androidx.benchmark.macro.CompilationMode$Partial.compileImpl$benchmark_macro(CompilationMode.kt:359)
+at androidx.benchmark.macro.CompilationMode.resetAndCompile$benchmark_macro(CompilationMode.kt:126)
+at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:76)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:21)
+
+INSTRUMENTATION_STATUS: test=generate
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 20,337
+There was 1 failure:
+1) generate(dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator)
+androidx.test.uiautomator.StaleObjectException
+at androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)
+at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:984)
+at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:973)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate$lambda$0(BaselineProfileGenerator.kt:42)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)
+at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:78)
+at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:76)
+at androidx.benchmark.macro.CompilationMode$Partial.compileImpl$benchmark_macro(CompilationMode.kt:359)
+at androidx.benchmark.macro.CompilationMode.resetAndCompile$benchmark_macro(CompilationMode.kt:126)
+at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:76)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:21)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1
+

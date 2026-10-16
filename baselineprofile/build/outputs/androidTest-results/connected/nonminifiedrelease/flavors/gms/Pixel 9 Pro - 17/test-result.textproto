@@ -1,0 +1,82 @@
+# proto-message: google.testing.platform.proto.api.core.TestSuiteResult
+# 2026-10-16T11:34:24.431161767Z:
+test_suite_meta_data {
+  scheduled_test_case_count: 1
+  device {
+    id: "192.168.178.164:5555"
+    friendly_name: "primary"
+  }
+}
+test_status: FAILED
+test_result {
+  test_case {
+    test_class: "BaselineProfileGenerator"
+    test_package: "dev.yuwixx.resonance.baselineprofile"
+    test_method: "generate"
+    start_time {
+      seconds: 1792150442
+      nanos: 470000000
+    }
+    end_time {
+      seconds: 1792150462
+      nanos: 638000000
+    }
+    device {
+      id: "192.168.178.164:5555"
+      friendly_name: "primary"
+    }
+  }
+  test_status: FAILED
+  error {
+    error_message: "androidx.test.uiautomator.StaleObjectException\nat androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)\nat androidx.test.uiautomator.UiObject2.fling(UiObject2.java:984)\nat androidx.test.uiautomator.UiObject2.fling(UiObject2.java:973)\nat dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate$lambda$0(BaselineProfileGenerator.kt:42)\nat dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)\nat androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:78)\nat androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:76)\nat androidx.benchmark.macro.CompilationMode$Partial.compileImpl$benchmark_macro(CompilationMode.kt:359)\nat androidx.benchmark.macro.CompilationMode.resetAndCompile$benchmark_macro(CompilationMode.kt:126)\nat androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:76)\nat androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)\nat androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)\nat dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:21)\n"
+    error_type: "androidx.test.uiautomator.StaleObjectException\nat androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java"
+    stack_trace: "androidx.test.uiautomator.StaleObjectException\nat androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)\nat androidx.test.uiautomator.UiObject2.fling(UiObject2.java:984)\nat androidx.test.uiautomator.UiObject2.fling(UiObject2.java:973)\nat dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate$lambda$0(BaselineProfileGenerator.kt:42)\nat dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)\nat androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:78)\nat androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:76)\nat androidx.benchmark.macro.CompilationMode$Partial.compileImpl$benchmark_macro(CompilationMode.kt:359)\nat androidx.benchmark.macro.CompilationMode.resetAndCompile$benchmark_macro(CompilationMode.kt:126)\nat androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:76)\nat androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)\nat androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)\nat dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:21)\n"
+  }
+  output_artifact {
+    label {
+      label: "logcat"
+      namespace: "android"
+    }
+    source_path {
+      path: "/home/yu/StudioProjects/resonance/baselineprofile/build/outputs/androidTest-results/connected/nonminifiedrelease/flavors/gms/Pixel 9 Pro - 17/logcat-dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator-generate.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info"
+      namespace: "android"
+    }
+    source_path {
+      path: "/home/yu/StudioProjects/resonance/baselineprofile/build/outputs/androidTest-results/connected/nonminifiedrelease/flavors/gms/Pixel 9 Pro - 17/device-info.pb"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.meminfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "/home/yu/StudioProjects/resonance/baselineprofile/build/outputs/androidTest-results/connected/nonminifiedrelease/flavors/gms/Pixel 9 Pro - 17/meminfo"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.cpuinfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "/home/yu/StudioProjects/resonance/baselineprofile/build/outputs/androidTest-results/connected/nonminifiedrelease/flavors/gms/Pixel 9 Pro - 17/cpuinfo"
+    }
+  }
+}
+output_artifact {
+  label {
+    label: "test-results.log"
+    namespace: "com.google.testing.platform.runtime.android.driver.AndroidInstrumentationDriver"
+  }
+  source_path {
+    path: "/home/yu/StudioProjects/resonance/baselineprofile/build/outputs/androidTest-results/connected/nonminifiedrelease/flavors/gms/Pixel 9 Pro - 17/testlog/test-results.log"
+  }
+  type: TEST_DATA
+  mime_type: "text/plain"
+}

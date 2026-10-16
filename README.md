@@ -3,12 +3,12 @@
 
 <div align="center">
   <h1>Resonance</h1>
-  <p>A modern, feature-rich local music player for <b>Android 15 and newer</b></p>
+  <p>A modern, feature-rich music player for <b>Android 8.0 and newer</b>: local files and Navidrome</p>
   <p>Inspired by <a href="https://github.com/namidaco/namida">Namida</a>, <a href="https://github.com/theovilardo/PixelPlayer">Pixel Player</a> & <a href="https://github.com/FoedusProgramme/Gramophone">Gramphone</a> 💜</p>
 
-  ![Android](https://img.shields.io/badge/Android-API%2035+-3DDC84?logo=android&logoColor=white)
-  ![Kotlin](https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white)
-  ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3-4285F4?logo=jetpackcompose&logoColor=white)
+  ![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3DDC84?logo=android&logoColor=white)
+  ![Kotlin](https://img.shields.io/badge/Kotlin-2.4-7F52FF?logo=kotlin&logoColor=white)
+  ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203%20Expressive-4285F4?logo=jetpackcompose&logoColor=white)
   ![License](https://img.shields.io/badge/License-MIT-blue)
 
   <h3>Available on</h3>
@@ -16,13 +16,6 @@
   <a href="https://github.com/yuw1xx/resonance-app/releases/latest"><img src="https://badgen.net/github/release/yuw1xx/resonance-app?label=GitHub+Release&amp;color=black&amp;icon=github" alt="GitHub Release"></a>
 </div>
 
----
-<div align="center"><h3>Available on</h3>
-
-<a href="https://rookieenough.github.io/Orion-Data/redirect.html?id=resonance"><img src="https://raw.githubusercontent.com/RookieEnough/Orion-Store/refs/heads/main/assets/orion-badge.png" alt="Get it on Orion Store" width="180"></a>
-<a href="https://github.com/yuw1xx/resonance-app/releases/latest"><img src="https://badgen.net/github/release/yuw1xx/resonance-app?label=GitHub+Release&amp;color=black&amp;icon=github" alt="GitHub Release"></a>
-
-</div>
 ---
 
 ## Overview
@@ -48,7 +41,8 @@ Resonance is a powerful local music player built entirely with Kotlin and Jetpac
 - [x] **Skip silence** — automatically skip silent passages
 - [x] **Playback speed & pitch control** — independent speed and pitch adjustment
 - [x] **Smart shuffle** — history-aware shuffle that avoids repeating recently played tracks
-- [x] **Sleep timer** — stop after a set number of tracks or minutes
+- [x] **Sleep timer** — minutes, tracks or end of the current song, with an optional fade-out
+- [x] **Reliable background playback** — keeps playing, scrobbling and recording history with the app closed; proper audio focus (pauses for calls)
 
 ### Library
 - [x] **Full MediaStore integration** — automatically detects all local audio files
@@ -57,17 +51,18 @@ Resonance is a powerful local music player built entirely with Kotlin and Jetpac
 - [x] **Excluded folders** — hide folders from the library
 - [x] **Auto-scan** — scheduled background library refresh
 - [x] **Sort & filter** — sort by title, artist, album, date added, duration, play count, and more
-- [x] **Persistent queue** — queue survives app restarts
+- [x] **Persistent queue** — queue survives app restarts; drag to reorder, swipe to remove, save as playlist, undo
+- [x] **Playlists** — M3U/M3U8 import, export, and two-way **folder sync** (works with Syncthing, SD cards…)
+- [x] **Smart playlists** — live rules on artist, genre, year, play count, last played, date added, length, liked…
 
 ### Streaming
-- [x] **Navidrome / Subsonic** — full Subsonic API support: browse, play, and scrobble from your self-hosted server
+- [x] **Navidrome / Subsonic** — browse, play and scrobble from your self-hosted server; the library is cached and only re-synced when the server actually changed; streamed audio is cached on disk
 - [x] **Chromecast** — cast to any Google Cast device directly from the player
 
 ### Lyrics
-- [x] **Synced lyrics** — LRC, TTML, and word-level karaoke support
-- [x] **Embedded lyrics** — reads lyrics from ID3 tags via JAudioTagger
-- [x] **LRCLib integration** — automatic online lyrics fetching
-- [x] **Lyrics editor** — edit and save lyrics directly in the app
+- [x] **Synced lyrics** — LRC with word-by-word karaoke, translations, instrumental breaks and offsets; tap a line to seek
+- [x] **Many sources** — embedded tags, `.lrc` files next to your music, your Navidrome server, and LRCLIB (opt-in)
+- [x] **Lyrics editor** — edit, search, and sync by tapping along with the song
 
 ### Metadata & Artwork
 - [x] **Tag editor** — edit title, artist, album, genre, year, track number, and more
@@ -88,7 +83,7 @@ Resonance is a powerful local music player built entirely with Kotlin and Jetpac
 - [x] **Play breakdowns** — see when you listen most, by hour and time period
 
 ### Sharing
-- [x] **Resonance Share** — send songs directly to nearby devices over Wi-Fi via Google Nearby Connections
+- [x] **Resonance Share** — send songs to nearby devices over Wi-Fi (Nearby Connections), or anywhere via a self-hostable relay with resumable downloads (`server/resonance-share`)
 
 ### Backup
 - [x] **Playlist & liked song backup** — export and import as JSON
@@ -97,7 +92,7 @@ Resonance is a powerful local music player built entirely with Kotlin and Jetpac
 - [x] **System equalizer** — access and control EQ presets from within the app
 
 ### UI & Customization
-- [x] **Material 3** — full Material You dynamic color support
+- [x] **Material 3 Expressive** — Material You dynamic color with real tonal palettes, expressive motion and shapes, a draggable Now Playing sheet with predictive back
 - [x] **Preset colors** — choose from a set of curated accent colors
 - [x] **Dark / Light / System theme** — follows system or manual override
 - [x] **Blur artwork background** — blurred album art as the player background
@@ -135,16 +130,16 @@ Resonance is a powerful local music player built entirely with Kotlin and Jetpac
 
 ### Prerequisites
 
-- Android Studio Hedgehog or newer
-- Android SDK 35
-- JDK 17
+- Android Studio with AGP 9 support
+- Android SDK 37
+- JDK 17 or newer
 
 ### Build
 
 ```bash
 git clone https://github.com/yuw1xx/resonance-app.git
 cd resonance-app
-./gradlew assembleDebug
+./gradlew assembleGmsDebug   # or assembleFossDebug (no Google Play Services)
 ```
 
 ## Architecture

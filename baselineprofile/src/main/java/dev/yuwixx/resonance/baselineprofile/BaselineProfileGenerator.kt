@@ -1,0 +1,62 @@
+package dev.yuwixx.resonance.baselineprofile
+
+import androidx.benchmark.macro.junit4.BaselineProfileRule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Direction
+import androidx.test.uiautomator.Until
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+private const val PACKAGE = "dev.yuwixx.resonance"
+
+/** Records the hot paths users hit first: cold start, the library list, and the player. */
+@RunWith(AndroidJUnit4::class)
+class BaselineProfileGenerator {
+    @get:Rule
+    val rule = BaselineProfileRule()
+
+    @Test
+    fun generate() = rule.collect(packageName = PACKAGE, includeInStartupProfile = true) {
+        device.executeShellCommand("pm grant $PACKAGE android.permission.READ_MEDIA_AUDIO")
+        device.executeShellCommand("pm grant $PACKAGE android.permission.POST_NOTIFICATIONS")
+        pressHome()
+        startActivityAndWait()
+
+        // Fresh install: walk through setup.
+        repeat(6) {
+            val next = device.findObject(By.text("Continue"))
+                ?: device.findObject(By.text("Skip"))
+                ?: device.findObject(By.text("Get Started"))
+                ?: return@repeat
+            next.click()
+            device.waitForIdle()
+        }
+
+        // Library tab → scroll the song list.
+        device.wait(Until.findObject(By.text("Library")), 5_000)?.click()
+        device.waitForIdle()
+        // The list is rebuilt while the library loads, so look it up again for every fling.
+        fun fling(direction: Direction) {
+            runCatching {
+                val list = device.wait(Until.findObject(By.scrollable(true)), 5_000) ?: return
+                list.setGestureMargin(device.displayWidth / 5)
+                list.fling(direction)
+            }
+            device.waitForIdle()
+        }
+        repeat(3) { fling(Direction.DOWN) }
+        repeat(2) { fling(Direction.UP) }
+
+        // Shuffle-play the library (starts playback, shows the mini player), then open the
+        // full player from it.
+        device.findObject(By.desc("Shuffle Play"))?.click()
+        device.wait(Until.hasObject(By.desc("Pause")), 5_000)
+        device.findObject(By.desc("Pause"))?.click() // keep the profile run quiet
+        device.findObject(By.textContains("Library"))?.let { device.waitForIdle() }
+        device.swipe(device.displayWidth / 2, device.displayHeight - 300, device.displayWidth / 2, device.displayHeight / 3, 20)
+        device.waitForIdle()
+        device.pressBack()
+    }
+}
