@@ -104,10 +104,11 @@ fun LazyColumnWithScrollbar(
 
     val thumbModifier = Modifier
         .fillMaxHeight()
-        .width(28.dp)
-        .alpha(thumbAlpha)
+        .width(24.dp)
+        .graphicsLayer { alpha = thumbAlpha }
         .onSizeChanged { trackHeightPx = it.height.toFloat() }
-        .pointerInput(Unit) {
+        .then(
+            if (visible && canScroll) Modifier.pointerInput(Unit) {
             detectVerticalDragGestures(
                 onDragStart = {
                     isDragging = true
@@ -139,6 +140,8 @@ fun LazyColumnWithScrollbar(
                 }
             )
         }
+            else Modifier
+        )
 
     val thumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
     val thumbScale by animateFloatAsState(
@@ -238,10 +241,11 @@ fun LazyGridWithScrollbar(
 
     val thumbModifier = Modifier
         .fillMaxHeight()
-        .width(28.dp)
-        .alpha(thumbAlpha)
+        .width(24.dp)
+        .graphicsLayer { alpha = thumbAlpha }
         .onSizeChanged { trackHeightPx = it.height.toFloat() }
-        .pointerInput(Unit) {
+        .then(
+            if (visible && canScroll) Modifier.pointerInput(Unit) {
             detectVerticalDragGestures(
                 onDragStart = {
                     isDragging = true
@@ -272,6 +276,8 @@ fun LazyGridWithScrollbar(
                 }
             )
         }
+            else Modifier
+        )
 
     val thumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
     val thumbScale by animateFloatAsState(

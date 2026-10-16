@@ -33,10 +33,24 @@ class LocalFileServer @Inject constructor() {
             serverSocket = it
         }
 
+        // Keeps accepting until the real transfer (or a reject) happens: a stray request with
+        // the wrong token — a browser's favicon fetch, a port scan — used to consume the only
+        // accept() and shut the server down before the receiver ever connected.
         serveJob = scope.launch {
+            val deadline = System.currentTimeMillis() + timeoutMs
             try {
-                val client = socket.accept()
-                handleConnection(client, token, file, mimeType, onProgress, onDone, onRejected)
+                while (isActive) {
+                    val remaining = deadline - System.currentTimeMillis()
+                    if (remaining <= 0) break
+                    socket.soTimeout = remaining.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    val client = socket.accept()
+                    val outcome = try {
+                        handleConnection(client, token, file, mimeType, onProgress, onDone, onRejected)
+                    } catch (_: java.io.IOException) {
+                        Outcome.Ignored // receiver dropped mid-request; let it retry
+                    }
+                    if (outcome != Outcome.Ignored) break
+                }
             } catch (_: SocketTimeoutException) {
             } catch (_: Exception) {
             } finally {
@@ -54,6 +68,8 @@ class LocalFileServer @Inject constructor() {
         serverSocket = null
     }
 
+    private enum class Outcome { Served, Rejected, Ignored }
+
     private fun handleConnection(
         client    : java.net.Socket,
         expected  : String,
@@ -62,16 +78,16 @@ class LocalFileServer @Inject constructor() {
         onProgress: (Float) -> Unit,
         onDone    : () -> Unit,
         onRejected: () -> Unit,
-    ) {
-        client.use {
+    ): Outcome {
+        return client.use {
             it.soTimeout = 30_000
             val input  = it.getInputStream()
             val output = it.getOutputStream()
 
             val reader = input.bufferedReader()
 
-            val requestLine = reader.readLine() ?: return
-            val path = requestLine.split(" ").getOrNull(1)?.trimStart('/') ?: return
+            val requestLine = reader.readLine() ?: return Outcome.Ignored
+            val path = requestLine.split(" ").getOrNull(1)?.trimStart('/') ?: return Outcome.Ignored
 
             if (path == "reject?token=$expected") {
                 var line: String?
@@ -80,7 +96,7 @@ class LocalFileServer @Inject constructor() {
                 output.write("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".toByteArray())
                 output.flush()
                 onRejected()
-                return
+                return Outcome.Rejected
             }
 
             if (path != expected) {
@@ -89,7 +105,7 @@ class LocalFileServer @Inject constructor() {
                         .toByteArray()
                 )
                 output.flush()
-                return
+                return Outcome.Ignored
             }
 
             var line: String?
@@ -118,6 +134,7 @@ class LocalFileServer @Inject constructor() {
             }
             output.flush()
             onDone()
+            Outcome.Served
         }
     }
 }

@@ -249,3 +249,41 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         """.trimIndent())
     }
 }
+
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Index names must match Room's generated `index_<table>_<column>` or schema
+        // validation fails on open.
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_songs_path` ON `songs` (`path`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_songs_folder` ON `songs` (`folder`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_songs_albumId` ON `songs` (`albumId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_playlist_songs_songId` ON `playlist_songs` (`songId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_history_listenedAt` ON `history` (`listenedAt`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_history_songId` ON `history` (`songId`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_navidrome_songs_numericId` ON `navidrome_songs` (`numericId`)")
+
+        db.execSQL("ALTER TABLE `queues` ADD COLUMN `positionMs` INTEGER NOT NULL DEFAULT 0")
+
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `smart_playlists` (
+                `playlistId` INTEGER NOT NULL,
+                `rulesJson` TEXT NOT NULL,
+                PRIMARY KEY(`playlistId`)
+            )
+        """.trimIndent())
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `playlist_sources` (
+                `playlistId` INTEGER NOT NULL,
+                `documentUri` TEXT NOT NULL,
+                `displayName` TEXT NOT NULL,
+                `lastModified` INTEGER NOT NULL,
+                `lastSyncedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`playlistId`)
+            )
+        """.trimIndent())
+
+        // Deleting a playlist used to leave its song refs behind.
+        db.execSQL("DELETE FROM `playlist_songs` WHERE `playlistId` NOT IN (SELECT `id` FROM `playlists`)")
+        db.execSQL("DELETE FROM `mix_navidrome_songs` WHERE `playlistId` NOT IN (SELECT `id` FROM `playlists`)")
+    }
+}

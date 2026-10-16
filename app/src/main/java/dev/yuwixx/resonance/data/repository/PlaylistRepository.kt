@@ -30,25 +30,43 @@ class PlaylistRepository @Inject constructor(
     private val prefs: ResonancePreferences,
     private val navidromeSyncRepository: NavidromeSyncRepository,
 ) {
-    val allPlaylists: Flow<List<Playlist>> = playlistDao.getAllPlaylists().flatMapLatest { entities ->
-        if (entities.isEmpty()) return@flatMapLatest flowOf(emptyList())
-        val flows = entities.map { entity ->
-            flow {
-                val songs = loadSongsForPlaylist(entity)
-                emit(entity.toDomain(songs))
+    // Built from whole-table flows joined in memory: one emission whenever playlists, their
+    // song refs, or the songs themselves change (a rescan, a tag edit), instead of the old
+    // query-per-song-per-playlist fan-out that also missed ref/song changes entirely.
+    val allPlaylists: Flow<List<Playlist>> = combine(
+        playlistDao.getAllPlaylists(),
+        playlistDao.observeAllSongRefs(),
+        songDao.getAllSongs(),
+        navidromeSongDao.getAllSongs(),
+        prefs.artistDelimiter,
+    ) { entities, refs, localSongs, navidromeSongs, delimiter ->
+        if (entities.isEmpty()) return@combine emptyList()
+        val refsByPlaylist = refs.groupBy { it.playlistId }
+        val localById = HashMap<Long, Song>(localSongs.size * 2)
+        localSongs.forEach { localById[it.id] = it.toDomain(delimiter) }
+        val navidromeByNumericId = HashMap<Long, Song>(navidromeSongs.size * 2)
+        val navidromeById = HashMap<String, Song>(navidromeSongs.size * 2)
+        navidromeSongs.forEach {
+            val song = it.toDomain()
+            navidromeByNumericId[it.numericId] = song
+            navidromeById[it.navidromeId] = song
+        }
+        entities.map { entity ->
+            val songs = if (entity.isMix && entity.mixSource == "NAVIDROME") {
+                mixNavidromeSongDao.getSongRefs(entity.id).mapNotNull { navidromeById[it.navidromeSongId] }
+            } else {
+                // Songs added while Navidrome is the active source are stored by their numeric
+                // Navidrome id. Linked playlists resolve against Navidrome first so a numeric id
+                // that happens to collide with a MediaStore id doesn't show the wrong local song.
+                val preferNavidrome = entity.navidromePlaylistId != null
+                refsByPlaylist[entity.id].orEmpty().mapNotNull { ref ->
+                    if (preferNavidrome) navidromeByNumericId[ref.songId] ?: localById[ref.songId]
+                    else localById[ref.songId] ?: navidromeByNumericId[ref.songId]
+                }
             }
+            entity.toDomain(songs)
         }
-        combine(flows) { it.toList() }
-    }
-
-    private suspend fun loadSongsForPlaylist(entity: PlaylistEntity): List<Song> =
-        if (entity.isMix && entity.mixSource == "NAVIDROME") {
-            mixNavidromeSongDao.getSongRefs(entity.id)
-                .mapNotNull { ref -> navidromeSongDao.getSongById(ref.navidromeSongId)?.toDomain() }
-        } else {
-            playlistDao.getPlaylistSongRefs(entity.id)
-                .mapNotNull { ref -> songDao.getSongById(ref.songId)?.toDomain() }
-        }
+    }.flowOn(Dispatchers.Default)
 
     private fun PlaylistEntity.toDomain(songs: List<Song>): Playlist = Playlist(
         id = id,
@@ -75,26 +93,43 @@ class PlaylistRepository @Inject constructor(
 
     suspend fun deletePlaylist(playlistId: Long) {
         val entity = playlistDao.getPlaylistById(playlistId) ?: return
-        playlistDao.deletePlaylist(entity)
+        playlistDao.deletePlaylistAndSongs(entity)
         entity.navidromePlaylistId?.let { navidromeSyncRepository.pushPlaylistDelete(it) }
     }
 
     suspend fun addSongToPlaylist(playlistId: Long, songId: Long) = addSongsToPlaylist(playlistId, listOf(songId))
 
-    suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>) {
-        val refs = playlistDao.getPlaylistSongRefs(playlistId)
-        var nextPos = refs.size
-        songIds.forEach { songId ->
-            playlistDao.addSongToPlaylist(
-                PlaylistSongCrossRef(playlistId = playlistId, songId = songId, position = nextPos++)
-            )
-        }
+    // Returns how many songs were actually added — songs already in the playlist are skipped
+    // (the table's (playlistId, songId) key allows each song once).
+    suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>): Int {
+        val start = playlistDao.nextPosition(playlistId)
+        val results = playlistDao.insertSongRefsIgnoringDuplicates(
+            songIds.distinct().mapIndexed { i, songId ->
+                PlaylistSongCrossRef(playlistId = playlistId, songId = songId, position = start + i)
+            }
+        )
+        val addedIds = songIds.distinct().filterIndexed { i, _ -> results.getOrElse(i) { -1L } != -1L }
+        if (addedIds.isEmpty()) return 0
+        playlistDao.compactPositions(playlistId)
         updateModifiedTime(playlistId)
-        syncPushAddSongs(playlistId, songIds)
+        syncPushAddSongs(playlistId, addedIds)
+        return addedIds.size
+    }
+
+    suspend fun createPlaylistWithSongs(name: String, songIds: List<Long>): Long {
+        val id = createPlaylist(name)
+        if (songIds.isNotEmpty()) addSongsToPlaylist(id, songIds)
+        return id
+    }
+
+    suspend fun replacePlaylistSongs(playlistId: Long, songIds: List<Long>) {
+        playlistDao.replaceSongs(playlistId, songIds)
+        updateModifiedTime(playlistId)
     }
 
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
         playlistDao.removeSongFromPlaylist(playlistId, songId)
+        playlistDao.compactPositions(playlistId)
         updateModifiedTime(playlistId)
         val linked = playlistDao.getPlaylistById(playlistId)?.navidromePlaylistId ?: return
         val navidromeId = navidromeSongDao.getSongByNumericId(songId)?.navidromeId ?: return
@@ -124,18 +159,6 @@ class PlaylistRepository @Inject constructor(
         }
     }
 
-    fun exportPlaylistAsM3U(playlist: Playlist): String {
-        val sb = StringBuilder()
-        sb.appendLine("#EXTM3U")
-        sb.appendLine("#PLAYLIST:${playlist.name}")
-        playlist.songs.forEach { song ->
-            val durationSec = (song.duration / 1000).toInt()
-            sb.appendLine("#EXTINF:$durationSec,${song.artist} - ${song.title}")
-            sb.appendLine(song.path)
-        }
-        return sb.toString().trimEnd()
-    }
-
     suspend fun updatePlaylistArtwork(playlistId: Long, artworkUri: Uri?) {
         val entity = playlistDao.getPlaylistById(playlistId) ?: return
         playlistDao.updatePlaylist(
@@ -160,7 +183,10 @@ class PlaylistRepository @Inject constructor(
             if (!seen.add(key)) toRemove.add(ref.songId)
         }
         toRemove.forEach { songId -> playlistDao.removeSongFromPlaylist(playlistId, songId) }
-        if (toRemove.isNotEmpty()) updateModifiedTime(playlistId)
+        if (toRemove.isNotEmpty()) {
+            playlistDao.compactPositions(playlistId)
+            updateModifiedTime(playlistId)
+        }
         toRemove.size
     }
 

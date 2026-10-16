@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
             val amoledMode by playerViewModel.prefs.amoledBlackTheme.collectAsState(initial = false)
             val systemDynamicEnabled by playerViewModel.prefs.dynamicColorEnabled.collectAsState(initial = true)
             val partyMode by playerViewModel.partyMode.collectAsState(initial = false)
+            val cornerRadius by playerViewModel.prefs.cornerRadius.collectAsState(initial = 28)
 
             val useDark = when (darkThemePref) {
                 "LIGHT" -> false
@@ -111,123 +112,13 @@ class MainActivity : ComponentActivity() {
 
             val updateState by settingsViewModel.updateState.collectAsState()
 
-            when (val state = updateState) {
-                is SettingsViewModel.UpdateState.Available -> {
-                    AlertDialog(
-                        onDismissRequest = { settingsViewModel.dismissUpdate() },
-                        icon = { Icon(Icons.Rounded.NewReleases, null, tint = MaterialTheme.colorScheme.primary) },
-                        title = { Text("Update Available") },
-                        text = {
-                            Column(
-                                modifier = Modifier.verticalScroll(rememberScrollState())
-                            ) {
-                                Text(
-                                    "Version ${state.release.tagName} is available!",
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                val body = state.release.body
-                                if (!body.isNullOrBlank()) {
-                                    Spacer(Modifier.height(10.dp))
-                                    Text(
-                                        text = parseMarkdown(body),
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                            }
-                        },
-                        confirmButton = {
-                            Button(onClick = { settingsViewModel.downloadUpdate(this@MainActivity, state.assetUrl) }) {
-                                Text("Download")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { settingsViewModel.dismissUpdate() }) { Text("Later") }
-                        }
-                    )
-                }
-                is SettingsViewModel.UpdateState.Downloading -> {
-                    AlertDialog(
-                        onDismissRequest = {},
-                        title = { Text("Downloading Update") },
-                        text = {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                LinearProgressIndicator(
-                                    progress = { state.progress },
-                                    modifier = Modifier.fillMaxWidth().height(8.dp),
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Text("${(state.progress * 100).toInt()}%")
-                            }
-                        },
-                        confirmButton = {}
-                    )
-                }
-                is SettingsViewModel.UpdateState.ReadyToInstall -> {
-                    AlertDialog(
-                        onDismissRequest = { settingsViewModel.dismissUpdate() },
-                        title = { Text("Download Complete") },
-                        text = { Text("The update is ready to be installed.") },
-                        confirmButton = {
-                            Button(onClick = {
-                                settingsViewModel.dismissUpdate()
-                                val apkUri = androidx.core.content.FileProvider.getUriForFile(
-                                    this@MainActivity,
-                                    "${packageName}.provider",
-                                    state.apkFile
-                                )
-                                val intent = Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(apkUri, "application/vnd.android.package-archive")
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                startActivity(intent)
-                            }) { Text("Install") }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { settingsViewModel.dismissUpdate() }) { Text("Cancel") }
-                        }
-                    )
-                }
-                is SettingsViewModel.UpdateState.Checking -> {
-                    if (state.isManual) {
-                        AlertDialog(
-                            onDismissRequest = {},
-                            title = { Text("Checking for updates...") },
-                            text = {
-                                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator()
-                                }
-                            },
-                            confirmButton = {}
-                        )
-                    }
-                }
-                is SettingsViewModel.UpdateState.UpToDate -> {
-                    AlertDialog(
-                        onDismissRequest = { settingsViewModel.dismissUpdate() },
-                        title = { Text("Up to date") },
-                        text = { Text("You are on the latest version of Resonance.") },
-                        confirmButton = { TextButton(onClick = { settingsViewModel.dismissUpdate() }) { Text("OK") } }
-                    )
-                }
-                is SettingsViewModel.UpdateState.Error -> {
-                    AlertDialog(
-                        onDismissRequest = { settingsViewModel.dismissUpdate() },
-                        title = { Text("Update Error") },
-                        text = { Text(state.message) },
-                        confirmButton = { TextButton(onClick = { settingsViewModel.dismissUpdate() }) { Text("OK") } }
-                    )
-                }
-                else -> {}
-            }
 
             ResonanceTheme(
                 darkTheme = useDark,
                 dynamicColorSeed = dynamicColor,
                 systemDynamicEnabled = systemDynamicEnabled,
                 amoledMode = amoledMode,
+                cornerRadius = cornerRadius,
             ) {
                 Box {
                     ResonanceNavGraph(
@@ -239,6 +130,120 @@ class MainActivity : ComponentActivity() {
                         ConfettiOverlay()
                     }
                 }
+
+                // Inside the theme so the dialogs get the app's colors, shapes and fonts.
+                    when (val state = updateState) {
+                        is SettingsViewModel.UpdateState.Available -> {
+                            AlertDialog(
+                                onDismissRequest = { settingsViewModel.dismissUpdate() },
+                                icon = { Icon(Icons.Rounded.NewReleases, null, tint = MaterialTheme.colorScheme.primary) },
+                                title = { Text("Update Available") },
+                                text = {
+                                    Column(
+                                        modifier = Modifier.verticalScroll(rememberScrollState())
+                                    ) {
+                                        Text(
+                                            "Version ${state.release.tagName} is available!",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        val body = state.release.body
+                                        if (!body.isNullOrBlank()) {
+                                            Spacer(Modifier.height(10.dp))
+                                            Text(
+                                                text = parseMarkdown(body),
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    Button(onClick = { settingsViewModel.downloadUpdate(this@MainActivity, state.assetUrl) }) {
+                                        Text("Download")
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { settingsViewModel.dismissUpdate() }) { Text("Later") }
+                                }
+                            )
+                        }
+                        is SettingsViewModel.UpdateState.Downloading -> {
+                            AlertDialog(
+                                onDismissRequest = {},
+                                title = { Text("Downloading Update") },
+                                text = {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        LinearProgressIndicator(
+                                            progress = { state.progress },
+                                            modifier = Modifier.fillMaxWidth().height(8.dp),
+                                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Text("${(state.progress * 100).toInt()}%")
+                                    }
+                                },
+                                confirmButton = {}
+                            )
+                        }
+                        is SettingsViewModel.UpdateState.ReadyToInstall -> {
+                            AlertDialog(
+                                onDismissRequest = { settingsViewModel.dismissUpdate() },
+                                title = { Text("Download Complete") },
+                                text = { Text("The update is ready to be installed.") },
+                                confirmButton = {
+                                    Button(onClick = {
+                                        settingsViewModel.dismissUpdate()
+                                        val apkUri = androidx.core.content.FileProvider.getUriForFile(
+                                            this@MainActivity,
+                                            "${packageName}.provider",
+                                            state.apkFile
+                                        )
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            setDataAndType(apkUri, "application/vnd.android.package-archive")
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        startActivity(intent)
+                                    }) { Text("Install") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { settingsViewModel.dismissUpdate() }) { Text("Cancel") }
+                                }
+                            )
+                        }
+                        is SettingsViewModel.UpdateState.Checking -> {
+                            if (state.isManual) {
+                                AlertDialog(
+                                    onDismissRequest = {},
+                                    title = { Text("Checking for updates...") },
+                                    text = {
+                                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                            CircularProgressIndicator()
+                                        }
+                                    },
+                                    confirmButton = {}
+                                )
+                            }
+                        }
+                        is SettingsViewModel.UpdateState.UpToDate -> {
+                            AlertDialog(
+                                onDismissRequest = { settingsViewModel.dismissUpdate() },
+                                title = { Text("Up to date") },
+                                text = { Text("You are on the latest version of Resonance.") },
+                                confirmButton = { TextButton(onClick = { settingsViewModel.dismissUpdate() }) { Text("OK") } }
+                            )
+                        }
+                        is SettingsViewModel.UpdateState.Error -> {
+                            AlertDialog(
+                                onDismissRequest = { settingsViewModel.dismissUpdate() },
+                                title = { Text("Update Error") },
+                                text = { Text(state.message) },
+                                confirmButton = { TextButton(onClick = { settingsViewModel.dismissUpdate() }) { Text("OK") } }
+                            )
+                        }
+                        else -> {}
+                    }
+
             }
         }
     }

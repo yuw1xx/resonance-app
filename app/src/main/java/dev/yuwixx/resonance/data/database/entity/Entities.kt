@@ -3,9 +3,15 @@
 package dev.yuwixx.resonance.data.database.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "songs")
+// Indices back the hot lookups: path (M3U import / backup restore matching), folder (folder
+// browser + include/exclude filters), albumId (album detail, artwork).
+@Entity(
+    tableName = "songs",
+    indices = [Index("path"), Index("folder"), Index("albumId")],
+)
 data class SongEntity(
     @PrimaryKey val id: Long,
     val uri: String,
@@ -58,14 +64,21 @@ data class MixNavidromeSongCrossRef(
     val position: Int,
 )
 
-@Entity(tableName = "playlist_songs", primaryKeys = ["playlistId", "songId"])
+@Entity(
+    tableName = "playlist_songs",
+    primaryKeys = ["playlistId", "songId"],
+    indices = [Index("songId")],
+)
 data class PlaylistSongCrossRef(
     val playlistId: Long,
     val songId: Long,
     val position: Int,
 )
 
-@Entity(tableName = "history")
+@Entity(
+    tableName = "history",
+    indices = [Index("listenedAt"), Index("songId")],
+)
 data class HistoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val songId: Long,
@@ -177,6 +190,8 @@ data class QueueEntity(
     val repeatMode: String,
     val originalOrder: String,
     val savedAt: Long = System.currentTimeMillis(),
+    // Playback position inside the current item, so a restored queue resumes mid-track.
+    val positionMs: Long = 0L,
 )
 
 @Entity(tableName = "liked_songs")
@@ -185,7 +200,7 @@ data class LikedSongEntity(
     val likedAt: Long = System.currentTimeMillis(),
 )
 
-@Entity(tableName = "navidrome_songs")
+@Entity(tableName = "navidrome_songs", indices = [Index("numericId")])
 data class NavidromeSongEntity(
     @PrimaryKey val navidromeId: String,
     val numericId: Long,
@@ -221,4 +236,23 @@ data class NavidromeAlbumEntity(
     val durationSec: Int,
     val year: Int,
     val cachedAt: Long = System.currentTimeMillis(),
+)
+
+// Rule set for a smart playlist, stored as JSON (see SmartPlaylistRules). The playlist row
+// itself stays in `playlists`, so smart playlists show up everywhere normal playlists do.
+@Entity(tableName = "smart_playlists")
+data class SmartPlaylistEntity(
+    @PrimaryKey val playlistId: Long,
+    val rulesJson: String,
+)
+
+// Links a playlist to an .m3u/.m3u8 file in the user's chosen sync folder (SAF document URI),
+// so folder sync can tell new, changed and already-imported files apart.
+@Entity(tableName = "playlist_sources")
+data class PlaylistSourceEntity(
+    @PrimaryKey val playlistId: Long,
+    val documentUri: String,
+    val displayName: String,
+    val lastModified: Long,
+    val lastSyncedAt: Long,
 )

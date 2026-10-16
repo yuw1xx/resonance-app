@@ -60,6 +60,7 @@ class MusicService : MediaLibraryService() {
     @Inject lateinit var replayGainProcessor: ReplayGainProcessor
     @Inject lateinit var navidromePreloader: NavidromePreloader
     @Inject lateinit var eqStateHolder: EqStateHolder
+    @Inject @dev.yuwixx.resonance.di.ApplicationScope lateinit var applicationScope: CoroutineScope
 
     private lateinit var player: ExoPlayer
     private lateinit var mediaSession: MediaLibrarySession
@@ -81,6 +82,11 @@ class MusicService : MediaLibraryService() {
     private var wasPlayingBeforeUnplug = false
 
     private var showSkipButtons = true
+    private var lockscreenArtworkEnabled = true
+
+    // Cached for widget pushes so the periodic progress refresh doesn't hit the DB/DataStore.
+    private var widgetIsLiked = false
+    private var widgetCornerRadius = 28
 
     private var widgetActionsReceiver: BroadcastReceiver? = null
     private var widgetProgressJob: kotlinx.coroutines.Job? = null
@@ -134,7 +140,8 @@ class MusicService : MediaLibraryService() {
                 persistQueue()
                 applyVolumeForCurrentItem()
                 scheduleCrossfade()
-                pushWidgetState()
+                applyLockscreenArtwork()
+                refreshWidgetLikeState()
                 preloadUpcomingTracks()
             }
 
@@ -150,6 +157,8 @@ class MusicService : MediaLibraryService() {
                 } else {
                     stopWidgetProgressUpdates()
                     pushWidgetState()
+                    // Pausing is the natural checkpoint for the resume position.
+                    persistQueue()
                 }
             }
 
@@ -204,6 +213,8 @@ class MusicService : MediaLibraryService() {
 
     companion object {
         private const val PRELOAD_AHEAD = 2
+        private const val WIDGET_PROGRESS_INTERVAL_MS = 5_000L
+        private const val EXTRA_STASHED_ARTWORK = "resonance.stashedArtworkUri"
         // How often scheduleCrossfade's poll loop checks player.duration/currentPosition while
         // the duration isn't known yet (e.g. some streamed/transcoded tracks briefly report no
         // duration) — falling back to this much longer interval instead of the normal 50ms avoids
@@ -372,7 +383,18 @@ class MusicService : MediaLibraryService() {
 
         scope.launch {
             prefs.lockscreenArtwork.collect { enabled ->
-                applyLockscreenArtwork(enabled)
+                lockscreenArtworkEnabled = enabled
+                applyLockscreenArtwork()
+            }
+        }
+
+        scope.launch {
+            var first = true
+            prefs.cornerRadius.collect { radius ->
+                widgetCornerRadius = radius
+                // The first value is just the cache fill; only later changes need a repaint.
+                if (!first && player.currentMediaItem != null) pushWidgetState()
+                first = false
             }
         }
 
@@ -478,25 +500,32 @@ class MusicService : MediaLibraryService() {
 
     // ─── Notification / Lockscreen ───
 
-        private fun applyLockscreenArtwork(enabled: Boolean) {
-        val item = player.currentMediaItem ?: return
-        val originalMetadata = item.mediaMetadata
-
-        val updatedMetadata = if (enabled) {
-            originalMetadata
-        } else {
-            originalMetadata.buildUpon()
-                .setArtworkUri(null)
-                .setArtworkData(null, null)
-                .build()
-        }
-
-        val updatedItem = item.buildUpon().setMediaMetadata(updatedMetadata).build()
-
+    // Strips (or restores) the current item's artwork so it doesn't show on the lockscreen/
+    // notification. The original URI is stashed in the item's extras, so turning the setting
+    // back on restores it, and the check runs on every transition since only the current item
+    // is touched. No-op when the item is already in the wanted state, so it never needlessly
+    // replaces the playing item.
+    private fun applyLockscreenArtwork() {
         val index = player.currentMediaItemIndex
-        if (index >= 0) {
-            player.replaceMediaItem(index, updatedItem)
+        val item = player.currentMediaItem ?: return
+        if (index < 0) return
+        val metadata = item.mediaMetadata
+        val stashed = metadata.extras?.getString(EXTRA_STASHED_ARTWORK)
+
+        val updatedMetadata = when {
+            !lockscreenArtworkEnabled && metadata.artworkUri != null -> {
+                val extras = Bundle(metadata.extras ?: Bundle()).apply {
+                    putString(EXTRA_STASHED_ARTWORK, metadata.artworkUri.toString())
+                }
+                metadata.buildUpon().setArtworkUri(null).setArtworkData(null, null).setExtras(extras).build()
+            }
+            lockscreenArtworkEnabled && stashed != null -> {
+                val extras = Bundle(metadata.extras ?: Bundle()).apply { remove(EXTRA_STASHED_ARTWORK) }
+                metadata.buildUpon().setArtworkUri(android.net.Uri.parse(stashed)).setExtras(extras).build()
+            }
+            else -> return
         }
+        player.replaceMediaItem(index, item.buildUpon().setMediaMetadata(updatedMetadata).build())
     }
 
         private fun updateNotificationCommandButtons(showSkip: Boolean) {
@@ -627,11 +656,11 @@ class MusicService : MediaLibraryService() {
                 }
 
                 withContext(Dispatchers.Main) {
-                    player.setMediaItems(
-                        mediaItems,
-                        queueEntity.currentIndex.coerceIn(0, mediaItems.lastIndex),
-                        /* startPositionMs= */ 0L,
-                    )
+                    // Only resume mid-track when the saved item survived the restore; if songs
+                    // went missing the indices shift, so start that item from the top instead.
+                    val startIndex = queueEntity.currentIndex.coerceIn(0, mediaItems.lastIndex)
+                    val startPositionMs = if (mediaItems.size == songIds.size) queueEntity.positionMs else 0L
+                    player.setMediaItems(mediaItems, startIndex, startPositionMs)
                     player.repeatMode = repeatMode
                     player.shuffleModeEnabled = queueEntity.shuffleEnabled
 
@@ -653,7 +682,11 @@ class MusicService : MediaLibraryService() {
 
                     player.prepare()
                 }
-            } catch (_: Exception) {}
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("MusicService", "Failed to restore queue", e)
+            }
         }
     }
 
@@ -674,6 +707,7 @@ class MusicService : MediaLibraryService() {
             shuffleEnabled = shuffle,
             repeatMode = repeatStr,
             originalOrder = buildShuffledOrder(ids, shuffle),
+            positionMs = player.currentPosition.coerceAtLeast(0L),
         )
     }
 
@@ -743,16 +777,25 @@ class MusicService : MediaLibraryService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession = mediaSession
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        persistQueue()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
-        // Kept synchronous/blocking on purpose: losing the queue if the process dies right
-        // after onDestroy() returns is worse than the small ANR risk of one fast DB write.
-        buildQueueEntity()?.let { entity ->
-            kotlinx.coroutines.runBlocking(Dispatchers.IO) { saveQueueEntity(entity) }
-        }
-        kotlinx.coroutines.runBlocking {
-            try { ResonanceWidget.updateState(this@MusicService, "", "", "", false, false, false, false) }
+        // The queue is already persisted on every transition and pause; this final save runs on
+        // the process-wide scope so it completes after the service is gone without blocking the
+        // main thread (the old runBlocking here was an ANR risk).
+        val finalQueue = buildQueueEntity()
+        val appContext = applicationContext
+        applicationScope.launch(Dispatchers.IO) {
+            finalQueue?.let { saveQueueEntity(it) }
+            try { ResonanceWidget.updateState(appContext, "", "", "", false, false, false, false) }
             catch (e: Exception) { Log.e("MusicService", "Failed to clear widget state", e) }
         }
+        // EqStateHolder is a singleton; drop the callbacks that capture this service.
+        eqStateHolder.onBandLevelChanged = null
+        eqStateHolder.onEnabledChanged = null
         crossfadeJob?.cancel()
         stopWidgetProgressUpdates()
         widgetActionsReceiver?.let { unregisterReceiver(it) }
@@ -768,8 +811,8 @@ class MusicService : MediaLibraryService() {
 
     private fun pushWidgetState() {
         val mediaItem = player.currentMediaItem ?: run {
+            val cornerRadius = widgetCornerRadius
             scope.launch {
-                val cornerRadius = prefs.cornerRadius.first()
                 ResonanceWidget.updateState(
                     context        = this@MusicService,
                     title          = "", artist = "", artworkUri = "",
@@ -786,10 +829,9 @@ class MusicService : MediaLibraryService() {
         val artworkUri = meta.artworkUri?.toString() ?: ""
         val duration   = player.duration.takeIf { it > 0 } ?: 1L
         val progress   = (player.currentPosition.toFloat() / duration).coerceIn(0f, 1f)
-        val songId     = mediaItem.mediaId.toLongOrNull()
+        val isLiked      = widgetIsLiked
+        val cornerRadius = widgetCornerRadius
         scope.launch {
-            val isLiked      = songId?.let { likedSongsDao.isLiked(it) > 0 } ?: false
-            val cornerRadius = prefs.cornerRadius.first()
             ResonanceWidget.updateState(
                 context        = this@MusicService,
                 title          = title,
@@ -806,12 +848,22 @@ class MusicService : MediaLibraryService() {
         }
     }
 
+    private fun refreshWidgetLikeState() {
+        val songId = player.currentMediaItem?.mediaId?.toLongOrNull()
+        scope.launch {
+            widgetIsLiked = songId?.let { withContext(Dispatchers.IO) { likedSongsDao.isLiked(it) > 0 } } ?: false
+            pushWidgetState()
+        }
+    }
+
+    // Track/play-state/like changes push immediately; this loop only advances the widget's
+    // progress bar, so a coarse interval is plenty and saves a Glance update every second.
     private fun startWidgetProgressUpdates() {
         widgetProgressJob?.cancel()
         widgetProgressJob = scope.launch {
-            while (true) {
+            while (isActive) {
                 pushWidgetState()
-                kotlinx.coroutines.delay(1_000)
+                delay(WIDGET_PROGRESS_INTERVAL_MS)
             }
         }
     }
@@ -851,6 +903,7 @@ class MusicService : MediaLibraryService() {
                                 } else {
                                     likedSongsDao.likeSong(LikedSongEntity(songId = songId, likedAt = System.currentTimeMillis()))
                                 }
+                                widgetIsLiked = !isLiked
                                 pushWidgetState()
                             }
                         }
@@ -939,7 +992,13 @@ class MusicService : MediaLibraryService() {
                             } else emptyList()
                         }
                     }
-                    future.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                    // Honour the browser's paging instead of shipping the whole library in one
+                    // Binder transaction (large libraries could exceed the transaction limit).
+                    val paged = if (pageSize > 0 && pageSize < Int.MAX_VALUE) {
+                        val from = (page.toLong() * pageSize).coerceAtMost(items.size.toLong()).toInt()
+                        items.subList(from, (from + pageSize).coerceAtMost(items.size))
+                    } else items
+                    future.set(LibraryResult.ofItemList(ImmutableList.copyOf(paged), params))
                 } catch (e: Exception) {
                     future.set(LibraryResult.ofError(SessionError.ERROR_UNKNOWN))
                 }
@@ -979,8 +1038,16 @@ class MusicService : MediaLibraryService() {
 
             val future = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
             scope.launch(Dispatchers.IO) {
-                val matches = songDao.searchSongs(query).first().map { it.toAutoMediaItem() }
-                val resolved = matches.ifEmpty { mediaItems }
+                // Always complete the future: an exception here used to leave the controller
+                // waiting forever on a voice search.
+                val resolved = try {
+                    searchForPlayback(query).ifEmpty { mediaItems }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w("MusicService", "Voice search failed for '$query'", e)
+                    mediaItems
+                }
                 future.set(MediaSession.MediaItemsWithStartPosition(resolved, 0, 0L))
             }
             return future
@@ -999,11 +1066,47 @@ class MusicService : MediaLibraryService() {
                 browseItem("playlist_${playlist.id}", playlist.name, MediaMetadata.MEDIA_TYPE_PLAYLIST)
             }
 
-        private suspend fun buildPlaylistSongItems(playlistId: Long): List<MediaItem> {
-            val refs = playlistDao.getPlaylistSongRefs(playlistId)
-            return refs.mapNotNull { ref ->
-                songDao.getSongById(ref.songId)?.toAutoMediaItem()
+        private suspend fun searchForPlayback(query: String): List<MediaItem> {
+            if (prefs.musicSource.first() == MusicSource.NAVIDROME) {
+                val q = query.trim().lowercase()
+                return navidromeSongDao.getAllSongsList()
+                    .filter { it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) || it.album.lowercase().contains(q) }
+                    .map { it.toAutoMediaItem() }
             }
+            return songDao.searchSongs(query).first().map { it.toAutoMediaItem() }
+        }
+
+        // One batched lookup per source instead of a query per song; Navidrome-linked
+        // playlists store numeric Navidrome ids, so resolve those against navidrome_songs.
+        private suspend fun buildPlaylistSongItems(playlistId: Long): List<MediaItem> {
+            val ids = playlistDao.getPlaylistSongRefs(playlistId).map { it.songId }
+            if (ids.isEmpty()) return emptyList()
+            val local = ids.chunked(900).flatMap { songDao.getSongsByIds(it) }.associateBy { it.id }
+            val missing = ids.filter { it !in local }
+            val remote = if (missing.isEmpty()) emptyMap()
+                else missing.chunked(900).flatMap { navidromeSongDao.getSongsByNumericIds(it) }.associateBy { it.numericId }
+            return ids.mapNotNull { id -> local[id]?.toAutoMediaItem() ?: remote[id]?.toAutoMediaItem() }
+        }
+
+        private fun dev.yuwixx.resonance.data.database.entity.NavidromeSongEntity.toAutoMediaItem(): MediaItem {
+            val localPath = navidromeDownloadRepository.localPathForSync(numericId)
+            val playbackUri = localPath?.let { android.net.Uri.fromFile(java.io.File(it)) }
+                ?: android.net.Uri.parse(streamUrl)
+            return MediaItem.Builder()
+                .setMediaId(numericId.toString())
+                .setUri(playbackUri)
+                .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(playbackUri).build())
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(title)
+                        .setArtist(artist)
+                        .setAlbumTitle(album)
+                        .setArtworkUri(coverArtUrl?.let { android.net.Uri.parse(it) })
+                        .setIsBrowsable(false)
+                        .setIsPlayable(true)
+                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                        .build()
+                ).build()
         }
 
         private fun browseItem(id: String, title: String, mediaType: Int) =

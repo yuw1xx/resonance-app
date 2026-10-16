@@ -16,7 +16,6 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
-import com.google.common.util.concurrent.MoreExecutors
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.cast.CastManager
@@ -236,17 +235,29 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    private var controllerFuture: com.google.common.util.concurrent.ListenableFuture<MediaController>? = null
+
     @OptIn(UnstableApi::class)
     private fun initializeController() {
         val sessionToken = SessionToken(context, ComponentName(context, MusicService::class.java))
-        val controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
-        controllerFuture.addListener(
+        val future = MediaController.Builder(context, sessionToken).buildAsync()
+        controllerFuture = future
+        future.addListener(
             {
-                _controller = controllerFuture.get()
-                _controller?.addListener(playerListener)
+                val controller = try {
+                    future.get()
+                } catch (e: Exception) {
+                    // Cancelled from onCleared(), or the service refused the connection.
+                    android.util.Log.w("PlayerViewModel", "MediaController connection failed", e)
+                    return@addListener
+                }
+                _controller = controller
+                controller.addListener(playerListener)
                 syncStateWithController()
             },
-            MoreExecutors.directExecutor()
+            // Main thread: the listener touches the controller, which must be used on its
+            // application looper.
+            androidx.core.content.ContextCompat.getMainExecutor(context)
         )
     }
 
@@ -835,7 +846,10 @@ class PlayerViewModel @Inject constructor(
 
     override fun onCleared() {
         _controller?.removeListener(playerListener)
-        _controller?.release()
+        // releaseFuture also covers a connection still in flight, which a plain release() on
+        // the (still null) controller would leak.
+        controllerFuture?.let { MediaController.releaseFuture(it) } ?: _controller?.release()
+        _controller = null
         localAudioServer.safeStop()
         super.onCleared()
     }

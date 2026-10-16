@@ -279,7 +279,9 @@ fun SongsScreen(
                 showAddToPlaylistDialog = false
             },
             onCreatePlaylist = { name ->
-                libraryViewModel.createPlaylist(name)
+                libraryViewModel.createPlaylistWithSongs(name, selectedSongs.map { it.id })
+                selectedSongs = emptySet()
+                showAddToPlaylistDialog = false
             }
         )
     }
@@ -698,13 +700,18 @@ fun PlaylistsScreen(
     onPlaylistClick: (Playlist) -> Unit,
 ) {
     val playlists by libraryViewModel.allPlaylists.collectAsState()
+    val importState by libraryViewModel.m3uImportState.collectAsState()
     var showCreateDialog by remember { mutableStateOf(false) }
+    val launchImport = rememberM3uImportLauncher { uris -> libraryViewModel.startM3uImport(uris) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {},
                 actions = {
+                    IconButton(onClick = launchImport) {
+                        Icon(Icons.Rounded.FileOpen, "Import M3U playlist")
+                    }
                     IconButton(onClick = { showCreateDialog = true }) {
                         Icon(Icons.Rounded.Add, "New Playlist")
                     }
@@ -727,6 +734,10 @@ fun PlaylistsScreen(
                     Spacer(Modifier.height(24.dp))
                     Button(onClick = { showCreateDialog = true }) {
                         Text("Create Playlist")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = launchImport) {
+                        Text("Import M3U")
                     }
                 }
             }
@@ -762,6 +773,13 @@ fun PlaylistsScreen(
             }
         )
     }
+
+    M3uImportDialogs(
+        state = importState,
+        onConfirm = libraryViewModel::confirmM3uImport,
+        onDismiss = libraryViewModel::dismissM3uImport,
+        onOpenPlaylist = { id -> playlists.find { it.id == id }?.let(onPlaylistClick) },
+    )
 }
 
 @Composable
@@ -1332,13 +1350,11 @@ fun PlaylistDetailScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("audio/x-mpegurl")
     ) { uri ->
-        if (uri != null && playlist != null) {
-            try {
-                val m3u = libraryViewModel.exportPlaylistAsM3U(playlist)
-                context.contentResolver.openOutputStream(uri)?.use { it.write(m3u.toByteArray()) }
-                scope.launch { snackbarHostState.showSnackbar("Playlist exported successfully") }
-            } catch (e: Exception) {
-                scope.launch { snackbarHostState.showSnackbar("Export failed: ${e.message}") }
+        val target = playlist
+        if (uri != null && target != null) {
+            scope.launch {
+                val error = libraryViewModel.exportPlaylist(target, uri)
+                snackbarHostState.showSnackbar(if (error == null) "Playlist exported" else "Export failed: $error")
             }
         }
     }
@@ -2439,7 +2455,9 @@ fun LikedSongsScreen(
                 showAddToPlaylistDialog = false
             },
             onCreatePlaylist = { name ->
-                libraryViewModel.createPlaylist(name)
+                libraryViewModel.createPlaylistWithSongs(name, selectedSongs.map { it.id })
+                selectedSongs = emptySet()
+                showAddToPlaylistDialog = false
             }
         )
     }
@@ -2769,7 +2787,9 @@ fun SearchScreen(
                 showAddToPlaylistDialog = false
             },
             onCreatePlaylist = { name ->
-                libraryViewModel.createPlaylist(name)
+                libraryViewModel.createPlaylistWithSongs(name, selectedSongs.map { it.id })
+                selectedSongs = emptySet()
+                showAddToPlaylistDialog = false
             }
         )
     }

@@ -110,6 +110,41 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addSongToPlaylist(ref: PlaylistSongCrossRef)
 
+    // IGNORE, not REPLACE: re-adding a song that's already in the playlist must leave it where
+    // it is instead of moving it to the end (and leaving a hole at its old position).
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertSongRefsIgnoringDuplicates(refs: List<PlaylistSongCrossRef>): List<Long>
+
+    @Query("SELECT COALESCE(MAX(position) + 1, 0) FROM playlist_songs WHERE playlistId = :playlistId")
+    suspend fun nextPosition(playlistId: Long): Int
+
+    // Every playlist's refs in one query, so the playlists screen is built from three flows
+    // (playlists, refs, songs) instead of one query per playlist per song.
+    @Query("SELECT * FROM playlist_songs ORDER BY playlistId ASC, position ASC")
+    fun observeAllSongRefs(): Flow<List<PlaylistSongCrossRef>>
+
+    @Transaction
+    suspend fun deletePlaylistAndSongs(playlist: PlaylistEntity) {
+        clearPlaylist(playlist.id)
+        deletePlaylist(playlist)
+    }
+
+    // Rewrites positions as 0..n-1 in their current order, closing gaps left by removals.
+    @Transaction
+    suspend fun compactPositions(playlistId: Long) {
+        getPlaylistSongRefs(playlistId).forEachIndexed { index, ref ->
+            if (ref.position != index) updateSongPosition(playlistId, ref.songId, index)
+        }
+    }
+
+    @Transaction
+    suspend fun replaceSongs(playlistId: Long, songIds: List<Long>) {
+        clearPlaylist(playlistId)
+        insertSongRefsIgnoringDuplicates(
+            songIds.distinct().mapIndexed { i, id -> PlaylistSongCrossRef(playlistId, id, i) }
+        )
+    }
+
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId")
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long)
 
@@ -137,6 +172,53 @@ interface PlaylistDao {
     // excludes auto-generated Smart Mixes, which backups never contain and shouldn't be merged into.
     @Query("SELECT * FROM playlists WHERE name = :name AND isMix = 0 LIMIT 1")
     suspend fun getPlaylistByName(name: String): PlaylistEntity?
+}
+
+@Dao
+interface SmartPlaylistDao {
+    @Query("SELECT * FROM smart_playlists")
+    fun observeAll(): Flow<List<SmartPlaylistEntity>>
+
+    @Query("SELECT * FROM smart_playlists WHERE playlistId = :playlistId")
+    suspend fun get(playlistId: Long): SmartPlaylistEntity?
+
+    @Upsert
+    suspend fun upsert(entity: SmartPlaylistEntity)
+
+    @Query("DELETE FROM smart_playlists WHERE playlistId = :playlistId")
+    suspend fun delete(playlistId: Long)
+
+    @Query("SELECT * FROM smart_playlists")
+    suspend fun getAll(): List<SmartPlaylistEntity>
+
+    // Smart playlist rules compile to SQL at runtime (SmartPlaylistQueryBuilder); observing
+    // songs, history and liked_songs keeps results live as the library and stats change.
+    @RawQuery(observedEntities = [SongEntity::class, HistoryEntity::class, LikedSongEntity::class])
+    fun observeSongs(query: androidx.sqlite.db.SupportSQLiteQuery): Flow<List<SongEntity>>
+
+    @RawQuery
+    suspend fun querySongs(query: androidx.sqlite.db.SupportSQLiteQuery): List<SongEntity>
+}
+
+@Dao
+interface PlaylistSourceDao {
+    @Query("SELECT * FROM playlist_sources")
+    suspend fun getAll(): List<PlaylistSourceEntity>
+
+    @Query("SELECT * FROM playlist_sources WHERE documentUri = :uri LIMIT 1")
+    suspend fun getByUri(uri: String): PlaylistSourceEntity?
+
+    @Query("SELECT * FROM playlist_sources WHERE playlistId = :playlistId")
+    suspend fun getByPlaylist(playlistId: Long): PlaylistSourceEntity?
+
+    @Upsert
+    suspend fun upsert(entity: PlaylistSourceEntity)
+
+    @Query("DELETE FROM playlist_sources WHERE playlistId = :playlistId")
+    suspend fun delete(playlistId: Long)
+
+    @Query("DELETE FROM playlist_sources")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -373,6 +455,9 @@ interface NavidromeSongDao {
 
     @Query("SELECT * FROM navidrome_songs WHERE numericId = :id")
     suspend fun getSongByNumericId(id: Long): NavidromeSongEntity?
+
+    @Query("SELECT * FROM navidrome_songs WHERE numericId IN (:ids)")
+    suspend fun getSongsByNumericIds(ids: List<Long>): List<NavidromeSongEntity>
 
     @Query("SELECT COUNT(*) FROM navidrome_songs")
     suspend fun count(): Int

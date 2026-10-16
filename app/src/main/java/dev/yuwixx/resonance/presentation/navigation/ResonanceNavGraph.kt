@@ -485,7 +485,8 @@ fun ResonanceNavGraph(
                             }
                         },
                         onCreatePlaylist = { name ->
-                            libraryViewModel.createPlaylist(name)
+                            val songIds = listOfNotNull(playerViewModel.currentSong.value?.id)
+                            libraryViewModel.createPlaylistWithSongs(name, songIds)
                         },
                         onArtistClick = { name -> navController.navigate(Screen.ArtistDetail.createRoute(name)) },
                         onSongClick = { songId -> navController.navigate(Screen.SongDetail.createRoute(songId)) },

@@ -91,6 +91,11 @@ android {
             isIncludeAndroidResources = true
         }
     }
+
+    // Exported Room schemas double as assets for MigrationTestHelper. Robolectric unit tests
+    // read the merged *debug* assets (test-source-set assets aren't packaged for them), so they
+    // go there; release builds don't carry them.
+    sourceSets.getByName("debug").assets.srcDirs(files("$projectDir/schemas"))
 }
 
 dependencies {

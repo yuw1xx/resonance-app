@@ -23,6 +23,7 @@ import dev.yuwixx.resonance.data.database.MIGRATION_5_6
 import dev.yuwixx.resonance.data.database.MIGRATION_6_7
 import dev.yuwixx.resonance.data.database.MIGRATION_7_8
 import dev.yuwixx.resonance.data.database.MIGRATION_8_9
+import dev.yuwixx.resonance.data.database.MIGRATION_9_10
 import dev.yuwixx.resonance.data.database.ResonanceDatabase
 import dev.yuwixx.resonance.data.database.dao.*
 import dev.yuwixx.resonance.data.network.ApiRateLimiter
@@ -50,7 +51,7 @@ object DatabaseModule {
     @Singleton @Provides
     fun provideDatabase(@ApplicationContext ctx: Context): ResonanceDatabase =
         Room.databaseBuilder(ctx, ResonanceDatabase::class.java, "resonance.db")
-            .addMigrations(MIGRATION_1_3, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+            .addMigrations(MIGRATION_1_3, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
             .build()
 
     @Provides fun provideSongDao(db: ResonanceDatabase): SongDao = db.songDao()
@@ -67,6 +68,8 @@ object DatabaseModule {
     @Provides fun provideSongDownloadDao(db: ResonanceDatabase): SongDownloadDao = db.songDownloadDao()
     @Provides fun providePendingStarActionDao(db: ResonanceDatabase): PendingStarActionDao = db.pendingStarActionDao()
     @Provides fun provideArtistInfoDao(db: ResonanceDatabase): ArtistInfoDao = db.artistInfoDao()
+    @Provides fun provideSmartPlaylistDao(db: ResonanceDatabase): SmartPlaylistDao = db.smartPlaylistDao()
+    @Provides fun providePlaylistSourceDao(db: ResonanceDatabase): PlaylistSourceDao = db.playlistSourceDao()
 }
 
 @Module

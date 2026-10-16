@@ -397,8 +397,8 @@ class ShareTransferManager @Inject constructor(
     private suspend fun prepareP2p(song: Song, file: File) {
         if (!ensureP2pInitialized()) return
 
-        val manager = p2pManager!!
-        val channel = p2pChannel!!
+        val manager = p2pManager ?: return
+        val channel = p2pChannel ?: return
 
         suspendCancellableCoroutine { cont ->
             manager.removeGroup(channel, object : WifiP2pManager.ActionListener {

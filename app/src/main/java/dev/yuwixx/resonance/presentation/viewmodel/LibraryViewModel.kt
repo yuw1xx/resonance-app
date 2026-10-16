@@ -37,7 +37,73 @@ class LibraryViewModel @Inject constructor(
     private val navidromeDownloadRepository: NavidromeDownloadRepository,
     private val mixGeneratorManager: MixGeneratorManager,
     private val mixRepository: MixRepository,
+    private val m3uImporter: dev.yuwixx.resonance.data.playlist.M3uImporter,
 ) : ViewModel() {
+
+    // ─── M3U import / export ───
+
+    sealed interface M3uImportState {
+        data object Idle : M3uImportState
+        /** Some picked files clash with existing playlist names; ask how to handle them. */
+        data class ConfirmConflicts(val previews: List<dev.yuwixx.resonance.data.playlist.M3uImporter.Preview>) : M3uImportState
+        data class Importing(val done: Int, val total: Int) : M3uImportState
+        data class Finished(
+            val results: List<dev.yuwixx.resonance.data.playlist.M3uImporter.Result>,
+            val failures: List<String>,
+        ) : M3uImportState
+    }
+
+    private val _m3uImportState = MutableStateFlow<M3uImportState>(M3uImportState.Idle)
+    val m3uImportState: StateFlow<M3uImportState> = _m3uImportState.asStateFlow()
+
+    fun startM3uImport(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            _m3uImportState.value = M3uImportState.Importing(0, uris.size)
+            val previews = m3uImporter.preview(uris)
+            if (previews.any { it.existingPlaylistId != null }) {
+                _m3uImportState.value = M3uImportState.ConfirmConflicts(previews)
+            } else {
+                runM3uImport(uris, dev.yuwixx.resonance.data.playlist.M3uImporter.ConflictMode.KEEP_BOTH)
+            }
+        }
+    }
+
+    fun confirmM3uImport(mode: dev.yuwixx.resonance.data.playlist.M3uImporter.ConflictMode) {
+        val state = _m3uImportState.value as? M3uImportState.ConfirmConflicts ?: return
+        viewModelScope.launch { runM3uImport(state.previews.map { it.uri }, mode) }
+    }
+
+    fun dismissM3uImport() {
+        _m3uImportState.value = M3uImportState.Idle
+    }
+
+    private suspend fun runM3uImport(uris: List<Uri>, mode: dev.yuwixx.resonance.data.playlist.M3uImporter.ConflictMode) {
+        val results = mutableListOf<dev.yuwixx.resonance.data.playlist.M3uImporter.Result>()
+        val failures = mutableListOf<String>()
+        uris.forEachIndexed { i, uri ->
+            _m3uImportState.value = M3uImportState.Importing(i, uris.size)
+            try {
+                results += m3uImporter.import(uri, mode)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failures += e.message ?: m3uImporter.displayNameStem(uri)
+            }
+        }
+        _m3uImportState.value = M3uImportState.Finished(results, failures)
+    }
+
+    /** Writes the playlist to [uri] off the main thread. Returns null on success, or an error. */
+    suspend fun exportPlaylist(playlist: Playlist, uri: Uri): String? =
+        try {
+            m3uImporter.exportToUri(playlist, uri)
+            null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            e.message ?: "Unknown error"
+        }
 
     val downloadStates: StateFlow<Map<Long, SongDownloadEntity>> = navidromeDownloadRepository.downloadStates
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
@@ -164,6 +230,10 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch { playlistRepository.createPlaylist(name) }
     }
 
+    fun createPlaylistWithSongs(name: String, songIds: List<Long>) {
+        viewModelScope.launch { playlistRepository.createPlaylistWithSongs(name, songIds) }
+    }
+
     fun deletePlaylist(id: Long) {
         viewModelScope.launch { playlistRepository.deletePlaylist(id) }
     }
@@ -194,9 +264,6 @@ class LibraryViewModel @Inject constructor(
             }
         }
     }
-
-    fun exportPlaylistAsM3U(playlist: dev.yuwixx.resonance.data.model.Playlist): String =
-        playlistRepository.exportPlaylistAsM3U(playlist)
 
     fun updateSongTags(
         songId: Long,

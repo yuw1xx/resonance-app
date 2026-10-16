@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -289,33 +290,63 @@ fun AnimatedPermissionGate(
     ) { isGranted -> if (isGranted) content() else prompt() }
 }
 
-/** Staggered fade+scale entrance for list items — originated in `LikedSongsScreen`'s song list,
- *  promoted here for reuse across every other list in the app. Apply alongside
- *  `Modifier.animateItem()`: `.animateItem().staggeredEntrance(index)`.
- *
- *  `animateFloatAsState` only animates on a target *change* — seeding it at the real target from
- *  frame one would mean there's never a lower value to animate from, so it would silently never
- *  play. This seeds below target, then flips one frame later via `LaunchedEffect` so it
- *  genuinely animates in. */
+/** Remembers which list items have already played their entrance animation, so items
+ *  scrolling back into view don't fade/scale in again. Hoist one per list and pass it to
+ *  [staggeredEntrance]. Survives configuration changes. */
+private const val UNTRACKED_ENTRANCE_LIMIT = 14
+
+class EntranceTracker internal constructor(internal val seen: MutableSet<Any>) {
+    /** True for items composed in the list's first frame — only those get the cascade delay. */
+    internal var firstFrame = true
+}
+
 @Composable
-fun Modifier.staggeredEntrance(index: Int, capMs: Int = 400): Modifier {
-    var started by remember(index) { mutableStateOf(false) }
-    LaunchedEffect(index) { started = true }
-    val delayMs = (index * 40).coerceAtMost(capMs)
-    val animatedAlpha by animateFloatAsState(
-        targetValue = if (started) 1f else 0f,
-        animationSpec = tween(700, delayMillis = delayMs, easing = EmphasizedDecelerate),
-        label = "stagger_alpha_$index",
-    )
-    val animatedScale by animateFloatAsState(
-        targetValue = if (started) 1f else 0.92f,
-        animationSpec = tween(700, delayMillis = delayMs, easing = EmphasizedDecelerate),
-        label = "stagger_scale_$index",
-    )
+fun rememberEntranceTracker(): EntranceTracker {
+    val seen = rememberSaveable(
+        saver = androidx.compose.runtime.saveable.listSaver(
+            save = { it.seen.map(Any::toString) },
+            restore = { EntranceTracker(it.toMutableSet<Any>()) },
+        )
+    ) { EntranceTracker(HashSet()) }
+    LaunchedEffect(seen) { seen.firstFrame = false }
+    return seen
+}
+
+/** Staggered fade+scale entrance for list items. Apply alongside `Modifier.animateItem()`:
+ *  `.animateItem().staggeredEntrance(index, key, tracker)`.
+ *
+ *  Plays once per item key: the initial screenful cascades in (40ms per index, capped), items
+ *  revealed later by scrolling get a short undelayed fade, and items that already appeared
+ *  (tracked by [tracker]) render immediately — previously every item replayed the full
+ *  animation each time it scrolled back on screen. Animates via graphicsLayer only, so it never
+ *  triggers recomposition or relayout. */
+@Composable
+fun Modifier.staggeredEntrance(
+    index: Int,
+    key: Any? = null,
+    tracker: EntranceTracker? = null,
+    capMs: Int = 320,
+): Modifier {
+    val trackKey = key?.toString()
+    val alreadySeen = trackKey != null && tracker != null && trackKey in tracker.seen
+    if (alreadySeen) return this
+    // Untracked lists can't tell "first appearance" from "scrolled back into view", so only the
+    // initial screenful animates there; deeper items just appear.
+    if (tracker == null && index >= UNTRACKED_ENTRANCE_LIMIT) return this
+    val cascade = tracker == null || tracker.firstFrame
+    val progress = remember(trackKey ?: index) { Animatable(0f) }
+    val spec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    LaunchedEffect(trackKey ?: index) {
+        if (cascade) delay((index * 40L).coerceAtMost(capMs.toLong()))
+        progress.animateTo(1f, spec)
+        if (trackKey != null) tracker?.seen?.add(trackKey)
+    }
     return this.graphicsLayer {
-        alpha = animatedAlpha
-        scaleX = animatedScale
-        scaleY = animatedScale
+        val p = progress.value
+        alpha = p
+        val scale = 0.94f + 0.06f * p
+        scaleX = scale
+        scaleY = scale
     }
 }
 
@@ -323,6 +354,60 @@ fun Modifier.staggeredEntrance(index: Int, capMs: Int = 400): Modifier {
 internal fun Modifier.preferredFrameRateSafe(hz: Float): Modifier =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) preferredFrameRate(hz)
     else this
+
+/** Playback progress (0..1) as an animated State that is only ever *read* inside draw
+ *  lambdas — position ticks then invalidate a single draw pass instead of recomposing the whole
+ *  seekbar (and its parent) several times a second. */
+@Composable
+private fun rememberAnimatedProgress(position: State<Long>, durationMs: Long): State<Float> {
+    val progress = remember { Animatable(0f) }
+    val currentDuration by rememberUpdatedState(durationMs)
+    LaunchedEffect(position) {
+        snapshotFlow {
+            val d = currentDuration
+            if (d > 0) (position.value.toFloat() / d).coerceIn(0f, 1f) else 0f
+        }.collect { target ->
+            // Big jumps (a seek, a track change) snap; normal ticks glide.
+            if (kotlin.math.abs(target - progress.value) > 0.05f) progress.snapTo(target)
+            else progress.animateTo(target, tween(durationMillis = 170, easing = LinearEasing))
+        }
+    }
+    return progress.asState()
+}
+
+/** Shared tap/drag handling for the seekbars: the thumb follows the finger live, but the actual
+ *  seek is issued once on release (seeking on every move event flooded the player with seeks). */
+private fun Modifier.seekGestures(
+    durationMs: () -> Long,
+    onDragChange: (dragging: Boolean, fraction: Float) -> Unit,
+    onSeek: () -> (Long) -> Unit,
+    onTick: () -> Unit,
+): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            val down = awaitPointerEvent()
+            val first = down.changes.firstOrNull() ?: continue
+            if (!first.pressed) continue
+            var fraction = (first.position.x / size.width).coerceIn(0f, 1f)
+            onDragChange(true, fraction)
+            onTick()
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == first.id } ?: break
+                val newFraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                if (newFraction != fraction) {
+                    fraction = newFraction
+                    onDragChange(true, fraction)
+                }
+                change.consume()
+                if (!change.pressed) break
+            }
+            onSeek()((fraction * durationMs()).toLong())
+            onTick()
+            onDragChange(false, fraction)
+        }
+    }
+}
 
 @Composable
 fun MaterialYou3Seekbar(
@@ -336,33 +421,28 @@ fun MaterialYou3Seekbar(
 ) {
     val haptics = LocalHapticFeedback.current
     val config = LocalAppearanceConfig.current
-    val positionMs by position
-
-    val targetProgress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-    val animatedProgress by animateFloatAsState(
-        targetValue = targetProgress,
-        animationSpec = tween(durationMillis = 170, easing = FastOutSlowInEasing),
-        label = "m3_progress",
-    )
+    val progress = rememberAnimatedProgress(position, durationMs)
+    val currentOnSeek by rememberUpdatedState(onSeek)
+    val currentDuration by rememberUpdatedState(durationMs)
+    val hapticsEnabled by rememberUpdatedState(config.hapticEnabled)
 
     var isDragging by remember { mutableStateOf(false) }
-    var dragProgress by remember { mutableFloatStateOf(0f) }
-    val displayProgress = if (isDragging) dragProgress else animatedProgress
+    val dragProgress = remember { mutableFloatStateOf(0f) }
 
     // A thin track reads as a plain rectangle no matter its corner radius (8dp tall with a 4dp
     // radius is imperceptible as "rounded" at normal viewing distance) — 14dp is thick enough
     // for the pill shape to actually be visible, matching the Android 13+ media-notification
     // seekbar this style is meant to evoke.
-    val activeHeight by animateDpAsState(
+    val activeHeight = animateDpAsState(
         targetValue = if (isDragging) 22.dp else 14.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
         label = "m3_height"
     )
     // Always visible, not just while dragging — on a track this thick, a bare color transition
     // alone doesn't read as "there's a handle here."
-    val thumbHeight by animateDpAsState(
+    val thumbHeight = animateDpAsState(
         targetValue = if (isDragging) 32.dp else 22.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
         label = "m3_thumb_height"
     )
 
@@ -371,26 +451,16 @@ fun MaterialYou3Seekbar(
             .fillMaxWidth()
             .height(48.dp)
             .preferredFrameRateSafe(120f)
-            .pointerInput(durationMs) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull() ?: continue
-                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                        dragProgress = fraction
-                        if (change.pressed) {
-                            isDragging = true
-                            onSeek((fraction * durationMs).toLong())
-                            if (config.hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        } else {
-                            isDragging = false
-                        }
-                    }
-                }
-            }
+            .seekGestures(
+                durationMs = { currentDuration },
+                onDragChange = { dragging, fraction -> isDragging = dragging; dragProgress.floatValue = fraction },
+                onSeek = { currentOnSeek },
+                onTick = { if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+            )
     ) {
+        val displayProgress = if (isDragging) dragProgress.floatValue else progress.value
         val width = size.width
-        val height = activeHeight.toPx()
+        val height = activeHeight.value.toPx()
         val cy = size.height / 2f
         val splitX = displayProgress * width
         val thumbWidth = 4.dp.toPx()
@@ -418,7 +488,7 @@ fun MaterialYou3Seekbar(
             )
         }
 
-        val thumbH = thumbHeight.toPx()
+        val thumbH = thumbHeight.value.toPx()
         drawRoundRect(
             color = playedColor,
             topLeft = Offset(splitX - thumbWidth / 2f, cy - thumbH / 2f),
@@ -444,17 +514,15 @@ fun WaveformSeekbar(
 ) {
     val haptics = LocalHapticFeedback.current
     val config = LocalAppearanceConfig.current
-    val positionMs by position
+    val progress = rememberAnimatedProgress(position, durationMs)
+    val currentOnSeek by rememberUpdatedState(onSeek)
+    val currentDuration by rememberUpdatedState(durationMs)
+    val hapticsEnabled by rememberUpdatedState(config.hapticEnabled)
 
-    val targetProgress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-    val animatedProgress by animateFloatAsState(
-        targetValue = targetProgress,
-        animationSpec = tween(durationMillis = 170, easing = FastOutSlowInEasing),
-        label = "waveform_progress",
-    )
-
+    // Both animated values are read only inside the draw block, so the breathing effect costs
+    // a redraw per frame instead of a recomposition per frame.
     val infiniteTransition = rememberInfiniteTransition(label = "wave_breathe")
-    val breathe by infiniteTransition.animateFloat(
+    val breathe = infiniteTransition.animateFloat(
         initialValue = 0.96f,
         targetValue = 1.04f,
         animationSpec = infiniteRepeatable(
@@ -463,15 +531,14 @@ fun WaveformSeekbar(
         ),
         label = "breathe_amp",
     )
-    val ampMultiplier by animateFloatAsState(
-        targetValue = if (isPlaying) breathe else 1f,
-        animationSpec = tween(560),
-        label = "amp_multiplier",
+    val playingBlend = animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0f,
+        animationSpec = MaterialTheme.motionScheme.slowEffectsSpec(),
+        label = "amp_blend",
     )
 
     var isDragging by remember { mutableStateOf(false) }
-    var dragProgress by remember { mutableFloatStateOf(0f) }
-    val displayProgress = if (isDragging) dragProgress else animatedProgress
+    val dragProgress = remember { mutableFloatStateOf(0f) }
 
     val amplitudes = remember(waveformData) {
         waveformData?.amplitudes ?: FloatArray(300) { i ->
@@ -488,72 +555,46 @@ fun WaveformSeekbar(
             .fillMaxWidth()
             .height(64.dp)
             .preferredFrameRateSafe(120f)
-            .pointerInput(durationMs) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull() ?: continue
-                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                        dragProgress = fraction
-                        if (change.pressed) {
-                            isDragging = true
-                            onSeek((fraction * durationMs).toLong())
-                            if (config.hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        } else {
-                            isDragging = false
-                        }
-                    }
-                }
-            }
-            .drawWithCache {
-                onDrawWithContent {
-                    val barW = barWidthDp.toPx()
-                    val gap = barSpacingDp.toPx()
-                    val step = barW + gap
-                    val count = (size.width / step).toInt().coerceAtLeast(1)
-                    val cy = size.height / 2f
-                    val splitX = displayProgress * size.width
-
-                    val safeProgress = displayProgress.coerceIn(0.001f, 0.999f)
-                    val smoothBrush = Brush.horizontalGradient(
-                        0f to playedColor,
-                        safeProgress to playedColor,
-                        safeProgress to remainingColor,
-                        1f to remainingColor,
-                        startX = 0f,
-                        endX = size.width
-                    )
-
-                    for (i in 0 until count) {
-                        val barCX = i * step + barW / 2f
-
-                        val ampIdx = (i.toFloat() / count * amplitudes.size).toInt()
-                            .coerceIn(0, amplitudes.lastIndex)
-                        val rawAmp = amplitudes[ampIdx].coerceAtLeast(minHeightFraction)
-
-                        val distFromSplit = abs(barCX - splitX) / size.width
-                        val lift = if (distFromSplit < 0.04f) {
-                            val t = 1f - (distFromSplit / 0.04f)
-                            1f + t * t * 0.55f
-                        } else 1f
-
-                        val barH = (rawAmp * ampMultiplier * lift * size.height)
-                            .coerceIn(size.height * minHeightFraction, size.height * 0.95f)
-
-                        val top = cy - barH / 2f
-                        val bottom = cy + barH / 2f
-
-                        drawLine(
-                            brush = smoothBrush,
-                            start = Offset(barCX, top),
-                            end = Offset(barCX, bottom),
-                            strokeWidth = barW,
-                            cap = StrokeCap.Round,
-                        )
-                    }
-                }
-            },
+            .seekGestures(
+                durationMs = { currentDuration },
+                onDragChange = { dragging, fraction -> isDragging = dragging; dragProgress.floatValue = fraction },
+                onSeek = { currentOnSeek },
+                onTick = { if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+            ),
     ) {
+        val displayProgress = if (isDragging) dragProgress.floatValue else progress.value
+        val ampMultiplier = 1f + (breathe.value - 1f) * playingBlend.value
+        val barW = barWidthDp.toPx()
+        val gap = barSpacingDp.toPx()
+        val step = barW + gap
+        val count = (size.width / step).toInt().coerceAtLeast(1)
+        val cy = size.height / 2f
+        val splitX = displayProgress * size.width
+
+        for (i in 0 until count) {
+            val barCX = i * step + barW / 2f
+
+            val ampIdx = (i.toFloat() / count * amplitudes.size).toInt()
+                .coerceIn(0, amplitudes.lastIndex)
+            val rawAmp = amplitudes[ampIdx].coerceAtLeast(minHeightFraction)
+
+            val distFromSplit = abs(barCX - splitX) / size.width
+            val lift = if (distFromSplit < 0.04f) {
+                val t = 1f - (distFromSplit / 0.04f)
+                1f + t * t * 0.55f
+            } else 1f
+
+            val barH = (rawAmp * ampMultiplier * lift * size.height)
+                .coerceIn(size.height * minHeightFraction, size.height * 0.95f)
+
+            drawLine(
+                color = if (barCX <= splitX) playedColor else remainingColor,
+                start = Offset(barCX, cy - barH / 2f),
+                end = Offset(barCX, cy + barH / 2f),
+                strokeWidth = barW,
+                cap = StrokeCap.Round,
+            )
+        }
     }
 }
 
