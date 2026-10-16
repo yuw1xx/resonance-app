@@ -560,7 +560,7 @@ private fun AppearanceSection(prefs: ResonancePreferences) {
         )
         SegmentedSettingsItem(
             title = "Seekbar Style",
-            options = listOf("Standard" to "STANDARD", "Waveform" to "WAVEFORM", "Material You 3" to "MATERIAL_YOU_3"),
+            options = listOf("Standard" to "STANDARD", "Waveform" to "WAVEFORM", "M3" to "MATERIAL_YOU_3"),
             selected = seekbarStyle,
             onSelect = { scope.launch { prefs.setSeekbarStyle(it) } },
         )
