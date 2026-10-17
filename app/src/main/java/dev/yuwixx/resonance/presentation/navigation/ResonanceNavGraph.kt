@@ -184,6 +184,8 @@ fun ResonanceNavGraph(
     // Hide the bottom bar and player sheet entirely while setup is open, and while the
     // keyboard is up (they'd otherwise sit on top of it).
     val isSetupRoute = currentRoute == Screen.Setup.route
+    // Editing pages get the full height; the mini player stays for play/pause while syncing lyrics.
+    val isEditorRoute = currentRoute == Screen.LyricsEditor.route || currentRoute == Screen.TagEditor.route
     val imeVisible = WindowInsets.isImeVisible
 
     // "Open the player" expands the Now Playing sheet.
@@ -242,12 +244,14 @@ fun ResonanceNavGraph(
 
     val motion = MaterialTheme.motionScheme
     val density = LocalDensity.current
-    val showBottomBar = !isSetupRoute && isFirstRun == false && !imeVisible
+    val showBottomBar = !isSetupRoute && !isEditorRoute && isFirstRun == false && !imeVisible
     // Height of the bottom bar including the system navigation inset, known up front so the
     // collapsed sheet and the content padding are right from the first frame.
     val navInsetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomBarHeight = if (!showBottomBar) 0.dp
-        else if (floatingNav) FloatingNavHeight + FloatingNavVerticalMargin * 2 + navInsetBottom
+    val bottomBarHeight = if (!showBottomBar) {
+        // Without the bar, the mini player on editor pages still has to clear the system navigation.
+        if (isEditorRoute && !imeVisible) navInsetBottom else 0.dp
+    } else if (floatingNav) FloatingNavHeight + FloatingNavVerticalMargin * 2 + navInsetBottom
         else ShortNavHeight + navInsetBottom
     val bottomBarHeightPx = with(density) { bottomBarHeight.roundToPx() }
     // Effects spec, not spatial: padding must not overshoot (a bouncy spring went below
