@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.yuwixx.resonance.data.repository.MusicRepository
+import kotlinx.coroutines.CancellationException
 
 @HiltWorker
 class AutoScanWorker @AssistedInject constructor(
@@ -19,6 +20,8 @@ class AutoScanWorker @AssistedInject constructor(
         return try {
             musicRepository.syncWithMediaStore()
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.retry()
         }

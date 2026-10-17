@@ -1,5 +1,13 @@
 package dev.yuwixx.resonance.presentation.components
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import android.provider.Settings
+import android.net.Uri
+import android.content.Intent
 import android.Manifest
 import android.os.Build
 import androidx.compose.foundation.layout.*
@@ -27,46 +35,68 @@ fun PermissionWrapper(
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
 
-    val permissionState = rememberPermissionState(permission)
+    val context = LocalContext.current
+    var requested by rememberSaveable { mutableStateOf(false) }
+    val permissionState = rememberPermissionState(permission) { requested = true }
+    // Asked before and Android no longer shows the prompt: only the system settings can grant it.
+    val permanentlyDenied = requested && !permissionState.status.isGranted && !permissionState.status.shouldShowRationale
 
-    if (permissionState.status.isGranted) {
-        content()
-    } else {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+    AnimatedPermissionGate(
+        granted = permissionState.status.isGranted,
+        prompt = {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Rounded.Storage,
-                    null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    "Music Library Access",
-                    style = MaterialTheme.typography.headlineSmall,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Resonance needs permission to access your audio files to build your library.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = { permissionState.launchPermissionRequest() },
-                    shape = MaterialTheme.shapes.medium
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Text("Grant Permission")
+                    Icon(
+                        Icons.Rounded.Storage,
+                        null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "Music Library Access",
+                        style = MaterialTheme.typography.headlineSmall,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Resonance needs permission to access your audio files to build your library.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    if (permanentlyDenied) {
+                        Button(
+                            onClick = {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.fromParts("package", context.packageName, null),
+                                    )
+                                )
+                            },
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text("Open settings")
+                        }
+                    } else {
+                        Button(
+                            onClick = { permissionState.launchPermissionRequest() },
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Text("Grant Permission")
+                        }
+                    }
                 }
             }
-        }
-    }
+        },
+        content = content,
+    )
 }

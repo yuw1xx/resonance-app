@@ -30,7 +30,7 @@ class MixRepository @Inject constructor(
 ) {
     suspend fun generateAndPersistMixes() = withContext(Dispatchers.Default) {
         when (prefs.musicSource.first()) {
-            MusicSource.LOCAL     -> generateLocalMixes()
+            MusicSource.LOCAL -> generateLocalMixes()
             MusicSource.NAVIDROME -> generateNavidromeMixes()
         }
     }
@@ -150,8 +150,14 @@ class MixRepository @Inject constructor(
     private suspend fun upsertMixPlaylist(type: MixType, name: String, source: String, now: Long): Long {
         val existing = playlistDao.getMixByType(type.name)
         return if (existing != null) {
+            // After switching between local and Navidrome the mix's songs live in the other
+            // table; clear both so the old source's songs don't linger.
+            if (existing.mixSource != source) {
+                playlistDao.clearPlaylist(existing.id)
+                mixNavidromeSongDao.clearPlaylist(existing.id)
+            }
             playlistDao.updatePlaylist(
-                existing.copy(name = name, dateModified = now, lastMixGenerated = now)
+                existing.copy(name = name, mixSource = source, dateModified = now, lastMixGenerated = now)
             )
             existing.id
         } else {

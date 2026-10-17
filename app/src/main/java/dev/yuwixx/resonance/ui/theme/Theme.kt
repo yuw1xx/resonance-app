@@ -7,71 +7,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import com.materialkolor.dynamiccolor.ColorSpec
+import com.materialkolor.dynamiccolor.DynamicColor
+import com.materialkolor.dynamiccolor.DynamicScheme
+import com.materialkolor.dynamiccolor.MaterialDynamicColors
+import com.materialkolor.hct.Hct
+import com.materialkolor.scheme.SchemeExpressive
+import com.materialkolor.scheme.SchemeFidelity
+import com.materialkolor.scheme.SchemeNeutral
+import com.materialkolor.scheme.SchemeTonalSpot
+import com.materialkolor.scheme.SchemeVibrant
 
-val Violet80 = Color(0xFFCBB8FF)
-val Violet40 = Color(0xFF6650A4)
-val VioletContainer = Color(0xFF3D1F6B)
-val VioletContainerLight = Color(0xFFEADDFF)
-
-val Pink80 = Color(0xFFFFB3C1)
-val Pink40 = Color(0xFF984061)
-
-val Surface0 = Color(0xFF0E0A17)
-val Surface1 = Color(0xFF1A1426)
-val Surface2 = Color(0xFF251D36)
-val Surface3 = Color(0xFF312848)
-
-val OnSurface = Color(0xFFE9E0F3)
-val OnSurfaceVariant = Color(0xFFCBC2DB)
-
-val DarkColorScheme = darkColorScheme(
-    primary = Violet80,
-    onPrimary = Color(0xFF21005D),
-    primaryContainer = VioletContainer,
-    onPrimaryContainer = Color(0xFFEADDFF),
-    secondary = Pink80,
-    onSecondary = Color(0xFF550027),
-    secondaryContainer = Color(0xFF3E0020),
-    onSecondaryContainer = Color(0xFFFFD9E2),
-    tertiary = Color(0xFF80DEEA),
-    onTertiary = Color(0xFF00363C),
-    background = Surface0,
-    onBackground = OnSurface,
-    surface = Surface1,
-    onSurface = OnSurface,
-    surfaceVariant = Surface2,
-    onSurfaceVariant = OnSurfaceVariant,
-    outline = Color(0xFF958DA5),
-    outlineVariant = Color(0xFF4A4458),
-    surfaceContainer = Surface2,
-    surfaceContainerHigh = Surface3,
-    surfaceContainerHighest = Color(0xFF3D305A),
-)
-
-val LightColorScheme = lightColorScheme(
-    primary = Violet40,
-    onPrimary = Color.White,
-    primaryContainer = VioletContainerLight,
-    onPrimaryContainer = Color(0xFF21005D),
-    secondary = Pink40,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFFFD9E2),
-    onSecondaryContainer = Color(0xFF3E0020),
-    background = Color(0xFFFFFBFE),
-    onBackground = Color(0xFF1C1B1F),
-    surface = Color(0xFFFFFBFE),
-    onSurface = Color(0xFF1C1B1F),
-    surfaceVariant = Color(0xFFE7E0EC),
-    onSurfaceVariant = Color(0xFF49454F),
-    surfaceContainer = Color(0xFFF3EDF7),
-    surfaceContainerHigh = Color(0xFFECE6F0),
-    surfaceContainerHighest = Color(0xFFE6E0EA),
-)
+/** Brand seed used when neither wallpaper colors nor a preset are active. */
+val ResonanceSeed = Color(0xFF6750A4)
 
 val PresetColors = listOf(
     Color(0xFF6750A4),
@@ -83,16 +37,122 @@ val PresetColors = listOf(
     Color(0xFF006D3B),
 )
 
-val ExpressiveShapes = Shapes(
-    extraSmall = RoundedCornerShape(12.dp),
-    small = RoundedCornerShape(16.dp),
-    medium = RoundedCornerShape(24.dp),
-    large = RoundedCornerShape(32.dp),
-    extraLarge = RoundedCornerShape(40.dp)
+/** How a seed color spreads into a full scheme; the same choices as Android's wallpaper picker. */
+enum class PaletteStyle(val label: String) {
+    TONAL_SPOT("Tonal"),
+    VIBRANT("Vibrant"),
+    EXPRESSIVE("Expressive"),
+    FIDELITY("Faithful"),
+    NEUTRAL("Neutral");
+
+    companion object {
+        fun from(name: String?): PaletteStyle = entries.firstOrNull { it.name == name } ?: TONAL_SPOT
+    }
+}
+
+private val dynamicColors = MaterialDynamicColors()
+
+/** Builds a full Material 3 scheme, every container and fixed role included, from one seed. */
+fun seedColorScheme(seed: Color, dark: Boolean, style: PaletteStyle = PaletteStyle.TONAL_SPOT): ColorScheme {
+    val hct = Hct.fromInt(seed.toArgb())
+    val spec = ColorSpec.SpecVersion.SPEC_2025
+    val platform = DynamicScheme.Platform.PHONE
+    val scheme: DynamicScheme = when (style) {
+        PaletteStyle.TONAL_SPOT -> SchemeTonalSpot(hct, dark, 0.0, spec, platform)
+        PaletteStyle.VIBRANT -> SchemeVibrant(hct, dark, 0.0, spec, platform)
+        PaletteStyle.EXPRESSIVE -> SchemeExpressive(hct, dark, 0.0, spec, platform)
+        PaletteStyle.FIDELITY -> SchemeFidelity(hct, dark, 0.0, spec, platform)
+        PaletteStyle.NEUTRAL -> SchemeNeutral(hct, dark, 0.0, spec, platform)
+    }
+    fun DynamicColor.c() = Color(getArgb(scheme))
+    with(dynamicColors) {
+        val base = if (dark) darkColorScheme() else lightColorScheme()
+        return base.copy(
+            primary = primary.c(),
+            onPrimary = onPrimary.c(),
+            primaryContainer = primaryContainer.c(),
+            onPrimaryContainer = onPrimaryContainer.c(),
+            inversePrimary = inversePrimary.c(),
+            secondary = secondary.c(),
+            onSecondary = onSecondary.c(),
+            secondaryContainer = secondaryContainer.c(),
+            onSecondaryContainer = onSecondaryContainer.c(),
+            tertiary = tertiary.c(),
+            onTertiary = onTertiary.c(),
+            tertiaryContainer = tertiaryContainer.c(),
+            onTertiaryContainer = onTertiaryContainer.c(),
+            background = background.c(),
+            onBackground = onBackground.c(),
+            surface = surface.c(),
+            onSurface = onSurface.c(),
+            surfaceVariant = surfaceVariant.c(),
+            onSurfaceVariant = onSurfaceVariant.c(),
+            surfaceTint = surfaceTint.c(),
+            inverseSurface = inverseSurface.c(),
+            inverseOnSurface = inverseOnSurface.c(),
+            error = error.c(),
+            onError = onError.c(),
+            errorContainer = errorContainer.c(),
+            onErrorContainer = onErrorContainer.c(),
+            outline = outline.c(),
+            outlineVariant = outlineVariant.c(),
+            scrim = scrim.c(),
+            surfaceBright = surfaceBright.c(),
+            surfaceDim = surfaceDim.c(),
+            surfaceContainer = surfaceContainer.c(),
+            surfaceContainerHigh = surfaceContainerHigh.c(),
+            surfaceContainerHighest = surfaceContainerHighest.c(),
+            surfaceContainerLow = surfaceContainerLow.c(),
+            surfaceContainerLowest = surfaceContainerLowest.c(),
+            primaryFixed = primaryFixed.c(),
+            primaryFixedDim = primaryFixedDim.c(),
+            onPrimaryFixed = onPrimaryFixed.c(),
+            onPrimaryFixedVariant = onPrimaryFixedVariant.c(),
+            secondaryFixed = secondaryFixed.c(),
+            secondaryFixedDim = secondaryFixedDim.c(),
+            onSecondaryFixed = onSecondaryFixed.c(),
+            onSecondaryFixedVariant = onSecondaryFixedVariant.c(),
+            tertiaryFixed = tertiaryFixed.c(),
+            tertiaryFixedDim = tertiaryFixedDim.c(),
+            onTertiaryFixed = onTertiaryFixed.c(),
+            onTertiaryFixedVariant = onTertiaryFixedVariant.c(),
+        )
+    }
+}
+
+/** True-black variant: background/surface become pure black (OLED pixels off) while the
+ *  container ladder is pulled toward black but keeps its tint and its relative steps, so cards,
+ *  sheets and nav bars stay distinguishable from the background. */
+fun ColorScheme.toAmoled(): ColorScheme = copy(
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceDim = Color.Black,
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = lerp(surfaceContainerLow, Color.Black, 0.6f),
+    surfaceContainer = lerp(surfaceContainer, Color.Black, 0.5f),
+    surfaceContainerHigh = lerp(surfaceContainerHigh, Color.Black, 0.4f),
+    surfaceContainerHighest = lerp(surfaceContainerHighest, Color.Black, 0.3f),
+    surfaceVariant = lerp(surfaceVariant, Color.Black, 0.4f),
+    surfaceBright = lerp(surfaceBright, Color.Black, 0.3f),
 )
 
-val LocalDynamicColorSeed = compositionLocalOf<Color?> { null }
+/** Shape scale from the Corner radius setting; 28 gives the M3 Expressive defaults. */
+fun resonanceShapes(cornerRadius: Int): Shapes {
+    val f = (cornerRadius / 28f).coerceIn(0f, 2f)
+    fun r(base: Int) = RoundedCornerShape((base * f).dp)
+    return Shapes(
+        extraSmall = r(6),
+        small = r(10),
+        medium = r(16),
+        large = r(22),
+        largeIncreased = r(26),
+        extraLarge = r(30),
+        extraLargeIncreased = r(34),
+        extraExtraLarge = r(48),
+    )
+}
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ResonanceTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -100,94 +160,39 @@ fun ResonanceTheme(
     systemDynamicEnabled: Boolean = true,
     cornerRadius: Int = 28,
     amoledMode: Boolean = false,
+    paletteStyle: PaletteStyle = PaletteStyle.TONAL_SPOT,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val colorScheme = when {
-        dynamicColorSeed != null -> {
-            if (darkTheme) {
-                darkColorScheme(
-                    primary = dynamicColorSeed,
-                    onPrimary = Color.Black,
-                    primaryContainer = dynamicColorSeed.copy(alpha = 0.3f),
-                    onPrimaryContainer = Color.White,
-                    secondary = dynamicColorSeed,
-                    onSecondary = Color.Black,
-                    secondaryContainer = dynamicColorSeed.copy(alpha = 0.2f),
-                    onSecondaryContainer = Color.White,
-                    tertiary = dynamicColorSeed,
-                    background = Color(0xFF121212),
-                    onBackground = Color.White,
-                    surface = Color(0xFF121212),
-                    onSurface = Color.White,
-                    surfaceVariant = Color(0xFF222222),
-                    onSurfaceVariant = Color.LightGray,
-                    outline = dynamicColorSeed.copy(alpha = 0.5f)
-                )
-            } else {
-                lightColorScheme(
-                    primary = dynamicColorSeed,
-                    onPrimary = Color.White,
-                    primaryContainer = dynamicColorSeed.copy(alpha = 0.2f),
-                    onPrimaryContainer = dynamicColorSeed,
-                    secondary = dynamicColorSeed,
-                    onSecondary = Color.White,
-                    secondaryContainer = dynamicColorSeed.copy(alpha = 0.1f),
-                    onSecondaryContainer = dynamicColorSeed,
-                    tertiary = dynamicColorSeed,
-                    background = Color.White,
-                    onBackground = Color.Black,
-                    surface = Color.White,
-                    onSurface = Color.Black,
-                    surfaceVariant = Color(0xFFF5F5F5),
-                    onSurfaceVariant = Color.DarkGray,
-                    outline = dynamicColorSeed.copy(alpha = 0.5f)
-                )
-            }
+    val baseScheme = remember(darkTheme, dynamicColorSeed, systemDynamicEnabled, paletteStyle) {
+        when {
+            dynamicColorSeed != null -> seedColorScheme(dynamicColorSeed, darkTheme, paletteStyle)
+            systemDynamicEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            else -> seedColorScheme(ResonanceSeed, darkTheme, paletteStyle)
         }
-        systemDynamicEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (darkTheme) dynamicDarkColorScheme(context)
-            else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
     }
-
-    val finalColorScheme = if (amoledMode && darkTheme) {
-        colorScheme.copy(
-            background = Color.Black,
-            surface = Color.Black,
-            surfaceVariant = Color(0xFF0D0D0D),
-            surfaceContainer = Color(0xFF111111),
-            surfaceContainerHigh = Color(0xFF181818),
-            surfaceContainerHighest = Color(0xFF1F1F1F),
-        )
-    } else colorScheme
+    val colorScheme = remember(baseScheme, amoledMode, darkTheme) {
+        if (amoledMode && darkTheme) baseScheme.toAmoled() else baseScheme
+    }
+    val shapes = remember(cornerRadius) { resonanceShapes(cornerRadius) }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
         }
     }
 
-    val dynamicShapes = Shapes(
-        extraSmall = RoundedCornerShape((cornerRadius * 0.4f).dp),
-        small = RoundedCornerShape((cornerRadius * 0.6f).dp),
-        medium = RoundedCornerShape(cornerRadius.dp),
-        large = RoundedCornerShape((cornerRadius * 1.2f).dp),
-        extraLarge = RoundedCornerShape((cornerRadius * 1.5f).dp)
+    MaterialExpressiveTheme(
+        colorScheme = colorScheme,
+        motionScheme = MotionScheme.expressive(),
+        shapes = shapes,
+        typography = ResonanceTypography,
+        content = content,
     )
-
-    CompositionLocalProvider(
-        LocalDynamicColorSeed provides dynamicColorSeed,
-    ) {
-        MaterialTheme(
-            colorScheme = finalColorScheme,
-            typography = ResonanceTypography,
-            shapes = dynamicShapes,
-            content = content,
-        )
-    }
 }

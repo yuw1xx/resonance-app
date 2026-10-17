@@ -5,15 +5,16 @@
     <!-- Signature-level: only this app (or another app signed with the same key) can send
          the home-screen widget's playback-control broadcasts. -->
     <permission
-        android:name="dev.yuwixx.resonance.permission.WIDGET_CONTROL"
+        android:name="${applicationId}.permission.WIDGET_CONTROL"
         android:protectionLevel="signature" />
-    <uses-permission android:name="dev.yuwixx.resonance.permission.WIDGET_CONTROL" />
+    <uses-permission android:name="${applicationId}.permission.WIDGET_CONTROL" />
 
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
@@ -38,18 +39,22 @@
     <application
         android:name=".ResonanceApp"
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Resonance"
+        android:enableOnBackInvokedCallback="true"
         android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:theme="@style/Theme.Resonance">
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Resonance.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

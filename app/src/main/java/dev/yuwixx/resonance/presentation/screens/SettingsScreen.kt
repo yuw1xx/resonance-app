@@ -1,24 +1,23 @@
-// Multi-level settings UI: a top-level menu of categories that each drill into their own
-// page (Appearance, Playback, Audio, Library, Navidrome, Last.fm, History, Data, About, …).
 package dev.yuwixx.resonance.presentation.screens
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Login
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,37 +28,52 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.documentfile.provider.DocumentFile
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.APP_VERSION
 import dev.yuwixx.resonance.data.model.MusicSource
+import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.LastFmAuthState
+import dev.yuwixx.resonance.data.repository.MalojaRepository
 import dev.yuwixx.resonance.data.repository.NavidromeConnectionState
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
-import dev.yuwixx.resonance.presentation.components.BigScreenTitle
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
+import dev.yuwixx.resonance.presentation.components.AnimatedStateSwap
 import dev.yuwixx.resonance.presentation.components.SectionCard
 import dev.yuwixx.resonance.presentation.components.SectionDivider
 import dev.yuwixx.resonance.presentation.components.SectionSubHeader
+import dev.yuwixx.resonance.presentation.components.count
+import dev.yuwixx.resonance.presentation.components.formatFileSize
+import dev.yuwixx.resonance.presentation.components.rememberHaptics
 import dev.yuwixx.resonance.presentation.navigation.navItems
 import dev.yuwixx.resonance.presentation.viewmodel.BackupUiState
 import dev.yuwixx.resonance.presentation.viewmodel.BackupViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.SettingsViewModel
 import dev.yuwixx.resonance.presentation.viewmodel.ShareViewModel
+import dev.yuwixx.resonance.ui.theme.BrandColors
+import dev.yuwixx.resonance.ui.theme.PaletteStyle
 import dev.yuwixx.resonance.ui.theme.PresetColors
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 enum class SettingsCategory(val title: String, val icon: ImageVector) {
     Main("Settings", Icons.Rounded.Settings),
@@ -88,7 +102,10 @@ private val settingsGroups = listOf(
     SettingsGroup("Audio & Playback",  listOf(SettingsCategory.Playback, SettingsCategory.Audio)),
     SettingsGroup("Library",           listOf(SettingsCategory.Library, SettingsCategory.Navidrome)),
     SettingsGroup("Online Services",   listOf(SettingsCategory.OnlineServices)),
-    SettingsGroup("System",            listOf(SettingsCategory.Notification, SettingsCategory.History, SettingsCategory.Updates, SettingsCategory.Data)),
+    SettingsGroup(
+        "System",
+        listOf(SettingsCategory.Notification, SettingsCategory.History, SettingsCategory.Updates, SettingsCategory.Data),
+    ),
     SettingsGroup("Info",              listOf(SettingsCategory.About)),
 )
 
@@ -98,10 +115,10 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onNavigateToLicenses: () -> Unit,
     onNavigateToEqualizer: () -> Unit,
+    onNavigateToMetadataEnrichment: () -> Unit = {},
     libraryViewModel: LibraryViewModel,
     settingsViewModel: SettingsViewModel,
 ) {
-    val scope = rememberCoroutineScope()
     val prefs = libraryViewModel.prefs
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -111,116 +128,28 @@ fun SettingsScreen(
         currentCategory = SettingsCategory.Main
     }
 
-    val updateFreq by settingsViewModel.updateFrequency.collectAsState()
-
-    val dynamicColor by prefs.dynamicColorEnabled.collectAsState(initial = true)
-    val presetColorInt by prefs.presetColor.collectAsState(initial = null)
-    val darkTheme by prefs.darkTheme.collectAsState(initial = "SYSTEM")
-    val cornerRadius by prefs.cornerRadius.collectAsState(initial = 28)
-    val seekbarStyle by prefs.seekbarStyle.collectAsState(initial = "WAVEFORM")
-    val blurBackground by prefs.blurArtworkBackground.collectAsState(initial = true)
-    val blurStrength by prefs.blurStrength.collectAsState(initial = 0.3f)
-    val artworkAnimation by prefs.artworkAnimation.collectAsState(initial = true)
-    val hapticFeedback by prefs.hapticFeedback.collectAsState(initial = true)
-    val showBitrateInfo by prefs.showBitrateInfo.collectAsState(initial = false)
-    val albumGridCols by prefs.albumGridColumns.collectAsState(initial = 2)
-    val hiddenNavTabs by prefs.hiddenNavTabs.collectAsState(initial = emptySet())
-    val miniPlayerStyle by prefs.miniPlayerStyle.collectAsState(initial = "CARD")
-    val playerLayout by prefs.playerLayout.collectAsState(initial = "STANDARD")
-    val showLyricsBtn by prefs.showLyricsButton.collectAsState(initial = true)
-    val lyricsFontScale by prefs.lyricsFontScale.collectAsState(initial = 1.0f)
-
-    val amoledMode by prefs.amoledBlackTheme.collectAsState(initial = false)
-    val compactList by prefs.compactListMode.collectAsState(initial = false)
-    val showDurationList by prefs.showDurationInList.collectAsState(initial = false)
-    val playerArtworkShape by prefs.playerArtworkShape.collectAsState(initial = "ROUNDED")
-    val lyricAlignment by prefs.lyricAlignment.collectAsState(initial = "CENTER")
-    val seekbarColor by prefs.seekbarColor.collectAsState(initial = "PRIMARY")
-    val tintedNavBar by prefs.tintedNavBar.collectAsState(initial = false)
-    val floatingNavBar by prefs.floatingNavBar.collectAsState(initial = false)
-    val navLabelVisibility by prefs.navLabelVisibility.collectAsState(initial = "ALWAYS")
-    val playlistGridCols by prefs.playlistGridColumns.collectAsState(initial = 2)
-    val homeShowMostPlayed by prefs.homeShowMostPlayed.collectAsState(initial = true)
-
-    val homeShowRecentlyAdded by prefs.homeShowRecentlyAdded.collectAsState(initial = true)
-    val homeRecentlyAddedCount by prefs.homeRecentlyAddedCount.collectAsState(initial = 20)
-    val mixesLocation by prefs.mixesLocation.collectAsState(initial = "BOTH")
-
-    val showAlbumInList by prefs.showAlbumInList.collectAsState(initial = false)
-    val listArtworkSize by prefs.listArtworkSize.collectAsState(initial = "MEDIUM")
-    val defaultSongsSort by prefs.defaultSongsSort.collectAsState(initial = "TITLE")
-    val showRemainingTime by prefs.showRemainingTime.collectAsState(initial = false)
-    val showNextSongInPlayer by prefs.showNextSongInPlayer.collectAsState(initial = false)
-    val lyricsLineSpacing by prefs.lyricsLineSpacing.collectAsState(initial = "NORMAL")
-    val miniPlayerShowProgress by prefs.miniPlayerShowProgress.collectAsState(initial = true)
-    val miniPlayerShowSkipBtn by prefs.miniPlayerShowSkipBtn.collectAsState(initial = true)
-    val showEqualizerInPlayer by prefs.showEqualizerInPlayer.collectAsState(initial = true)
-
-    val gapless by prefs.gaplessEnabled.collectAsState(initial = true)
-    val skipSilence by prefs.skipSilence.collectAsState(initial = false)
-    val crossfadeMs by prefs.crossfadeDurationMs.collectAsState(initial = 0)
-    val playbackSpeed by prefs.playbackSpeed.collectAsState(initial = 1.0f)
-    val playbackPitch by prefs.playbackPitch.collectAsState(initial = 1.0f)
-    val resumeOnHeadphones by prefs.resumeOnHeadphones.collectAsState(initial = true)
-    val pauseOnHeadphonesOut by prefs.pauseOnHeadphonesOut.collectAsState(initial = true)
-    val duckAudio by prefs.duckAudioOnFocusLoss.collectAsState(initial = true)
-    val smartShuffle by prefs.smartShuffleEnabled.collectAsState(initial = false)
-    val volumeNorm by prefs.volumeNormalization.collectAsState(initial = false)
-
-    val replayGainMode by prefs.replayGainMode.collectAsState(initial = "TRACK")
-    val replayGainPreamp by prefs.replayGainPreampDb.collectAsState(initial = 0f)
-
-    val isSyncing by libraryViewModel.isSyncing.collectAsState()
-    val minDurationMs by prefs.minTrackDurationMs.collectAsState(initial = 30_000L)
-    val artistDelimiter by prefs.artistDelimiter.collectAsState(initial = ",;/&")
-    val showArtworkList by prefs.showArtworkInList.collectAsState(initial = true)
-    val groupByAlbumArtist by prefs.groupByAlbumArtist.collectAsState(initial = true)
-    val showFilenameTitle by prefs.showFilenameAsTitle.collectAsState(initial = false)
-    val ignoreArticles by prefs.ignoreArticles.collectAsState(initial = true)
-    val autoScanHours by prefs.autoScanIntervalHours.collectAsState(initial = 0)
-    val fetchArtistImages by prefs.fetchArtistImages.collectAsState(initial = false)
-    val fetchLyrics by prefs.fetchLyrics.collectAsState(initial = false)
-    val fetchAlbumArt by prefs.fetchAlbumArt.collectAsState(initial = false)
-    val allFolders by libraryViewModel.allFolders.collectAsState()
-    val excludedFolders by prefs.excludedFolders.collectAsState(initial = emptySet())
-    val includedFolders by prefs.includedFolders.collectAsState(initial = emptySet())
-
-    val lockscreenArtwork by prefs.lockscreenArtwork.collectAsState(initial = true)
-    val showSkipButtons by prefs.showSkipButtons.collectAsState(initial = true)
-
-    val historyEnabled by prefs.historyEnabled.collectAsState(initial = true)
-    val minListenSecs by prefs.minListenSeconds.collectAsState(initial = 30)
-    val minListenPct by prefs.minListenPercentage.collectAsState(initial = 0.5f)
-    val maxHistory by prefs.maxHistoryItems.collectAsState(initial = 1000)
-
-    val lastFmEnabled by settingsViewModel.lastFmEnabled.collectAsState()
-    val lastFmNowPlaying by settingsViewModel.lastFmNowPlaying.collectAsState()
-    val lastFmOnlyWifi by settingsViewModel.lastFmOnlyWifi.collectAsState()
-    val lastFmScrobblePct by settingsViewModel.lastFmScrobblePct.collectAsState()
-    val lastFmScrobbleMinSecs by settingsViewModel.lastFmScrobbleMinSecs.collectAsState()
-    val lastFmOfflineQueue by settingsViewModel.lastFmOfflineQueue.collectAsState()
-    val lastFmAuthState by settingsViewModel.lastFmAuthState.collectAsState()
-    val lastFmPending by settingsViewModel.pendingScrobbles.collectAsState()
-    val malojaEnabled by settingsViewModel.malojaEnabled.collectAsState()
-    val malojaServerUrl by settingsViewModel.malojaServerUrl.collectAsState()
-    val malojaTestState by settingsViewModel.malojaTestState.collectAsState()
-    val malojaPending by settingsViewModel.malojaPending.collectAsState()
-    val remoteShareServerUrl by settingsViewModel.remoteShareServerUrl.collectAsState()
-    val remoteShareUploadToken by settingsViewModel.remoteShareUploadToken.collectAsState()
-    val partyMode by settingsViewModel.partyMode.collectAsState()
-    val currentMusicSource by settingsViewModel.musicSource.collectAsState()
-    val navidromeServerUrl by settingsViewModel.navidromeServerUrl.collectAsState()
-    val navidromeUsername by settingsViewModel.navidromeUsername.collectAsState()
-    val navidromeConnectionState by settingsViewModel.navidromeConnectionState.collectAsState()
-    val navidromeSyncState by settingsViewModel.navidromeSyncState.collectAsState()
-    val downloadWifiOnly by settingsViewModel.downloadWifiOnly.collectAsState()
-    val downloadsStorageUsed by settingsViewModel.downloadsStorageUsed.collectAsState()
-    val downloadedSongCount by settingsViewModel.downloadedSongCount.collectAsState()
+    // M3 Expressive large flexible app bar: big title that collapses as the page scrolls,
+    // re-expanded whenever another page opens.
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    LaunchedEffect(currentCategory) { scrollBehavior.state.heightOffset = 0f }
+    val motion = MaterialTheme.motionScheme
+    val enterSpatial = motion.defaultSpatialSpec<IntOffset>()
+    val enterEffects = motion.defaultEffectsSpec<Float>()
+    val exitEffects = motion.fastEffectsSpec<Float>()
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = {},
+            @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+            LargeFlexibleTopAppBar(
+                title = {
+                    AnimatedContent(
+                        targetState = currentCategory.title,
+                        transitionSpec = { fadeIn(enterEffects) togetherWith fadeOut(exitEffects) },
+                        label = "settings_title",
+                    ) { Text(it) }
+                },
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = {
                         if (currentCategory == SettingsCategory.Main) onBack()
@@ -230,7 +159,8 @@ fun SettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                 ),
             )
         },
@@ -239,23 +169,12 @@ fun SettingsScreen(
         AnimatedContent(
             targetState = currentCategory,
             transitionSpec = {
-                if (targetState != SettingsCategory.Main) {
-                    // Drill into sub-page: shared axis X forward
-                    (slideInHorizontally(tween(500, easing = EmphasizedDecelerate)) { (it * 0.15f).toInt() } +
-                        fadeIn(tween(500, delayMillis = 50, easing = EmphasizedDecelerate)))
-                        .togetherWith(
-                            slideOutHorizontally(tween(400, easing = EmphasizedAccelerate)) { -(it * 0.15f).toInt() } +
-                                fadeOut(tween(200, easing = EmphasizedAccelerate))
-                        )
-                } else {
-                    // Back to main: shared axis X reverse
-                    (slideInHorizontally(tween(500, easing = EmphasizedDecelerate)) { -(it * 0.15f).toInt() } +
-                        fadeIn(tween(500, delayMillis = 50, easing = EmphasizedDecelerate)))
-                        .togetherWith(
-                            slideOutHorizontally(tween(400, easing = EmphasizedAccelerate)) { (it * 0.15f).toInt() } +
-                                fadeOut(tween(200, easing = EmphasizedAccelerate))
-                        )
-                }
+                // M3 shared axis X: forward into a sub-page, reverse back to the main list.
+                val forward = targetState != SettingsCategory.Main
+                (slideInHorizontally(enterSpatial) { (if (forward) it else -it) * 15 / 100 } + fadeIn(enterEffects))
+                    .togetherWith(
+                        slideOutHorizontally(enterSpatial) { (if (forward) -it else it) * 15 / 100 } + fadeOut(exitEffects)
+                    )
             },
             label = "settings_content"
         ) { category ->
@@ -266,1104 +185,1423 @@ fun SettingsScreen(
                 ),
                 modifier = Modifier.fillMaxSize()
             ) {
-                item { BigScreenTitle(category.title) }
                 when (category) {
                     SettingsCategory.Main -> {
-                        // App header card
                         item {
-                            var easterEggTaps by remember { mutableIntStateOf(0) }
-                            var showEasterEgg by remember { mutableStateOf(false) }
-                            var showPartyDisable by remember { mutableStateOf(false) }
-                            val bounceScale = remember { Animatable(1f) }
-
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                                    .graphicsLayer { scaleX = bounceScale.value; scaleY = bounceScale.value }
-                                    .clickable {
-                                        scope.launch {
-                                            bounceScale.animateTo(0.93f, spring(stiffness = Spring.StiffnessHigh))
-                                            bounceScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow))
-                                        }
-                                        if (partyMode) {
-                                            showPartyDisable = true
-                                        } else {
-                                            easterEggTaps++
-                                            if (easterEggTaps >= 5) {
-                                                showEasterEgg = true
-                                                easterEggTaps = 0
-                                            }
-                                        }
-                                    },
-                                shape = MaterialTheme.shapes.large,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                ) {
-                                    Surface(
-                                        shape = MaterialTheme.shapes.medium,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(52.dp),
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                Icons.Rounded.MusicNote,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onPrimary,
-                                                modifier = Modifier.size(28.dp),
-                                            )
-                                        }
-                                    }
-                                    Column {
-                                        Text(
-                                            if (partyMode) "🎉 Resonance" else "Resonance",
-                                            style = MaterialTheme.typography.titleLarge,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        )
-                                        Text(
-                                            when {
-                                                partyMode -> "Party Mode is ON"
-                                                easterEggTaps in 1..4 -> "${5 - easterEggTaps} more…"
-                                                else -> "v$APP_VERSION"
-                                            },
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (showEasterEgg) {
-                                AlertDialog(
-                                    onDismissRequest = { showEasterEgg = false },
-                                    icon = { Text("🎵", fontSize = 40.sp) },
-                                    title = { Text("You found it!") },
-                                    text = {
-                                        Text(
-                                            "Resonance was built with love for music.\n\nThanks for using the app! ♪\n\nPsst — want to unlock something special?",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                    },
-                                    confirmButton = {
-                                        Button(onClick = {
-                                            settingsViewModel.setPartyMode(true)
-                                            showEasterEgg = false
-                                        }) { Text("🎉 Party Mode!") }
-                                    },
-                                    dismissButton = {
-                                        TextButton(onClick = { showEasterEgg = false }) { Text("♫ Nice") }
-                                    },
-                                )
-                            }
-
-                            if (showPartyDisable) {
-                                AlertDialog(
-                                    onDismissRequest = { showPartyDisable = false },
-                                    icon = { Text("🎉", fontSize = 40.sp) },
-                                    title = { Text("Party Mode is ON") },
-                                    text = {
-                                        Text(
-                                            "The party is still going! Want to turn it off?",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                    },
-                                    confirmButton = {
-                                        Button(onClick = {
-                                            settingsViewModel.setPartyMode(false)
-                                            showPartyDisable = false
-                                        }) { Text("End the party") }
-                                    },
-                                    dismissButton = {
-                                        TextButton(onClick = { showPartyDisable = false }) { Text("Keep it going!") }
-                                    },
-                                )
-                            }
+                            MainSection(
+                                settingsViewModel = settingsViewModel,
+                                onCategoryClick = { currentCategory = it },
+                            )
                         }
-
-                        // Grouped category rows
-                        settingsGroups.forEach { group ->
-                            item {
-                                Text(
-                                    text = group.label,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
-                                )
-                            }
-                            item {
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp)
-                                        .padding(bottom = 4.dp),
-                                    shape = MaterialTheme.shapes.large,
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                ) {
-                                    Column {
-                                        group.items.forEachIndexed { idx, cat ->
-                                            if (idx > 0) HorizontalDivider(
-                                                modifier = Modifier.padding(horizontal = 16.dp),
-                                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                                            )
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable { currentCategory = cat }
-                                                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                            ) {
-                                                Surface(
-                                                    shape = MaterialTheme.shapes.small,
-                                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                                    modifier = Modifier.size(38.dp),
-                                                ) {
-                                                    Box(contentAlignment = Alignment.Center) {
-                                                        Icon(
-                                                            cat.icon,
-                                                            contentDescription = null,
-                                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                            modifier = Modifier.size(20.dp),
-                                                        )
-                                                    }
-                                                }
-                                                Text(
-                                                    cat.title,
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Normal,
-                                                    modifier = Modifier.weight(1f),
-                                                )
-                                                Icon(
-                                                    Icons.Rounded.ChevronRight,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(18.dp),
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        item { Spacer(Modifier.height(16.dp)) }
                     }
 
                     SettingsCategory.Updates -> {
-                        item {
-                            var showDisableWarning by remember { mutableStateOf(false) }
-
-                            SectionCard(icon = Icons.Rounded.SystemUpdate, title = "Updates", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SegmentedSettingsItem(
-                                    title = "Check for Updates",
-                                    options = listOf("Launch" to "LAUNCH", "Daily" to "DAILY", "Weekly" to "WEEKLY", "Off" to "DISABLED"),
-                                    selected = updateFreq,
-                                    onSelect = {
-                                        if (it == "DISABLED") showDisableWarning = true
-                                        else settingsViewModel.setUpdateFrequency(it)
-                                    },
-                                )
-                                SettingsTextItem(
-                                    title = "Check Now",
-                                    subtitle = "Current version: v$APP_VERSION",
-                                    icon = Icons.Rounded.Update,
-                                    onClick = { settingsViewModel.checkForUpdates(APP_VERSION, isManual = true) }
-                                )
-                            }
-
-                            if (showDisableWarning) {
-                                AlertDialog(
-                                    onDismissRequest = { showDisableWarning = false },
-                                    icon = { Icon(Icons.Rounded.Warning, null, tint = MaterialTheme.colorScheme.error) },
-                                    title = { Text("Disable Updates?") },
-                                    text = { Text("It is highly recommended to keep update checks enabled so you don't miss bug fixes and new features.\n\nAre you sure you want to disable automatic checks?") },
-                                    confirmButton = {
-                                        Button(
-                                            onClick = {
-                                                settingsViewModel.setUpdateFrequency("DISABLED")
-                                                showDisableWarning = false
-                                            },
-                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                                        ) { Text("Disable") }
-                                    },
-                                    dismissButton = {
-                                        TextButton(onClick = { showDisableWarning = false }) { Text("Keep Enabled") }
-                                    }
-                                )
-                            }
-                        }
+                        item { UpdatesSection(settingsViewModel) }
                     }
 
                     SettingsCategory.Appearance -> {
-                        item {
-                            var showNavTabsDialog by remember { mutableStateOf(false) }
-                            val visibleCount = navItems.count { it.screen.route !in hiddenNavTabs }
-
-                            SectionCard(icon = Icons.Rounded.Palette, title = "Appearance", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SectionSubHeader("Color & Theme")
-                                SettingsToggleRow("System Dynamic Color", "Use Android 12+ wallpaper colours", dynamicColor) {
-                                    scope.launch { prefs.setDynamicColorEnabled(it) }
-                                }
-                                if (!dynamicColor) {
-                                    ThemeColorPicker(
-                                        current = presetColorInt,
-                                        onPick = { scope.launch { prefs.setPresetColor(it) } }
-                                    )
-                                }
-                                SegmentedSettingsItem(
-                                    title = "Dark Theme",
-                                    options = listOf("System" to "SYSTEM", "Light" to "LIGHT", "Dark" to "DARK"),
-                                    selected = darkTheme,
-                                    onSelect = { scope.launch { prefs.setDarkTheme(it) } },
-                                )
-                                SegmentedSettingsItem(
-                                    title = "Seekbar Style",
-                                    options = listOf("Standard" to "STANDARD", "Waveform" to "WAVEFORM", "Material You 3" to "MATERIAL_YOU_3", "Cava" to "CAVA"),
-                                    selected = seekbarStyle,
-                                    onSelect = { scope.launch { prefs.setSeekbarStyle(it) } },
-                                )
-                                SettingsToggleRow("Blur Background", "Artwork-tinted blurred backdrop in player", blurBackground) {
-                                    scope.launch { prefs.setBlurArtworkBackground(it) }
-                                }
-                                if (blurBackground) {
-                                    SettingsSliderItem(
-                                        title = "Blur Intensity",
-                                        value = blurStrength,
-                                        range = 0.1f..0.7f,
-                                        label = "${(blurStrength * 100).roundToInt()}%",
-                                        onValueChange = { scope.launch { prefs.setBlurStrength(it) } },
-                                    )
-                                }
-                                SettingsToggleRow("Artwork Animation", "Scale artwork on play/pause", artworkAnimation) {
-                                    scope.launch { prefs.setArtworkAnimation(it) }
-                                }
-                                SettingsToggleRow("Haptic Feedback", "Vibrate on seek and long-press", hapticFeedback) {
-                                    scope.launch { prefs.setHapticFeedback(it) }
-                                }
-                                SettingsToggleRow("Show Bitrate & Format", "Display audio quality badge in player", showBitrateInfo) {
-                                    scope.launch { prefs.setShowBitrateInfo(it) }
-                                }
-                                SettingsSliderItem(
-                                    title = "Corner Radius",
-                                    value = cornerRadius.toFloat(),
-                                    range = 0f..40f,
-                                    label = "${cornerRadius}dp",
-                                    steps = 40,
-                                    onValueChange = { scope.launch { prefs.setCornerRadius(it.toInt()) } },
-                                )
-                                SettingsSliderItem(
-                                    title = "Album Grid Columns",
-                                    value = albumGridCols.toFloat(),
-                                    range = 2f..4f,
-                                    label = "$albumGridCols columns",
-                                    steps = 1,
-                                    onValueChange = { scope.launch { prefs.setAlbumGridColumns(it.toInt()) } },
-                                )
-                                SettingsToggleRow("AMOLED Black Mode", "True black backgrounds for OLED displays", amoledMode) {
-                                    scope.launch { prefs.setAmoledBlackTheme(it) }
-                                }
-                                SegmentedSettingsItem(
-                                    title = "Player Artwork Shape",
-                                    options = listOf("Rounded" to "ROUNDED", "Square" to "SQUARE", "Circle" to "CIRCLE"),
-                                    selected = playerArtworkShape,
-                                    onSelect = { scope.launch { prefs.setPlayerArtworkShape(it) } },
-                                )
-                                SegmentedSettingsItem(
-                                    title = "Seekbar Colour",
-                                    options = listOf("Primary" to "PRIMARY", "Secondary" to "SECONDARY", "Tertiary" to "TERTIARY"),
-                                    selected = seekbarColor,
-                                    onSelect = { scope.launch { prefs.setSeekbarColor(it) } },
-                                )
-
-                                SectionDivider()
-                                SectionSubHeader("Song Lists")
-                                SettingsToggleRow("Compact Mode", "Reduce row height for a denser list view", compactList) {
-                                    scope.launch { prefs.setCompactListMode(it) }
-                                }
-                                SettingsToggleRow("Show Duration in List", "Display track length next to each song", showDurationList) {
-                                    scope.launch { prefs.setShowDurationInList(it) }
-                                }
-                                SettingsToggleRow("Show Album in List", "Display album name below artist in song rows", showAlbumInList) {
-                                    scope.launch { prefs.setShowAlbumInList(it) }
-                                }
-                                SegmentedSettingsItem(
-                                    title = "List Artwork Size",
-                                    options = listOf("Small" to "SMALL", "Medium" to "MEDIUM", "Large" to "LARGE"),
-                                    selected = listArtworkSize,
-                                    onSelect = { scope.launch { prefs.setListArtworkSize(it) } },
-                                )
-                                SegmentedSettingsItem(
-                                    title = "Default Songs Sort",
-                                    options = listOf("Title" to "TITLE", "Artist" to "ARTIST", "Album" to "ALBUM", "Added" to "ADDED"),
-                                    selected = defaultSongsSort,
-                                    onSelect = { scope.launch { prefs.setDefaultSongsSort(it) } },
-                                )
-                                SettingsSliderItem(
-                                    title = "Playlist Grid Columns",
-                                    value = playlistGridCols.toFloat(),
-                                    range = 1f..4f,
-                                    label = "$playlistGridCols ${if (playlistGridCols == 1) "column" else "columns"}",
-                                    steps = 2,
-                                    onValueChange = { scope.launch { prefs.setPlaylistGridColumns(it.toInt()) } },
-                                )
-
-                                SectionDivider()
-                                SectionSubHeader("Navigation Bar")
-                                SettingsToggleRow("Floating Navigation Bar", "Pill-shaped bar that floats above the screen edge", floatingNavBar) {
-                                    scope.launch { prefs.setFloatingNavBar(it) }
-                                }
-                                SettingsToggleRow("Tinted Navigation Bar", "Apply surface tint to the bottom navigation bar", tintedNavBar) {
-                                    scope.launch { prefs.setTintedNavBar(it) }
-                                }
-                                SegmentedSettingsItem(
-                                    title = "Tab Labels",
-                                    options = listOf("Always" to "ALWAYS", "Selected" to "SELECTED", "Never" to "NEVER"),
-                                    selected = navLabelVisibility,
-                                    onSelect = { scope.launch { prefs.setNavLabelVisibility(it) } },
-                                )
-                                SettingsTextItem(
-                                    title = "Navigation Bar Tabs",
-                                    subtitle = "$visibleCount of ${navItems.size} tabs shown",
-                                    icon = Icons.Rounded.Tab,
-                                    onClick = { showNavTabsDialog = true },
-                                )
-                            }
-
-                            if (showNavTabsDialog) {
-                                NavTabsDialog(
-                                    hiddenNavTabs = hiddenNavTabs,
-                                    onToggle = { route, shouldHide ->
-                                        val updated = if (shouldHide) hiddenNavTabs + route
-                                                      else             hiddenNavTabs - route
-                                        scope.launch { prefs.setHiddenNavTabs(updated) }
-                                    },
-                                    onDismiss = { showNavTabsDialog = false },
-                                )
-                            }
-                        }
+                        item { AppearanceSection(prefs) }
                     }
 
                     SettingsCategory.Home -> {
-                        item {
-                            SectionCard(icon = Icons.Rounded.Home, title = "Home Screen Sections", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SegmentedSettingsItem(
-                                    title = "Your Mixes",
-                                    options = listOf("Home only" to "HOME", "Both" to "BOTH", "Playlists only" to "PLAYLISTS"),
-                                    selected = mixesLocation,
-                                    onSelect = { scope.launch { prefs.setMixesLocation(it) } },
-                                )
-                                SettingsToggleRow("Most Played", "Show your top tracks as a horizontal scroll row", homeShowMostPlayed) {
-                                    scope.launch { prefs.setHomeShowMostPlayed(it) }
-                                }
-                                SettingsToggleRow("Recently Added", "Show recently added songs as a horizontal scroll row", homeShowRecentlyAdded) {
-                                    scope.launch { prefs.setHomeShowRecentlyAdded(it) }
-                                }
-                                if (homeShowRecentlyAdded) {
-                                    SegmentedSettingsItem(
-                                        title = "Recently Added Count",
-                                        options = listOf("10" to "10", "20" to "20", "30" to "30", "50" to "50"),
-                                        selected = homeRecentlyAddedCount.toString(),
-                                        onSelect = { scope.launch { prefs.setHomeRecentlyAddedCount(it.toInt()) } },
-                                    )
-                                }
-                            }
-                        }
+                        item { HomeSection(prefs) }
                     }
 
                     SettingsCategory.Player -> {
-                        item {
-                            SectionCard(icon = Icons.Rounded.MusicNote, title = "Player", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SegmentedSettingsItem(
-                                    title = "Player Layout",
-                                    options = listOf("Standard" to "STANDARD", "Big Artwork" to "ARTWORK_BIG", "Lyrics Focus" to "LYRICS_FOCUS"),
-                                    selected = playerLayout,
-                                    onSelect = { scope.launch { prefs.setPlayerLayout(it) } },
-                                )
-                                SegmentedSettingsItem(
-                                    title = "Mini Player Style",
-                                    options = listOf("Compact" to "COMPACT", "Card" to "CARD", "Floating" to "FLOATING"),
-                                    selected = miniPlayerStyle,
-                                    onSelect = { scope.launch { prefs.setMiniPlayerStyle(it) } },
-                                )
-                                SettingsToggleRow("Show Lyrics Button", "Display lyrics shortcut in player footer", showLyricsBtn) {
-                                    scope.launch { prefs.setShowLyricsButton(it) }
-                                }
-                                SettingsSliderItem(
-                                    title = "Lyrics Font Size",
-                                    value = lyricsFontScale,
-                                    range = 0.50f..1.75f,
-                                    label = "${(lyricsFontScale * 100).roundToInt()}%",
-                                    steps = 4,
-                                    onValueChange = { newValue ->
-                                        val step = 0.25f
-                                        val rounded = (newValue / step).roundToInt() * step
-                                        scope.launch { prefs.setLyricsFontScale(rounded.coerceIn(0.50f, 1.75f)) }
-                                    },
-                                )
-                                SegmentedSettingsItem(
-                                    title = "Lyrics Alignment",
-                                    options = listOf("Centered" to "CENTER", "Left" to "START"),
-                                    selected = lyricAlignment,
-                                    onSelect = { scope.launch { prefs.setLyricAlignment(it) } },
-                                )
-                                SegmentedSettingsItem(
-                                    title = "Lyrics Line Spacing",
-                                    options = listOf("Compact" to "COMPACT", "Normal" to "NORMAL", "Spacious" to "SPACIOUS"),
-                                    selected = lyricsLineSpacing,
-                                    onSelect = { scope.launch { prefs.setLyricsLineSpacing(it) } },
-                                )
-                                SettingsToggleRow("Show Remaining Time", "Display remaining duration instead of total on the right", showRemainingTime) {
-                                    scope.launch { prefs.setShowRemainingTime(it) }
-                                }
-                                SettingsToggleRow("Show Next Song", "Show upcoming track name below the seekbar", showNextSongInPlayer) {
-                                    scope.launch { prefs.setShowNextSongInPlayer(it) }
-                                }
-                                SettingsToggleRow("Show Equalizer Button", "Display equalizer shortcut in player footer", showEqualizerInPlayer) {
-                                    scope.launch { prefs.setShowEqualizerInPlayer(it) }
-                                }
-
-                                SectionDivider()
-                                SectionSubHeader("Mini Player")
-                                SettingsToggleRow("Show Progress Bar", "Display a thin progress line at the bottom of the mini player", miniPlayerShowProgress) {
-                                    scope.launch { prefs.setMiniPlayerShowProgress(it) }
-                                }
-                                SettingsToggleRow("Show Skip Button", "Show skip-next button in the mini player", miniPlayerShowSkipBtn) {
-                                    scope.launch { prefs.setMiniPlayerShowSkipBtn(it) }
-                                }
-                            }
-                        }
+                        item { PlayerSection(prefs) }
                     }
 
                     SettingsCategory.Playback -> {
-                        item {
-                            SectionCard(icon = Icons.Rounded.PlayCircle, title = "Playback", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SettingsToggleRow("Gapless Playback", "Smooth transition between tracks", gapless) {
-                                    scope.launch { prefs.setGaplessEnabled(it) }
-                                }
-                                SettingsToggleRow("Skip Silence", "Automatically skip silent parts of tracks", skipSilence) {
-                                    scope.launch { prefs.setSkipSilence(it) }
-                                }
-                                SettingsSliderItem(
-                                    title = "Crossfade Duration",
-                                    value = crossfadeMs.toFloat(),
-                                    range = 0f..10000f,
-                                    label = if (crossfadeMs == 0) "Disabled" else "${crossfadeMs / 1000}s",
-                                    steps = 10,
-                                    onValueChange = { newValue ->
-                                        val step = 1000f
-                                        val rounded = (newValue / step).roundToInt() * step
-                                        scope.launch { prefs.setCrossfadeDuration(rounded.toInt()) }
-                                    },
-                                )
-                                SettingsSliderItem(
-                                    title = "Playback Speed",
-                                    value = playbackSpeed,
-                                    range = 0.5f..2.0f,
-                                    label = "${playbackSpeed}x",
-                                    steps = 6,
-                                    onValueChange = { newValue ->
-                                        val step = 0.25f
-                                        val rounded = (newValue / step).roundToInt() * step
-                                        scope.launch { prefs.setPlaybackSpeed(rounded.coerceIn(0.5f, 2.0f)) }
-                                    },
-                                )
-                                SettingsSliderItem(
-                                    title = "Playback Pitch",
-                                    value = playbackPitch,
-                                    range = 0.5f..2.0f,
-                                    label = "${playbackPitch}x",
-                                    steps = 6,
-                                    onValueChange = { newValue ->
-                                        val step = 0.25f
-                                        val rounded = (newValue / step).roundToInt() * step
-                                        scope.launch { prefs.setPlaybackPitch(rounded.coerceIn(0.5f, 2.0f)) }
-                                    },
-                                )
-                                SettingsToggleRow("Resume on Headphones", "Continue playback when headphones are connected", resumeOnHeadphones) {
-                                    scope.launch { prefs.setResumeOnHeadphones(it) }
-                                }
-                                SettingsToggleRow("Pause on Disconnect", "Stop playback when headphones are removed", pauseOnHeadphonesOut) {
-                                    scope.launch { prefs.setPauseOnHeadphonesOut(it) }
-                                }
-                                SettingsToggleRow("Audio Ducking", "Lower volume when other apps play sound", duckAudio) {
-                                    scope.launch { prefs.setDuckAudioOnFocusLoss(it) }
-                                }
-                                SettingsToggleRow("Smart Shuffle", "Prioritise higher rated and recent tracks", smartShuffle) {
-                                    scope.launch { prefs.setSmartShuffleEnabled(it) }
-                                }
-                            }
-                        }
+                        item { PlaybackSection(prefs) }
                     }
 
                     SettingsCategory.Audio -> {
-                        item {
-                            SectionCard(icon = Icons.Rounded.GraphicEq, title = "Audio", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SegmentedSettingsItem(
-                                    title = "ReplayGain Mode",
-                                    options = listOf("Off" to "OFF", "Track" to "TRACK", "Album" to "ALBUM"),
-                                    selected = replayGainMode,
-                                    onSelect = { scope.launch { prefs.setReplayGainMode(it) } },
-                                )
-                                SettingsSliderItem(
-                                    title = "ReplayGain Preamp",
-                                    value = replayGainPreamp,
-                                    range = -15f..15f,
-                                    label = when (val db = replayGainPreamp.roundToInt()) {
-                                        0 -> "0 dB"
-                                        else -> if (db > 0) "+$db dB" else "$db dB"
-                                    },
-                                    steps = 30,
-                                    onValueChange = { scope.launch { prefs.setReplayGainPreamp(it) } },
-                                )
-                                SettingsToggleRow("Volume Normalisation", "Equalise loudness across all tracks", volumeNorm) {
-                                    scope.launch { prefs.setVolumeNormalization(it) }
-                                }
-                                SettingsTextItem(
-                                    title = "Equalizer",
-                                    subtitle = "Adjust frequency bands",
-                                    icon = Icons.Rounded.GraphicEq,
-                                    onClick = onNavigateToEqualizer,
-                                )
-                            }
-                        }
+                        item { AudioSection(prefs, onNavigateToEqualizer) }
                     }
 
                     SettingsCategory.Library -> {
-                        item {
-                            var showDelimiterDialog by remember { mutableStateOf(false) }
-                            var showIncludedDialog by remember { mutableStateOf(false) }
-                            var showExcludedDialog by remember { mutableStateOf(false) }
-
-                            SectionCard(icon = Icons.Rounded.LibraryMusic, title = "Library", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                ScanLibraryItem(isSyncing) {
-                                    libraryViewModel.syncLibrary()
-                                }
-                                SettingsSliderItem(
-                                    title = "Minimum Track Duration",
-                                    value = (minDurationMs / 1000f),
-                                    range = 0f..300f,
-                                    label = if (minDurationMs == 0L) "No filter" else "${minDurationMs / 1000}s",
-                                    steps = 30,
-                                    onValueChange = { newValue ->
-                                        val step = 10f
-                                        val rounded = (newValue / step).roundToInt() * step
-                                        scope.launch { prefs.setMinTrackDuration((rounded.toLong() * 1000).coerceAtLeast(0)) }
-                                    },
-                                )
-                                SettingsToggleRow("Show Artwork in Lists", "Display album art thumbnails in song lists", showArtworkList) {
-                                    scope.launch { prefs.setShowArtworkInList(it) }
-                                }
-                                SettingsToggleRow("Group by Album Artist", "Use album artist for grouping (not track artist)", groupByAlbumArtist) {
-                                    scope.launch { prefs.setGroupByAlbumArtist(it) }
-                                }
-                                SettingsToggleRow("Show Filename as Title", "Fall back to filename when title tag is missing", showFilenameTitle) {
-                                    scope.launch { prefs.setShowFilenameAsTitle(it) }
-                                }
-                                SettingsToggleRow("Ignore Articles in Sort", "Sort \"The Beatles\" as \"Beatles\"", ignoreArticles) {
-                                    scope.launch { prefs.setIgnoreArticles(it) }
-                                }
-                                SettingsTextItem(
-                                    title = "Artist Delimiter",
-                                    subtitle = "Characters that split multi-artist tags: $artistDelimiter",
-                                    icon = Icons.Rounded.People,
-                                    onClick = { showDelimiterDialog = true },
-                                )
-                                SegmentedSettingsItem(
-                                    title = "Auto Scan Interval",
-                                    options = listOf("Off" to "0", "1 hr" to "1", "6 hrs" to "6", "24 hrs" to "24"),
-                                    selected = autoScanHours.toString(),
-                                    onSelect = { scope.launch { prefs.setAutoScanIntervalHours(it.toInt()) } },
-                                )
-                                SettingsTextItem(
-                                    title = "Included Folders",
-                                    subtitle = if (includedFolders.isEmpty()) "All folders (scan everything)"
-                                               else "${includedFolders.size} folder${if (includedFolders.size != 1) "s" else ""} included",
-                                    icon = Icons.Rounded.FolderOpen,
-                                    onClick = { showIncludedDialog = true },
-                                )
-                                SettingsTextItem(
-                                    title = "Excluded Folders",
-                                    subtitle = if (excludedFolders.isEmpty()) "No folders excluded"
-                                               else "${excludedFolders.size} folder${if (excludedFolders.size != 1) "s" else ""} excluded",
-                                    icon = Icons.Rounded.FolderOff,
-                                    onClick = { showExcludedDialog = true },
-                                )
-                            }
-
-                            if (showDelimiterDialog) {
-                                var delimiterInput by remember { mutableStateOf(artistDelimiter) }
-                                AlertDialog(
-                                    onDismissRequest = { showDelimiterDialog = false },
-                                    title = { Text("Artist Delimiter") },
-                                    text = {
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Text(
-                                                "Characters used to split multi-artist tags (e.g. \"Artist1, Artist2\"). " +
-                                                        "Enter all split characters with no spaces between them.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                            OutlinedTextField(
-                                                value = delimiterInput,
-                                                onValueChange = { delimiterInput = it },
-                                                label = { Text("Delimiter characters") },
-                                                singleLine = true,
-                                                modifier = Modifier.fillMaxWidth(),
-                                            )
-                                        }
-                                    },
-                                    confirmButton = {
-                                        Button(
-                                            onClick = {
-                                                scope.launch { prefs.setArtistDelimiter(delimiterInput) }
-                                                showDelimiterDialog = false
-                                            },
-                                            enabled = delimiterInput.isNotBlank(),
-                                        ) { Text("Save") }
-                                    },
-                                    dismissButton = {
-                                        TextButton(onClick = { showDelimiterDialog = false }) { Text("Cancel") }
-                                    },
-                                )
-                            }
-                            if (showIncludedDialog) {
-                                IncludedFoldersDialog(
-                                    allFolders = allFolders,
-                                    includedFolders = includedFolders,
-                                    onSave = { folders ->
-                                        scope.launch { prefs.setIncludedFolders(folders) }
-                                        showIncludedDialog = false
-                                    },
-                                    onDismiss = { showIncludedDialog = false },
-                                )
-                            }
-                            if (showExcludedDialog) {
-                                ExcludedFoldersDialog(
-                                    allFolders = allFolders,
-                                    excludedFolders = excludedFolders,
-                                    onSave = { folders ->
-                                        scope.launch { prefs.setExcludedFolders(folders) }
-                                        showExcludedDialog = false
-                                    },
-                                    onDismiss = { showExcludedDialog = false },
-                                )
-                            }
-                        }
+                        item { LibrarySection(libraryViewModel, prefs) }
                     }
 
                     SettingsCategory.Navidrome -> {
-                        item {
-                            NavidromeSection(
-                                currentSource = currentMusicSource,
-                                savedServerUrl = navidromeServerUrl,
-                                savedUsername = navidromeUsername,
-                                connectionState = navidromeConnectionState,
-                                syncState = navidromeSyncState,
-                                onTest = { url, user, pass ->
-                                    settingsViewModel.testNavidromeConnection(url, user, pass)
-                                },
-                                onSave = { url, user, pass ->
-                                    settingsViewModel.saveNavidromeAndSwitch(url, user, pass)
-                                },
-                                onSwitchToLocal = { settingsViewModel.switchToLocal() },
-                                onResetConnection = { settingsViewModel.resetNavidromeConnectionState() },
-                                onResetSync = { settingsViewModel.resetNavidromeSyncState() },
-                            )
-                        }
-                        if (currentMusicSource == MusicSource.NAVIDROME) {
-                            item {
-                                DownloadsSection(
-                                    wifiOnly = downloadWifiOnly,
-                                    onWifiOnlyChange = { settingsViewModel.setDownloadWifiOnly(it) },
-                                    storageUsedBytes = downloadsStorageUsed,
-                                    downloadedSongCount = downloadedSongCount,
-                                    onDeleteAll = { settingsViewModel.removeAllDownloads() },
-                                )
-                            }
-                        }
+                        item { NavidromeSettingsSection(settingsViewModel) }
                     }
 
                     SettingsCategory.OnlineServices -> {
                         item {
-                            SectionCard(icon = Icons.Rounded.Lyrics, title = "Lyrics & Artwork", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SettingsToggleRow(
-                                    title = "Fetch Lyrics",
-                                    subtitle = "Auto-download time-synced lyrics from LRC Library",
-                                    checked = fetchLyrics,
-                                ) { scope.launch { prefs.setFetchLyrics(it) } }
-                                SettingsToggleRow(
-                                    title = "Fetch Artist Images",
-                                    subtitle = "Load artist photos from Last.fm in the Artists list",
-                                    checked = fetchArtistImages,
-                                ) { scope.launch { prefs.setFetchArtistImages(it) } }
-                                SettingsToggleRow(
-                                    title = "Fetch Album Art",
-                                    subtitle = "Search Spotify for a song's cover art when it's missing",
-                                    checked = fetchAlbumArt,
-                                ) { scope.launch { prefs.setFetchAlbumArt(it) } }
-                            }
-                        }
-
-                        // No outer group label here (unlike the Main screen's category groups) —
-                        // LastFmSection/MalojaSection each already self-identify via their own
-                        // branded pill badge, so a floating "Last.fm Scrobbling" text above would
-                        // just duplicate that, and every other sub-section on this screen already
-                        // carries its own title inside a SectionCard instead of a separate label.
-                        item { Spacer(Modifier.height(8.dp)) }
-                        item {
-                            LastFmSection(
-                                authState = lastFmAuthState,
-                                enabled = lastFmEnabled,
-                                nowPlayingEnabled = lastFmNowPlaying,
-                                scrobblePct = lastFmScrobblePct,
-                                scrobbleMinSecs = lastFmScrobbleMinSecs,
-                                onlyOnWifi = lastFmOnlyWifi,
-                                offlineQueue = lastFmOfflineQueue,
-                                pendingScrobbles = lastFmPending,
-                                onEnabledChange = { settingsViewModel.setLastFmEnabled(it) },
-                                onLogin = { u, p -> settingsViewModel.lastFmLogin(u, p) },
-                                onLogout = { settingsViewModel.lastFmLogout() },
-                                onNowPlayingChange = { settingsViewModel.setLastFmNowPlaying(it) },
-                                onScrobblePctChange = { settingsViewModel.setLastFmScrobblePct(it) },
-                                onScrobbleMinSecsChange = { settingsViewModel.setLastFmScrobbleMinSecs(it) },
-                                onOnlyOnWifiChange = { settingsViewModel.setLastFmOnlyWifi(it) },
-                                onOfflineQueueChange = { settingsViewModel.setLastFmOfflineQueue(it) },
-                                onSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+                            OnlineServicesSettingsSection(
+                                prefs = prefs,
+                                settingsViewModel = settingsViewModel,
+                                onNavigateToMetadataEnrichment = onNavigateToMetadataEnrichment,
+                                snackbarHostState = snackbarHostState,
                             )
-                        }
-
-                        item { Spacer(Modifier.height(8.dp)) }
-                        item {
-                            MalojaSection(
-                                isConfigured = malojaServerUrl.isNotBlank(),
-                                serverUrl = malojaServerUrl,
-                                enabled = malojaEnabled,
-                                testState = malojaTestState,
-                                pendingScrobbles = malojaPending,
-                                onSave = { url, key -> settingsViewModel.saveMalojaConfig(url, key) },
-                                onClear = { settingsViewModel.clearMaloja() },
-                                onEnabledChange = { settingsViewModel.setMalojaEnabled(it) },
-                                onTest = { url, key -> settingsViewModel.testMalojaConnection(url, key) },
-                                onResetTestState = { settingsViewModel.resetMalojaTestState() },
-                                onSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
-                            )
-                        }
-
-                        item {
-                            SectionCard(icon = Icons.Rounded.Public, title = "Internet Share", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                RemoteShareSection(
-                                    serverUrl = remoteShareServerUrl,
-                                    uploadToken = remoteShareUploadToken,
-                                    onSave = { url, token -> settingsViewModel.saveRemoteShareConfig(url, token) },
-                                )
-                            }
                         }
                     }
 
                     SettingsCategory.Notification -> {
-                        item {
-                            SectionCard(icon = Icons.Rounded.Notifications, title = "Notification & Lock Screen", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SettingsToggleRow("Show Artwork on Lock Screen", "Display album art on lock screen controls", lockscreenArtwork) {
-                                    scope.launch { prefs.setLockscreenArtwork(it) }
-                                }
-                                SettingsToggleRow("Show Skip Buttons", "Include previous/next in notification shade", showSkipButtons) {
-                                    scope.launch { prefs.setShowSkipButtons(it) }
-                                }
-                            }
-                        }
+                        item { NotificationSection(prefs) }
                     }
 
                     SettingsCategory.History -> {
-                        item {
-                            SectionCard(icon = Icons.Rounded.History, title = "Listening History", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SettingsToggleRow("Track Play History", "Record which tracks you've listened to", historyEnabled) {
-                                    scope.launch { prefs.setHistoryEnabled(it) }
-                                }
-                                if (historyEnabled) {
-                                    SettingsSliderItem(
-                                        title = "Minimum Listen Duration",
-                                        value = minListenSecs.toFloat(),
-                                        range = 10f..120f,
-                                        label = "${minListenSecs}s",
-                                        steps = 11,
-                                        onValueChange = { newValue ->
-                                            val step = 10f
-                                            val rounded = (newValue / step).roundToInt() * step
-                                            val finalSecs = rounded.toInt().coerceIn(10, 120)
-                                            scope.launch { prefs.setListenThresholds(finalSecs, minListenPct) }
-                                        },
-                                    )
-                                    SettingsSliderItem(
-                                        title = "Minimum Listen Percentage",
-                                        value = minListenPct,
-                                        range = 0.1f..1.0f,
-                                        label = "${(minListenPct * 100).roundToInt()}%",
-                                        steps = 9,
-                                        onValueChange = { newValue ->
-                                            val step = 0.1f
-                                            val rounded = (newValue / step).roundToInt() * step
-                                            val finalPct = rounded.coerceIn(0.1f, 1.0f)
-                                            scope.launch { prefs.setListenThresholds(minListenSecs, finalPct) }
-                                        },
-                                    )
-                                    SettingsSliderItem(
-                                        title = "Max History Items",
-                                        value = maxHistory.toFloat(),
-                                        range = 100f..5000f,
-                                        label = "$maxHistory items",
-                                        steps = 49,
-                                        onValueChange = { newValue ->
-                                            val step = 100f
-                                            val rounded = (newValue / step).roundToInt() * step
-                                            val final = rounded.toInt().coerceIn(100, 5000)
-                                            scope.launch { prefs.setMaxHistoryItems(final) }
-                                        },
-                                    )
-                                }
-                            }
-                        }
+                        item { HistorySection(prefs) }
                     }
 
                     SettingsCategory.Data -> {
-                        item {
-                            val backupViewModel: BackupViewModel = hiltViewModel()
-                            val backupState by backupViewModel.state.collectAsState()
-                            val shareViewModel: ShareViewModel = hiltViewModel()
-                            val diagState by shareViewModel.diagnosticState.collectAsState()
-                            var showClearHistoryDialog by remember { mutableStateOf(false) }
-                            val isClearingHistory by libraryViewModel.isClearingHistory.collectAsState()
-
-                            val exportLauncher = rememberLauncherForActivityResult(
-                                ActivityResultContracts.CreateDocument("application/json")
-                            ) { uri -> uri?.let { backupViewModel.exportBackup(it) } }
-
-                            val importLauncher = rememberLauncherForActivityResult(
-                                ActivityResultContracts.OpenDocument()
-                            ) { uri -> uri?.let { backupViewModel.importBackup(it) } }
-
-                            SectionCard(icon = Icons.Rounded.Storage, title = "Data & Backup", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SettingsTextItem(
-                                    title = "Export Backup",
-                                    subtitle = "Save liked songs and playlists to a file",
-                                    icon = Icons.Rounded.FileUpload,
-                                    onClick = {
-                                        exportLauncher.launch("resonance_backup.json")
-                                    }
-                                )
-                                SettingsTextItem(
-                                    title = "Import Backup",
-                                    subtitle = "Restore liked songs and playlists from a file",
-                                    icon = Icons.Rounded.FileDownload,
-                                    onClick = {
-                                        importLauncher.launch(arrayOf("application/json", "*/*"))
-                                    }
-                                )
-
-                                SectionDivider()
-                                SectionSubHeader("Diagnostics")
-                                SettingsTextItem(
-                                    title = "Resonance Share Test",
-                                    subtitle = "Verify Nearby and QR transfer systems",
-                                    icon = Icons.Rounded.WifiTethering,
-                                    onClick = { shareViewModel.runDiagnostics() }
-                                )
-
-                                SectionDivider()
-                                SectionSubHeader("Danger Zone")
-                                SettingsTextItem(
-                                    title = "Clear Playback History",
-                                    subtitle = if (isClearingHistory) "Clearing…" else "Permanently delete all history records",
-                                    icon = Icons.Rounded.DeleteForever,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    onClick = { if (!isClearingHistory) showClearHistoryDialog = true },
-                                )
-                            }
-
-                            when (val s = backupState) {
-                                is BackupUiState.Working -> {
-                                    AlertDialog(
-                                        onDismissRequest = {},
-                                        title = { Text("Working…") },
-                                        text = {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                                Spacer(Modifier.width(16.dp))
-                                                Text("Please wait…")
-                                            }
-                                        },
-                                        confirmButton = {},
-                                    )
-                                }
-                                is BackupUiState.ExportSuccess, is BackupUiState.ImportSuccess -> {
-                                    val msg = when (s) {
-                                        is BackupUiState.ExportSuccess -> s.message
-                                        is BackupUiState.ImportSuccess -> s.message
-                                        else -> ""
-                                    }
-                                    AlertDialog(
-                                        onDismissRequest = backupViewModel::dismiss,
-                                        icon = { Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary) },
-                                        title = { Text("Done") },
-                                        text = { Text(msg) },
-                                        confirmButton = {
-                                            TextButton(onClick = backupViewModel::dismiss) { Text("OK") }
-                                        },
-                                    )
-                                }
-                                is BackupUiState.Error -> {
-                                    AlertDialog(
-                                        onDismissRequest = backupViewModel::dismiss,
-                                        icon = { Icon(Icons.Rounded.Error, null, tint = MaterialTheme.colorScheme.error) },
-                                        title = { Text("Error") },
-                                        text = { Text(s.message) },
-                                        confirmButton = {
-                                            TextButton(onClick = backupViewModel::dismiss) { Text("OK") }
-                                        },
-                                    )
-                                }
-                                else -> {}
-                            }
-
-                            if (diagState !is ShareViewModel.DiagnosticState.Idle) {
-                                AlertDialog(
-                                    onDismissRequest = { shareViewModel.clearDiagnostics() },
-                                    title = { Text("Share Diagnostics") },
-                                    text = {
-                                        Column {
-                                            when (val s = diagState) {
-                                                is ShareViewModel.DiagnosticState.Running -> {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                                                        Spacer(Modifier.width(16.dp))
-                                                        Text("Testing connection...")
-                                                    }
-                                                }
-                                                is ShareViewModel.DiagnosticState.Success -> {
-                                                    Text(s.message, color = MaterialTheme.colorScheme.primary)
-                                                }
-                                                is ShareViewModel.DiagnosticState.Failure -> {
-                                                    Text(s.message, color = MaterialTheme.colorScheme.error)
-                                                }
-                                                else -> {}
-                                            }
-                                        }
-                                    },
-                                    confirmButton = {
-                                        TextButton(onClick = { shareViewModel.clearDiagnostics() }) {
-                                            Text("Close")
-                                        }
-                                    }
-                                )
-                            }
-
-                            if (showClearHistoryDialog) {
-                                AlertDialog(
-                                    onDismissRequest = { showClearHistoryDialog = false },
-                                    icon = {
-                                        Icon(
-                                            Icons.Rounded.DeleteForever,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.error,
-                                        )
-                                    },
-                                    title = { Text("Clear Playback History?") },
-                                    text = {
-                                        Text(
-                                            "This will permanently delete all play counts and listen records. " +
-                                                    "Smart Queue, Most Played, and Lost Memories will be reset. " +
-                                                    "This cannot be undone.",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                    },
-                                    confirmButton = {
-                                        Button(
-                                            onClick = {
-                                                showClearHistoryDialog = false
-                                                libraryViewModel.clearHistory()
-                                                scope.launch {
-                                                    snackbarHostState.showSnackbar("Playback history cleared")
-                                                }
-                                            },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.error,
-                                                contentColor = MaterialTheme.colorScheme.onError,
-                                            ),
-                                        ) {
-                                            Text("Clear History")
-                                        }
-                                    },
-                                    dismissButton = {
-                                        TextButton(onClick = { showClearHistoryDialog = false }) {
-                                            Text("Cancel")
-                                        }
-                                    },
-                                )
-                            }
-                        }
+                        item { DataSection(libraryViewModel, snackbarHostState) }
                     }
 
                     SettingsCategory.About -> {
-                        item {
-                            val uriHandler = LocalUriHandler.current
-                            SectionCard(icon = Icons.Rounded.Info, title = "About", modifier = Modifier.padding(horizontal = 8.dp)) {
-                                SettingsTextItem(
-                                    title = "Resonance",
-                                    subtitle = "v$APP_VERSION",
-                                    icon = Icons.Rounded.MusicNote,
-                                )
-                                SettingsTextItem(
-                                    title = "GitHub Repository",
-                                    subtitle = "View source code and report issues",
-                                    icon = Icons.Rounded.Code,
-                                    trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
-                                    onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance-app") },
-                                )
-                                SettingsTextItem(
-                                    title = "Resonance Website",
-                                    subtitle = "Try the web client at resonance.yuwixx.dev",
-                                    icon = Icons.Rounded.Language,
-                                    trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
-                                    onClick = { uriHandler.openUri("https://resonance.yuwixx.dev") },
-                                )
-                                SettingsTextItem(
-                                    title = "Join the Discord",
-                                    subtitle = "Chat, get help, or become a tester",
-                                    icon = Icons.Rounded.Forum,
-                                    trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
-                                    onClick = { uriHandler.openUri("https://discord.gg/SftqvvveMj") },
-                                )
-                                SettingsTextItem(
-                                    title = "Support on Ko-fi",
-                                    subtitle = "Buy me a coffee if Resonance's been useful",
-                                    icon = Icons.Rounded.Coffee,
-                                    trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
-                                    onClick = { uriHandler.openUri("https://ko-fi.com/yuwixx") },
-                                )
-                                SettingsTextItem(
-                                    title = "App License",
-                                    subtitle = "View Resonance's open source license",
-                                    icon = Icons.Rounded.Gavel,
-                                    trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
-                                    onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance-app/blob/main/LICENSE") },
-                                )
-                                SettingsTextItem(
-                                    title = "Third-Party Licenses",
-                                    subtitle = "Open source libraries used in this project",
-                                    icon = Icons.Rounded.Description,
-                                    onClick = onNavigateToLicenses,
-                                )
+                        item { AboutSection(onNavigateToLicenses) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Each settings section collects only the preferences it shows, so a change recomposes just
+// that section.
+
+@Composable
+private fun MainSection(
+    settingsViewModel: SettingsViewModel,
+    onCategoryClick: (SettingsCategory) -> Unit,
+) {
+    val partyMode by settingsViewModel.partyMode.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var easterEggTaps by remember { mutableIntStateOf(0) }
+    var showEasterEgg by remember { mutableStateOf(false) }
+    var showPartyDisable by remember { mutableStateOf(false) }
+    val bounceScale = remember { Animatable(1f) }
+
+    Column {
+        // App header card
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .graphicsLayer { scaleX = bounceScale.value; scaleY = bounceScale.value }
+                .clickable {
+                    scope.launch {
+                        bounceScale.animateTo(0.93f, spring(stiffness = Spring.StiffnessMedium))
+                        bounceScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow))
+                    }
+                    if (partyMode) {
+                        showPartyDisable = true
+                    } else {
+                        easterEggTaps++
+                        if (easterEggTaps >= 5) {
+                            showEasterEgg = true
+                            easterEggTaps = 0
+                        }
+                    }
+                },
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.primaryContainer,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(52.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.MusicNote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(28.dp),
+                        )
+                    }
+                }
+                Column {
+                    AnimatedContent(
+                        targetState = partyMode,
+                        transitionSpec = {
+                            fadeIn(tween(280, easing = EmphasizedDecelerate)) togetherWith
+                                fadeOut(tween(180, easing = EmphasizedAccelerate))
+                        },
+                        label = "main_header_title",
+                    ) { party ->
+                        Text(
+                            if (party) "🎉 Resonance" else "Resonance",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                    AnimatedContent(
+                        targetState = when {
+                            partyMode -> "Party Mode is ON"
+                            easterEggTaps in 1..4 -> "${5 - easterEggTaps} more…"
+                            else -> "v$APP_VERSION"
+                        },
+                        transitionSpec = {
+                            fadeIn(tween(280, easing = EmphasizedDecelerate)) togetherWith
+                                fadeOut(tween(180, easing = EmphasizedAccelerate))
+                        },
+                        label = "main_header_subtitle",
+                    ) { subtitle ->
+                        Text(
+                            subtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showEasterEgg) {
+            AlertDialog(
+                onDismissRequest = { showEasterEgg = false },
+                icon = { Text("🎵", fontSize = 40.sp) },
+                title = { Text("You found it!") },
+                text = {
+                    Text(
+                        "Resonance was built with love for music.\n\nThanks for using the app! ♪\n\nPsst — want to unlock something special?",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        settingsViewModel.setPartyMode(true)
+                        showEasterEgg = false
+                    }) { Text("🎉 Party Mode!") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showEasterEgg = false }) { Text("♫ Nice") }
+                },
+            )
+        }
+
+        if (showPartyDisable) {
+            AlertDialog(
+                onDismissRequest = { showPartyDisable = false },
+                icon = { Text("🎉", fontSize = 40.sp) },
+                title = { Text("Party Mode is ON") },
+                text = {
+                    Text(
+                        "The party is still going! Want to turn it off?",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        settingsViewModel.setPartyMode(false)
+                        showPartyDisable = false
+                    }) { Text("End the party") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPartyDisable = false }) { Text("Keep it going!") }
+                },
+            )
+        }
+
+        // Grouped category rows
+        settingsGroups.forEach { group ->
+            Text(
+                text = group.label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
+            )
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 4.dp),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Column {
+                    group.items.forEachIndexed { idx, cat ->
+                        if (idx > 0) HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onCategoryClick(cat) }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.size(38.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        cat.icon,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
                             }
+                            Text(
+                                cat.title,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Normal,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
                         }
                     }
                 }
             }
         }
+
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun UpdatesSection(settingsViewModel: SettingsViewModel) {
+    val updateFreq by settingsViewModel.updateFrequency.collectAsStateWithLifecycle()
+    var showDisableWarning by remember { mutableStateOf(false) }
+
+    SectionCard(icon = Icons.Rounded.SystemUpdate, title = "Updates", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SegmentedSettingsItem(
+            title = "Check for Updates",
+            options = listOf("Launch" to "LAUNCH", "Daily" to "DAILY", "Weekly" to "WEEKLY", "Off" to "DISABLED"),
+            selected = updateFreq,
+            onSelect = {
+                if (it == "DISABLED") showDisableWarning = true
+                else settingsViewModel.setUpdateFrequency(it)
+            },
+        )
+        SettingsTextItem(
+            title = "Check Now",
+            subtitle = "Current version: v$APP_VERSION",
+            icon = Icons.Rounded.Update,
+            onClick = { settingsViewModel.checkForUpdates(APP_VERSION, isManual = true) }
+        )
+    }
+
+    if (showDisableWarning) {
+        AlertDialog(
+            onDismissRequest = { showDisableWarning = false },
+            icon = { Icon(Icons.Rounded.Warning, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Disable Updates?") },
+            text = { Text("It is highly recommended to keep update checks enabled so you don't miss bug fixes and new features.\n\nAre you sure you want to disable automatic checks?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        settingsViewModel.setUpdateFrequency("DISABLED")
+                        showDisableWarning = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Disable") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisableWarning = false }) { Text("Keep Enabled") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AppearanceSection(prefs: ResonancePreferences) {
+    val scope = rememberCoroutineScope()
+    val dynamicColor by prefs.dynamicColorEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val presetColorInt by prefs.presetColor.collectAsStateWithLifecycle(initialValue = null)
+    val darkTheme by prefs.darkTheme.collectAsStateWithLifecycle(initialValue = "SYSTEM")
+    val paletteStyle by prefs.paletteStyle.collectAsStateWithLifecycle(initialValue = "TONAL_SPOT")
+    val cornerRadius by prefs.cornerRadius.collectAsStateWithLifecycle(initialValue = 28)
+    val seekbarStyle by prefs.seekbarStyle.collectAsStateWithLifecycle(initialValue = "WAVEFORM")
+    val blurBackground by prefs.blurArtworkBackground.collectAsStateWithLifecycle(initialValue = true)
+    val blurStrength by prefs.blurStrength.collectAsStateWithLifecycle(initialValue = 0.3f)
+    val artworkAnimation by prefs.artworkAnimation.collectAsStateWithLifecycle(initialValue = true)
+    val hapticFeedback by prefs.hapticFeedback.collectAsStateWithLifecycle(initialValue = true)
+    val showBitrateInfo by prefs.showBitrateInfo.collectAsStateWithLifecycle(initialValue = false)
+    val albumGridCols by prefs.albumGridColumns.collectAsStateWithLifecycle(initialValue = 2)
+    val hiddenNavTabs by prefs.hiddenNavTabs.collectAsStateWithLifecycle(initialValue = emptySet())
+    val amoledMode by prefs.amoledBlackTheme.collectAsStateWithLifecycle(initialValue = false)
+    val compactList by prefs.compactListMode.collectAsStateWithLifecycle(initialValue = false)
+    val showDurationList by prefs.showDurationInList.collectAsStateWithLifecycle(initialValue = false)
+    val playerArtworkShape by prefs.playerArtworkShape.collectAsStateWithLifecycle(initialValue = "ROUNDED")
+    val seekbarColor by prefs.seekbarColor.collectAsStateWithLifecycle(initialValue = "PRIMARY")
+    val tintedNavBar by prefs.tintedNavBar.collectAsStateWithLifecycle(initialValue = false)
+    val floatingNavBar by prefs.floatingNavBar.collectAsStateWithLifecycle(initialValue = false)
+    val navLabelVisibility by prefs.navLabelVisibility.collectAsStateWithLifecycle(initialValue = "ALWAYS")
+    val playlistGridCols by prefs.playlistGridColumns.collectAsStateWithLifecycle(initialValue = 2)
+    val showAlbumInList by prefs.showAlbumInList.collectAsStateWithLifecycle(initialValue = false)
+    val listArtworkSize by prefs.listArtworkSize.collectAsStateWithLifecycle(initialValue = "MEDIUM")
+    val defaultSongsSort by prefs.defaultSongsSort.collectAsStateWithLifecycle(initialValue = "TITLE")
+
+    var showNavTabsDialog by remember { mutableStateOf(false) }
+    val visibleCount = navItems.count { it.screen.route !in hiddenNavTabs }
+
+    SectionCard(icon = Icons.Rounded.Palette, title = "Appearance", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SectionSubHeader("Color & Theme")
+        SettingsToggleRow("System Dynamic Color", "Use Android 12+ wallpaper colors", dynamicColor) {
+            scope.launch { prefs.setDynamicColorEnabled(it) }
+        }
+        AnimatedVisibility(
+            visible = !dynamicColor,
+            enter = fadeIn(tween(280, easing = EmphasizedDecelerate)) + expandVertically(tween(280, easing = EmphasizedDecelerate)),
+            exit = fadeOut(tween(180, easing = EmphasizedAccelerate)) + shrinkVertically(tween(180, easing = EmphasizedAccelerate)),
+        ) {
+            Column {
+                ThemeColorPicker(
+                    current = presetColorInt,
+                    onPick = { scope.launch { prefs.setPresetColor(it) } }
+                )
+                // Only seed-based schemes have a palette style; wallpaper colors come as they are.
+                Text(
+                    "Palette Style",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
+                    PaletteStyle.entries.forEach { style ->
+                        FilterChip(
+                            selected = PaletteStyle.from(paletteStyle) == style,
+                            onClick = { scope.launch { prefs.setPaletteStyle(style.name) } },
+                            label = { Text(style.label) },
+                        )
+                    }
+                }
+            }
+        }
+        SegmentedSettingsItem(
+            title = "Dark Theme",
+            options = listOf("System" to "SYSTEM", "Light" to "LIGHT", "Dark" to "DARK"),
+            selected = darkTheme,
+            onSelect = { scope.launch { prefs.setDarkTheme(it) } },
+        )
+        SegmentedSettingsItem(
+            title = "Seekbar Style",
+            options = listOf("Standard" to "STANDARD", "Waveform" to "WAVEFORM", "M3" to "MATERIAL_YOU_3"),
+            selected = seekbarStyle,
+            onSelect = { scope.launch { prefs.setSeekbarStyle(it) } },
+        )
+        SettingsToggleRow("Blur Background", "Artwork-tinted blurred backdrop in player", blurBackground) {
+            scope.launch { prefs.setBlurArtworkBackground(it) }
+        }
+        AnimatedVisibility(
+            visible = blurBackground,
+            enter = fadeIn(tween(280, easing = EmphasizedDecelerate)) + expandVertically(tween(280, easing = EmphasizedDecelerate)),
+            exit = fadeOut(tween(180, easing = EmphasizedAccelerate)) + shrinkVertically(tween(180, easing = EmphasizedAccelerate)),
+        ) {
+            SettingsSliderItem(
+                title = "Blur Intensity",
+                value = blurStrength,
+                range = 0.1f..0.7f,
+                label = "${(blurStrength * 100).roundToInt()}%",
+                onValueChange = { scope.launch { prefs.setBlurStrength(it) } },
+            )
+        }
+        SettingsToggleRow("Artwork Animation", "Scale artwork on play/pause", artworkAnimation) {
+            scope.launch { prefs.setArtworkAnimation(it) }
+        }
+        SettingsToggleRow("Haptic Feedback", "Vibrate on button taps, seeking and long-press", hapticFeedback) {
+            scope.launch { prefs.setHapticFeedback(it) }
+        }
+        SettingsToggleRow("Show Bitrate & Format", "Display audio quality badge in player", showBitrateInfo) {
+            scope.launch { prefs.setShowBitrateInfo(it) }
+        }
+        SettingsSliderItem(
+            title = "Corner Radius",
+            value = cornerRadius.toFloat(),
+            range = 0f..40f,
+            label = "${cornerRadius}dp",
+            steps = 39,
+            onValueChange = { scope.launch { prefs.setCornerRadius(it.roundToInt()) } },
+        )
+        SettingsSliderItem(
+            title = "Album Grid Columns",
+            value = albumGridCols.toFloat(),
+            range = 2f..4f,
+            label = "$albumGridCols columns",
+            steps = 1,
+            onValueChange = { scope.launch { prefs.setAlbumGridColumns(it.roundToInt()) } },
+        )
+        SettingsToggleRow("AMOLED Black Mode", "True black backgrounds for OLED displays", amoledMode) {
+            scope.launch { prefs.setAmoledBlackTheme(it) }
+        }
+        SegmentedSettingsItem(
+            title = "Player Artwork Shape",
+            options = listOf("Rounded" to "ROUNDED", "Square" to "SQUARE", "Circle" to "CIRCLE"),
+            selected = playerArtworkShape,
+            onSelect = { scope.launch { prefs.setPlayerArtworkShape(it) } },
+        )
+        SegmentedSettingsItem(
+            title = "Seekbar Color",
+            options = listOf("Primary" to "PRIMARY", "Secondary" to "SECONDARY", "Tertiary" to "TERTIARY"),
+            selected = seekbarColor,
+            onSelect = { scope.launch { prefs.setSeekbarColor(it) } },
+        )
+
+        SectionDivider()
+        SectionSubHeader("Song Lists")
+        SettingsToggleRow("Compact Mode", "Reduce row height for a denser list view", compactList) {
+            scope.launch { prefs.setCompactListMode(it) }
+        }
+        SettingsToggleRow("Show Duration in List", "Display track length next to each song", showDurationList) {
+            scope.launch { prefs.setShowDurationInList(it) }
+        }
+        SettingsToggleRow("Show Album in List", "Display album name below artist in song rows", showAlbumInList) {
+            scope.launch { prefs.setShowAlbumInList(it) }
+        }
+        SegmentedSettingsItem(
+            title = "List Artwork Size",
+            options = listOf("Small" to "SMALL", "Medium" to "MEDIUM", "Large" to "LARGE"),
+            selected = listArtworkSize,
+            onSelect = { scope.launch { prefs.setListArtworkSize(it) } },
+        )
+        SegmentedSettingsItem(
+            title = "Default Songs Sort",
+            options = listOf("Title" to "TITLE", "Artist" to "ARTIST", "Album" to "ALBUM", "Added" to "ADDED"),
+            selected = defaultSongsSort,
+            onSelect = { scope.launch { prefs.setDefaultSongsSort(it) } },
+        )
+        SettingsSliderItem(
+            title = "Playlist Grid Columns",
+            value = playlistGridCols.toFloat(),
+            range = 1f..4f,
+            label = "$playlistGridCols ${if (playlistGridCols == 1) "column" else "columns"}",
+            steps = 2,
+            onValueChange = { scope.launch { prefs.setPlaylistGridColumns(it.roundToInt()) } },
+        )
+
+        SectionDivider()
+        SectionSubHeader("Navigation Bar")
+        SettingsToggleRow("Floating Navigation Bar", "Pill-shaped bar that floats above the screen edge", floatingNavBar) {
+            scope.launch { prefs.setFloatingNavBar(it) }
+        }
+        SettingsToggleRow("Tinted Navigation Bar", "Apply surface tint to the bottom navigation bar", tintedNavBar) {
+            scope.launch { prefs.setTintedNavBar(it) }
+        }
+        SegmentedSettingsItem(
+            title = "Tab Labels",
+            options = listOf("Always" to "ALWAYS", "Selected" to "SELECTED", "Never" to "NEVER"),
+            selected = navLabelVisibility,
+            onSelect = { scope.launch { prefs.setNavLabelVisibility(it) } },
+        )
+        SettingsTextItem(
+            title = "Navigation Bar Tabs",
+            subtitle = "$visibleCount of ${navItems.size} tabs shown",
+            icon = Icons.Rounded.Tab,
+            onClick = { showNavTabsDialog = true },
+        )
+    }
+
+    if (showNavTabsDialog) {
+        NavTabsDialog(
+            hiddenNavTabs = hiddenNavTabs,
+            onToggle = { route, shouldHide ->
+                val updated = if (shouldHide) hiddenNavTabs + route
+                              else             hiddenNavTabs - route
+                scope.launch { prefs.setHiddenNavTabs(updated) }
+            },
+            onDismiss = { showNavTabsDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun HomeSection(prefs: ResonancePreferences) {
+    val scope = rememberCoroutineScope()
+    val mixesLocation by prefs.mixesLocation.collectAsStateWithLifecycle(initialValue = "BOTH")
+    val homeShowMostPlayed by prefs.homeShowMostPlayed.collectAsStateWithLifecycle(initialValue = true)
+    val homeShowRecentlyAdded by prefs.homeShowRecentlyAdded.collectAsStateWithLifecycle(initialValue = true)
+    val homeRecentlyAddedCount by prefs.homeRecentlyAddedCount.collectAsStateWithLifecycle(initialValue = 20)
+
+    SectionCard(icon = Icons.Rounded.Home, title = "Home Screen Sections", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SegmentedSettingsItem(
+            title = "Your Mixes",
+            options = listOf("Home only" to "HOME", "Both" to "BOTH", "Playlists only" to "PLAYLISTS"),
+            selected = mixesLocation,
+            onSelect = { scope.launch { prefs.setMixesLocation(it) } },
+        )
+        SettingsToggleRow("Most Played", "Show your top tracks as a horizontal scroll row", homeShowMostPlayed) {
+            scope.launch { prefs.setHomeShowMostPlayed(it) }
+        }
+        SettingsToggleRow("Recently Added", "Show recently added songs as a horizontal scroll row", homeShowRecentlyAdded) {
+            scope.launch { prefs.setHomeShowRecentlyAdded(it) }
+        }
+        AnimatedVisibility(
+            visible = homeShowRecentlyAdded,
+            enter = fadeIn(tween(280, easing = EmphasizedDecelerate)) + expandVertically(tween(280, easing = EmphasizedDecelerate)),
+            exit = fadeOut(tween(180, easing = EmphasizedAccelerate)) + shrinkVertically(tween(180, easing = EmphasizedAccelerate)),
+        ) {
+            SegmentedSettingsItem(
+                title = "Recently Added Count",
+                options = listOf("10" to "10", "20" to "20", "30" to "30", "50" to "50"),
+                selected = homeRecentlyAddedCount.toString(),
+                onSelect = { scope.launch { prefs.setHomeRecentlyAddedCount(it.toInt()) } },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerSection(prefs: ResonancePreferences) {
+    val scope = rememberCoroutineScope()
+    val playerLayout by prefs.playerLayout.collectAsStateWithLifecycle(initialValue = "STANDARD")
+    val miniPlayerStyle by prefs.miniPlayerStyle.collectAsStateWithLifecycle(initialValue = "CARD")
+    val showLyricsBtn by prefs.showLyricsButton.collectAsStateWithLifecycle(initialValue = true)
+    val lyricsFontScale by prefs.lyricsFontScale.collectAsStateWithLifecycle(initialValue = 1.0f)
+    val lyricAlignment by prefs.lyricAlignment.collectAsStateWithLifecycle(initialValue = "CENTER")
+    val lyricsLineSpacing by prefs.lyricsLineSpacing.collectAsStateWithLifecycle(initialValue = "NORMAL")
+    val lyricsFontFamily by prefs.lyricsFontFamily.collectAsStateWithLifecycle(initialValue = "DEFAULT")
+    val showRemainingTime by prefs.showRemainingTime.collectAsStateWithLifecycle(initialValue = false)
+    val showNextSongInPlayer by prefs.showNextSongInPlayer.collectAsStateWithLifecycle(initialValue = false)
+    val showEqualizerInPlayer by prefs.showEqualizerInPlayer.collectAsStateWithLifecycle(initialValue = true)
+    val miniPlayerShowProgress by prefs.miniPlayerShowProgress.collectAsStateWithLifecycle(initialValue = true)
+    val miniPlayerShowSkipBtn by prefs.miniPlayerShowSkipBtn.collectAsStateWithLifecycle(initialValue = true)
+
+    SectionCard(icon = Icons.Rounded.MusicNote, title = "Player", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SegmentedSettingsItem(
+            title = "Player Layout",
+            options = listOf("Standard" to "STANDARD", "Big Artwork" to "ARTWORK_BIG", "Lyrics Focus" to "LYRICS_FOCUS"),
+            selected = playerLayout,
+            onSelect = { scope.launch { prefs.setPlayerLayout(it) } },
+        )
+        SegmentedSettingsItem(
+            title = "Mini Player Style",
+            options = listOf("Compact" to "COMPACT", "Card" to "CARD", "Floating" to "FLOATING"),
+            selected = miniPlayerStyle,
+            onSelect = { scope.launch { prefs.setMiniPlayerStyle(it) } },
+        )
+        SettingsToggleRow("Show Lyrics Button", "Display lyrics shortcut in player footer", showLyricsBtn) {
+            scope.launch { prefs.setShowLyricsButton(it) }
+        }
+        SettingsSliderItem(
+            title = "Lyrics Font Size",
+            value = lyricsFontScale,
+            range = 0.50f..1.75f,
+            label = "${(lyricsFontScale * 100).roundToInt()}%",
+            steps = 4,
+            onValueChange = { newValue ->
+                val step = 0.25f
+                val rounded = (newValue / step).roundToInt() * step
+                scope.launch { prefs.setLyricsFontScale(rounded.coerceIn(0.50f, 1.75f)) }
+            },
+        )
+        SegmentedSettingsItem(
+            title = "Lyrics Alignment",
+            options = listOf("Centered" to "CENTER", "Left" to "START"),
+            selected = lyricAlignment,
+            onSelect = { scope.launch { prefs.setLyricAlignment(it) } },
+        )
+        SegmentedSettingsItem(
+            title = "Lyrics Font",
+            options = listOf("Default" to "DEFAULT", "Rounded" to "ROUNDED", "Serif" to "SERIF", "Mono" to "MONOSPACE"),
+            selected = lyricsFontFamily,
+            onSelect = { scope.launch { prefs.setLyricsFontFamily(it) } },
+        )
+        SegmentedSettingsItem(
+            title = "Lyrics Line Spacing",
+            options = listOf("Compact" to "COMPACT", "Normal" to "NORMAL", "Spacious" to "SPACIOUS"),
+            selected = lyricsLineSpacing,
+            onSelect = { scope.launch { prefs.setLyricsLineSpacing(it) } },
+        )
+        SettingsToggleRow("Show Remaining Time", "Display remaining duration instead of total on the right", showRemainingTime) {
+            scope.launch { prefs.setShowRemainingTime(it) }
+        }
+        SettingsToggleRow("Show Next Song", "Show upcoming track name below the seekbar", showNextSongInPlayer) {
+            scope.launch { prefs.setShowNextSongInPlayer(it) }
+        }
+        SettingsToggleRow("Show Equalizer Button", "Display equalizer shortcut in player footer", showEqualizerInPlayer) {
+            scope.launch { prefs.setShowEqualizerInPlayer(it) }
+        }
+
+        SectionDivider()
+        SectionSubHeader("Mini Player")
+        SettingsToggleRow("Show Progress Bar", "Display a thin progress line at the bottom of the mini player", miniPlayerShowProgress) {
+            scope.launch { prefs.setMiniPlayerShowProgress(it) }
+        }
+        SettingsToggleRow("Show Skip Button", "Show skip-next button in the mini player", miniPlayerShowSkipBtn) {
+            scope.launch { prefs.setMiniPlayerShowSkipBtn(it) }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackSection(prefs: ResonancePreferences) {
+    val scope = rememberCoroutineScope()
+    val gapless by prefs.gaplessEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val skipSilence by prefs.skipSilence.collectAsStateWithLifecycle(initialValue = false)
+    val crossfadeMs by prefs.crossfadeDurationMs.collectAsStateWithLifecycle(initialValue = 0)
+    val playbackSpeed by prefs.playbackSpeed.collectAsStateWithLifecycle(initialValue = 1.0f)
+    val playbackPitch by prefs.playbackPitch.collectAsStateWithLifecycle(initialValue = 1.0f)
+    val resumeOnHeadphones by prefs.resumeOnHeadphones.collectAsStateWithLifecycle(initialValue = true)
+    val pauseOnHeadphonesOut by prefs.pauseOnHeadphonesOut.collectAsStateWithLifecycle(initialValue = true)
+    val duckAudio by prefs.duckAudioOnFocusLoss.collectAsStateWithLifecycle(initialValue = true)
+    val smartShuffle by prefs.smartShuffleEnabled.collectAsStateWithLifecycle(initialValue = false)
+
+    SectionCard(icon = Icons.Rounded.PlayCircle, title = "Playback", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SettingsToggleRow("Gapless Playback", "Smooth transition between tracks", gapless) {
+            scope.launch { prefs.setGaplessEnabled(it) }
+        }
+        SettingsToggleRow("Skip Silence", "Automatically skip silent parts of tracks", skipSilence) {
+            scope.launch { prefs.setSkipSilence(it) }
+        }
+        SettingsSliderItem(
+            title = "Crossfade Duration",
+            value = crossfadeMs.toFloat(),
+            range = 0f..10000f,
+            label = if (crossfadeMs == 0) "Disabled" else "${crossfadeMs / 1000}s",
+            steps = 9,
+            onValueChange = { newValue ->
+                val step = 1000f
+                val rounded = (newValue / step).roundToInt() * step
+                scope.launch { prefs.setCrossfadeDuration(rounded.toInt()) }
+            },
+        )
+        SettingsSliderItem(
+            title = "Playback Speed",
+            value = playbackSpeed,
+            range = 0.5f..2.0f,
+            label = "${playbackSpeed}x",
+            steps = 5,
+            onValueChange = { newValue ->
+                val step = 0.25f
+                val rounded = (newValue / step).roundToInt() * step
+                scope.launch { prefs.setPlaybackSpeed(rounded.coerceIn(0.5f, 2.0f)) }
+            },
+        )
+        SettingsSliderItem(
+            title = "Playback Pitch",
+            value = playbackPitch,
+            range = 0.5f..2.0f,
+            label = "${playbackPitch}x",
+            steps = 5,
+            onValueChange = { newValue ->
+                val step = 0.25f
+                val rounded = (newValue / step).roundToInt() * step
+                scope.launch { prefs.setPlaybackPitch(rounded.coerceIn(0.5f, 2.0f)) }
+            },
+        )
+        SettingsToggleRow("Resume on Headphones", "Continue playback when headphones are connected", resumeOnHeadphones) {
+            scope.launch { prefs.setResumeOnHeadphones(it) }
+        }
+        SettingsToggleRow("Pause on Disconnect", "Stop playback when headphones are removed", pauseOnHeadphonesOut) {
+            scope.launch { prefs.setPauseOnHeadphonesOut(it) }
+        }
+        SettingsToggleRow("Audio Ducking", "Lower volume when other apps play sound", duckAudio) {
+            scope.launch { prefs.setDuckAudioOnFocusLoss(it) }
+        }
+        SettingsToggleRow("Smart Shuffle", "Prioritise higher rated and recent tracks", smartShuffle) {
+            scope.launch { prefs.setSmartShuffleEnabled(it) }
+        }
+    }
+}
+
+@Composable
+private fun AudioSection(prefs: ResonancePreferences, onNavigateToEqualizer: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val replayGainMode by prefs.replayGainMode.collectAsStateWithLifecycle(initialValue = "TRACK")
+    val replayGainPreamp by prefs.replayGainPreampDb.collectAsStateWithLifecycle(initialValue = 0f)
+    val volumeNorm by prefs.volumeNormalization.collectAsStateWithLifecycle(initialValue = false)
+
+    SectionCard(icon = Icons.Rounded.GraphicEq, title = "Audio", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SegmentedSettingsItem(
+            title = "ReplayGain Mode",
+            options = listOf("Off" to "OFF", "Track" to "TRACK", "Album" to "ALBUM"),
+            selected = replayGainMode,
+            onSelect = { scope.launch { prefs.setReplayGainMode(it) } },
+        )
+        SettingsSliderItem(
+            title = "ReplayGain Preamp",
+            value = replayGainPreamp,
+            range = -15f..15f,
+            label = when (val db = replayGainPreamp.roundToInt()) {
+                0 -> "0 dB"
+                else -> if (db > 0) "+$db dB" else "$db dB"
+            },
+            steps = 29,
+            onValueChange = { scope.launch { prefs.setReplayGainPreamp(it) } },
+        )
+        SettingsToggleRow("Volume Normalization", "Equalise loudness across all tracks", volumeNorm) {
+            scope.launch { prefs.setVolumeNormalization(it) }
+        }
+        SettingsTextItem(
+            title = "Equalizer",
+            subtitle = "Adjust frequency bands",
+            icon = Icons.Rounded.GraphicEq,
+            onClick = onNavigateToEqualizer,
+        )
+    }
+}
+
+@Composable
+private fun LibrarySection(libraryViewModel: LibraryViewModel, prefs: ResonancePreferences) {
+    val scope = rememberCoroutineScope()
+    val isSyncing by libraryViewModel.isSyncing.collectAsStateWithLifecycle()
+    val allFolders by libraryViewModel.allFolders.collectAsStateWithLifecycle()
+    val minDurationMs by prefs.minTrackDurationMs.collectAsStateWithLifecycle(initialValue = 30_000L)
+    val artistDelimiter by prefs.artistDelimiter.collectAsStateWithLifecycle(initialValue = ",;/&")
+    val showArtworkList by prefs.showArtworkInList.collectAsStateWithLifecycle(initialValue = true)
+    val groupByAlbumArtist by prefs.groupByAlbumArtist.collectAsStateWithLifecycle(initialValue = true)
+    val showFilenameTitle by prefs.showFilenameAsTitle.collectAsStateWithLifecycle(initialValue = false)
+    val ignoreArticles by prefs.ignoreArticles.collectAsStateWithLifecycle(initialValue = true)
+    val autoScanHours by prefs.autoScanIntervalHours.collectAsStateWithLifecycle(initialValue = 0)
+    val excludedFolders by prefs.excludedFolders.collectAsStateWithLifecycle(initialValue = emptySet())
+    val includedFolders by prefs.includedFolders.collectAsStateWithLifecycle(initialValue = emptySet())
+
+    var showDelimiterDialog by remember { mutableStateOf(false) }
+    var showIncludedDialog by remember { mutableStateOf(false) }
+    var showExcludedDialog by remember { mutableStateOf(false) }
+
+    PlaylistFolderSyncCard(libraryViewModel, prefs)
+    Spacer(Modifier.height(12.dp))
+
+    SectionCard(icon = Icons.Rounded.LibraryMusic, title = "Library", modifier = Modifier.padding(horizontal = 8.dp)) {
+        ScanLibraryItem(isSyncing) {
+            libraryViewModel.syncLibrary(force = true)
+        }
+        SettingsSliderItem(
+            title = "Minimum Track Duration",
+            value = (minDurationMs / 1000f),
+            range = 0f..300f,
+            label = if (minDurationMs == 0L) "No filter" else "${minDurationMs / 1000}s",
+            steps = 29,
+            onValueChange = { newValue ->
+                val step = 10f
+                val rounded = (newValue / step).roundToInt() * step
+                scope.launch { prefs.setMinTrackDuration((rounded.toLong() * 1000).coerceAtLeast(0)) }
+            },
+        )
+        SettingsToggleRow("Show Artwork in Lists", "Display album art thumbnails in song lists", showArtworkList) {
+            scope.launch { prefs.setShowArtworkInList(it) }
+        }
+        SettingsToggleRow("Group by Album Artist", "Use album artist for grouping (not track artist)", groupByAlbumArtist) {
+            scope.launch { prefs.setGroupByAlbumArtist(it) }
+        }
+        SettingsToggleRow("Show Filename as Title", "Fall back to filename when title tag is missing", showFilenameTitle) {
+            scope.launch { prefs.setShowFilenameAsTitle(it) }
+        }
+        SettingsToggleRow("Ignore Articles in Sort", "Sort \"The Beatles\" as \"Beatles\"", ignoreArticles) {
+            scope.launch { prefs.setIgnoreArticles(it) }
+        }
+        SettingsTextItem(
+            title = "Artist Delimiter",
+            subtitle = "Characters that split multi-artist tags: $artistDelimiter",
+            icon = Icons.Rounded.People,
+            onClick = { showDelimiterDialog = true },
+        )
+        SegmentedSettingsItem(
+            title = "Auto Scan Interval",
+            options = listOf("Off" to "0", "1 hr" to "1", "6 hrs" to "6", "24 hrs" to "24"),
+            selected = autoScanHours.toString(),
+            onSelect = { scope.launch { prefs.setAutoScanIntervalHours(it.toInt()) } },
+        )
+        SettingsTextItem(
+            title = "Included Folders",
+            subtitle = if (includedFolders.isEmpty()) "All folders (scan everything)"
+                       else "${includedFolders.size} folder${if (includedFolders.size != 1) "s" else ""} included",
+            icon = Icons.Rounded.FolderOpen,
+            onClick = { showIncludedDialog = true },
+        )
+        SettingsTextItem(
+            title = "Excluded Folders",
+            subtitle = if (excludedFolders.isEmpty()) "No folders excluded"
+                       else "${excludedFolders.size} folder${if (excludedFolders.size != 1) "s" else ""} excluded",
+            icon = Icons.Rounded.FolderOff,
+            onClick = { showExcludedDialog = true },
+        )
+    }
+
+    if (showDelimiterDialog) {
+        var delimiterInput by remember { mutableStateOf(artistDelimiter) }
+        AlertDialog(
+            onDismissRequest = { showDelimiterDialog = false },
+            title = { Text("Artist Delimiter") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Characters used to split multi-artist tags (e.g. \"Artist1, Artist2\"). " +
+                                "Enter all split characters with no spaces between them.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = delimiterInput,
+                        onValueChange = { delimiterInput = it },
+                        label = { Text("Delimiter characters") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch { prefs.setArtistDelimiter(delimiterInput) }
+                        showDelimiterDialog = false
+                    },
+                    enabled = delimiterInput.isNotBlank(),
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDelimiterDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+    if (showIncludedDialog) {
+        IncludedFoldersDialog(
+            allFolders = allFolders,
+            includedFolders = includedFolders,
+            onSave = { folders ->
+                scope.launch { prefs.setIncludedFolders(folders) }
+                showIncludedDialog = false
+            },
+            onDismiss = { showIncludedDialog = false },
+        )
+    }
+    if (showExcludedDialog) {
+        ExcludedFoldersDialog(
+            allFolders = allFolders,
+            excludedFolders = excludedFolders,
+            onSave = { folders ->
+                scope.launch { prefs.setExcludedFolders(folders) }
+                showExcludedDialog = false
+            },
+            onDismiss = { showExcludedDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun NavidromeSettingsSection(settingsViewModel: SettingsViewModel) {
+    val currentMusicSource by settingsViewModel.musicSource.collectAsStateWithLifecycle()
+    val navidromeServerUrl by settingsViewModel.navidromeServerUrl.collectAsStateWithLifecycle()
+    val navidromeUsername by settingsViewModel.navidromeUsername.collectAsStateWithLifecycle()
+    val navidromeConnectionState by settingsViewModel.navidromeConnectionState.collectAsStateWithLifecycle()
+    val navidromeSyncState by settingsViewModel.navidromeSyncState.collectAsStateWithLifecycle()
+    val downloadWifiOnly by settingsViewModel.downloadWifiOnly.collectAsStateWithLifecycle()
+    val downloadsStorageUsed by settingsViewModel.downloadsStorageUsed.collectAsStateWithLifecycle()
+    val downloadedSongCount by settingsViewModel.downloadedSongCount.collectAsStateWithLifecycle()
+
+    NavidromeSection(
+        currentSource = currentMusicSource,
+        savedServerUrl = navidromeServerUrl,
+        savedUsername = navidromeUsername,
+        connectionState = navidromeConnectionState,
+        syncState = navidromeSyncState,
+        onTest = { url, user, pass -> settingsViewModel.testNavidromeConnection(url, user, pass) },
+        onSave = { url, user, pass -> settingsViewModel.saveNavidromeAndSwitch(url, user, pass) },
+        onSwitchToLocal = { settingsViewModel.switchToLocal() },
+        onSwitchToNavidrome = { settingsViewModel.switchToNavidrome() },
+        onForgetServer = { settingsViewModel.forgetNavidrome() },
+        onResetConnection = { settingsViewModel.resetNavidromeConnectionState() },
+        onResetSync = { settingsViewModel.resetNavidromeSyncState() },
+    )
+    AnimatedVisibility(
+        visible = currentMusicSource == MusicSource.NAVIDROME,
+        enter = fadeIn(tween(280, easing = EmphasizedDecelerate)) + expandVertically(tween(280, easing = EmphasizedDecelerate)),
+        exit = fadeOut(tween(180, easing = EmphasizedAccelerate)) + shrinkVertically(tween(180, easing = EmphasizedAccelerate)),
+    ) {
+        DownloadsSection(
+            wifiOnly = downloadWifiOnly,
+            onWifiOnlyChange = { settingsViewModel.setDownloadWifiOnly(it) },
+            storageUsedBytes = downloadsStorageUsed,
+            downloadedSongCount = downloadedSongCount,
+            onDeleteAll = { settingsViewModel.removeAllDownloads() },
+        )
+    }
+}
+
+@Composable
+private fun OnlineServicesSettingsSection(
+    prefs: ResonancePreferences,
+    settingsViewModel: SettingsViewModel,
+    onNavigateToMetadataEnrichment: () -> Unit,
+    snackbarHostState: SnackbarHostState,
+) {
+    val scope = rememberCoroutineScope()
+    val fetchLyrics by prefs.fetchLyrics.collectAsStateWithLifecycle(initialValue = false)
+    val fetchArtistImages by prefs.fetchArtistImages.collectAsStateWithLifecycle(initialValue = false)
+    val fetchAlbumArt by prefs.fetchAlbumArt.collectAsStateWithLifecycle(initialValue = false)
+    val discogsApiToken by prefs.discogsApiToken.collectAsStateWithLifecycle(initialValue = "")
+    val lastFmEnabled by settingsViewModel.lastFmEnabled.collectAsStateWithLifecycle()
+    val lastFmNowPlaying by settingsViewModel.lastFmNowPlaying.collectAsStateWithLifecycle()
+    val lastFmOnlyWifi by settingsViewModel.lastFmOnlyWifi.collectAsStateWithLifecycle()
+    val lastFmScrobblePct by settingsViewModel.lastFmScrobblePct.collectAsStateWithLifecycle()
+    val lastFmScrobbleMinSecs by settingsViewModel.lastFmScrobbleMinSecs.collectAsStateWithLifecycle()
+    val lastFmOfflineQueue by settingsViewModel.lastFmOfflineQueue.collectAsStateWithLifecycle()
+    val lastFmAuthState by settingsViewModel.lastFmAuthState.collectAsStateWithLifecycle()
+    val lastFmPending by settingsViewModel.pendingScrobbles.collectAsStateWithLifecycle()
+    val malojaEnabled by settingsViewModel.malojaEnabled.collectAsStateWithLifecycle()
+    val malojaServerUrl by settingsViewModel.malojaServerUrl.collectAsStateWithLifecycle()
+    val malojaTestState by settingsViewModel.malojaTestState.collectAsStateWithLifecycle()
+    val malojaPending by settingsViewModel.malojaPending.collectAsStateWithLifecycle()
+    val remoteShareServerUrl by settingsViewModel.remoteShareServerUrl.collectAsStateWithLifecycle()
+    val remoteShareUploadToken by settingsViewModel.remoteShareUploadToken.collectAsStateWithLifecycle()
+
+    var showDiscogsDialog by remember { mutableStateOf(false) }
+
+    SectionCard(icon = Icons.Rounded.Lyrics, title = "Lyrics & Artwork", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SettingsToggleRow(
+            title = "Fetch Lyrics",
+            subtitle = "Auto-download time-synced lyrics from LRC Library",
+            checked = fetchLyrics,
+        ) { scope.launch { prefs.setFetchLyrics(it) } }
+        SettingsToggleRow(
+            title = "Fetch Artist Images",
+            subtitle = "Load artist photos from Last.fm in the Artists list",
+            checked = fetchArtistImages,
+        ) { scope.launch { prefs.setFetchArtistImages(it) } }
+        SettingsToggleRow(
+            title = "Fetch Album Art",
+            subtitle = "Search Spotify for a song's cover art when it's missing",
+            checked = fetchAlbumArt,
+        ) { scope.launch { prefs.setFetchAlbumArt(it) } }
+    }
+
+    SectionCard(icon = Icons.Rounded.AutoFixHigh, title = "Metadata Enrichment", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SettingsTextItem(
+            title = "Discogs API Token",
+            subtitle = if (discogsApiToken.isBlank()) "Not set — Discogs enrichment disabled" else "Configured",
+            icon = Icons.Rounded.Key,
+            onClick = { showDiscogsDialog = true },
+        )
+        SettingsTextItem(
+            title = "Scan for Metadata Corrections",
+            subtitle = "Find and review year/genre fixes from MusicBrainz & Last.fm",
+            icon = Icons.Rounded.AutoFixHigh,
+            onClick = onNavigateToMetadataEnrichment,
+        )
+    }
+    if (showDiscogsDialog) {
+        var tokenInput by remember { mutableStateOf(discogsApiToken) }
+        AlertDialog(
+            onDismissRequest = { showDiscogsDialog = false },
+            title = { Text("Discogs API Token") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Optional — adds band member lists to the artist info window. " +
+                            "Get a personal access token from your Discogs account settings.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = tokenInput,
+                        onValueChange = { tokenInput = it },
+                        label = { Text("Token") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch { prefs.setDiscogsApiToken(tokenInput.trim()) }
+                    showDiscogsDialog = false
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscogsDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // No group label: each section shows its own branded badge.
+    Spacer(Modifier.height(8.dp))
+    LastFmSection(
+        authState = lastFmAuthState,
+        enabled = lastFmEnabled,
+        nowPlayingEnabled = lastFmNowPlaying,
+        scrobblePct = lastFmScrobblePct,
+        scrobbleMinSecs = lastFmScrobbleMinSecs,
+        onlyOnWifi = lastFmOnlyWifi,
+        offlineQueue = lastFmOfflineQueue,
+        pendingScrobbles = lastFmPending,
+        onEnabledChange = { settingsViewModel.setLastFmEnabled(it) },
+        onLogin = { u, p -> settingsViewModel.lastFmLogin(u, p) },
+        onLogout = { settingsViewModel.lastFmLogout() },
+        onNowPlayingChange = { settingsViewModel.setLastFmNowPlaying(it) },
+        onScrobblePctChange = { settingsViewModel.setLastFmScrobblePct(it) },
+        onScrobbleMinSecsChange = { settingsViewModel.setLastFmScrobbleMinSecs(it) },
+        onOnlyOnWifiChange = { settingsViewModel.setLastFmOnlyWifi(it) },
+        onOfflineQueueChange = { settingsViewModel.setLastFmOfflineQueue(it) },
+        onSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+    )
+
+    Spacer(Modifier.height(8.dp))
+    MalojaSection(
+        isConfigured = malojaServerUrl.isNotBlank(),
+        serverUrl = malojaServerUrl,
+        enabled = malojaEnabled,
+        testState = malojaTestState,
+        pendingScrobbles = malojaPending,
+        onSave = { url, key -> settingsViewModel.saveMalojaConfig(url, key) },
+        onClear = { settingsViewModel.clearMaloja() },
+        onEnabledChange = { settingsViewModel.setMalojaEnabled(it) },
+        onTest = { url, key -> settingsViewModel.testMalojaConnection(url, key) },
+        onResetTestState = { settingsViewModel.resetMalojaTestState() },
+        onSnackbar = { msg -> scope.launch { snackbarHostState.showSnackbar(msg) } },
+    )
+
+    SectionCard(icon = Icons.Rounded.Public, title = "Internet Share", modifier = Modifier.padding(horizontal = 8.dp)) {
+        val shareServerStatus by settingsViewModel.shareServerStatus.collectAsStateWithLifecycle()
+        LaunchedEffect(remoteShareServerUrl) { settingsViewModel.checkShareServer(remoteShareServerUrl) }
+        RemoteShareSection(
+            serverUrl = remoteShareServerUrl,
+            uploadToken = remoteShareUploadToken,
+            status = shareServerStatus,
+            onSave = { url, token -> settingsViewModel.saveRemoteShareConfig(url, token) },
+            onRecheck = { settingsViewModel.checkShareServer(remoteShareServerUrl) },
+        )
+    }
+}
+
+@Composable
+private fun NotificationSection(prefs: ResonancePreferences) {
+    val scope = rememberCoroutineScope()
+    val lockscreenArtwork by prefs.lockscreenArtwork.collectAsStateWithLifecycle(initialValue = true)
+    val showSkipButtons by prefs.showSkipButtons.collectAsStateWithLifecycle(initialValue = true)
+
+    SectionCard(icon = Icons.Rounded.Notifications, title = "Notification & Lock Screen", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SettingsToggleRow("Show Artwork on Lock Screen", "Display album art on lock screen controls", lockscreenArtwork) {
+            scope.launch { prefs.setLockscreenArtwork(it) }
+        }
+        SettingsToggleRow("Show Skip Buttons", "Include previous/next in notification shade", showSkipButtons) {
+            scope.launch { prefs.setShowSkipButtons(it) }
+        }
+    }
+}
+
+@Composable
+private fun HistorySection(prefs: ResonancePreferences) {
+    val scope = rememberCoroutineScope()
+    val historyEnabled by prefs.historyEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val minListenSecs by prefs.minListenSeconds.collectAsStateWithLifecycle(initialValue = 30)
+    val minListenPct by prefs.minListenPercentage.collectAsStateWithLifecycle(initialValue = 0.5f)
+    val maxHistory by prefs.maxHistoryItems.collectAsStateWithLifecycle(initialValue = 1000)
+
+    SectionCard(icon = Icons.Rounded.History, title = "Listening History", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SettingsToggleRow("Track Play History", "Record which tracks you've listened to", historyEnabled) {
+            scope.launch { prefs.setHistoryEnabled(it) }
+        }
+        AnimatedVisibility(
+            visible = historyEnabled,
+            enter = fadeIn(tween(280, easing = EmphasizedDecelerate)) + expandVertically(tween(280, easing = EmphasizedDecelerate)),
+            exit = fadeOut(tween(180, easing = EmphasizedAccelerate)) + shrinkVertically(tween(180, easing = EmphasizedAccelerate)),
+        ) {
+            Column {
+                SettingsSliderItem(
+                    title = "Minimum Listen Duration",
+                    value = minListenSecs.toFloat(),
+                    range = 10f..120f,
+                    label = "${minListenSecs}s",
+                    steps = 10,
+                    onValueChange = { newValue ->
+                        val step = 10f
+                        val rounded = (newValue / step).roundToInt() * step
+                        val finalSecs = rounded.toInt().coerceIn(10, 120)
+                        scope.launch { prefs.setListenThresholds(finalSecs, minListenPct) }
+                    },
+                )
+                SettingsSliderItem(
+                    title = "Minimum Listen Percentage",
+                    value = minListenPct,
+                    range = 0.1f..1.0f,
+                    label = "${(minListenPct * 100).roundToInt()}%",
+                    steps = 9,
+                    onValueChange = { newValue ->
+                        val step = 0.1f
+                        val rounded = (newValue / step).roundToInt() * step
+                        val finalPct = rounded.coerceIn(0.1f, 1.0f)
+                        scope.launch { prefs.setListenThresholds(minListenSecs, finalPct) }
+                    },
+                )
+                SettingsSliderItem(
+                    title = "Max History Items",
+                    value = maxHistory.toFloat(),
+                    range = 100f..5000f,
+                    label = "$maxHistory items",
+                    steps = 48,
+                    onValueChange = { newValue ->
+                        val step = 100f
+                        val rounded = (newValue / step).roundToInt() * step
+                        val final = rounded.toInt().coerceIn(100, 5000)
+                        scope.launch { prefs.setMaxHistoryItems(final) }
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DataSection(libraryViewModel: LibraryViewModel, snackbarHostState: SnackbarHostState) {
+    val scope = rememberCoroutineScope()
+    val backupViewModel: BackupViewModel = hiltViewModel()
+    val backupState by backupViewModel.state.collectAsStateWithLifecycle()
+    val shareViewModel: ShareViewModel = hiltViewModel()
+    val diagState by shareViewModel.diagnosticState.collectAsStateWithLifecycle()
+    var showClearHistoryDialog by remember { mutableStateOf(false) }
+    val isClearingHistory by libraryViewModel.isClearingHistory.collectAsStateWithLifecycle()
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let { backupViewModel.exportBackup(it) } }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { backupViewModel.importBackup(it) } }
+
+    SectionCard(icon = Icons.Rounded.Storage, title = "Data & Backup", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SettingsTextItem(
+            title = "Export Backup",
+            subtitle = "Save liked songs, playlists, and settings to a file",
+            icon = Icons.Rounded.FileUpload,
+            onClick = {
+                exportLauncher.launch("resonance_backup.json")
+            }
+        )
+        SettingsTextItem(
+            title = "Import Backup",
+            subtitle = "Restore liked songs, playlists, and settings from a file",
+            icon = Icons.Rounded.FileDownload,
+            onClick = {
+                importLauncher.launch(arrayOf("application/json", "*/*"))
+            }
+        )
+
+        SectionDivider()
+        SectionSubHeader("Diagnostics")
+        SettingsTextItem(
+            title = "Resonance Share Test",
+            subtitle = "Verify Nearby and QR transfer systems",
+            icon = Icons.Rounded.WifiTethering,
+            onClick = { shareViewModel.runDiagnostics() }
+        )
+
+        SectionDivider()
+        SectionSubHeader("Danger Zone")
+        SettingsTextItem(
+            title = "Clear Playback History",
+            subtitle = if (isClearingHistory) "Clearing…" else "Permanently delete all history records",
+            icon = Icons.Rounded.DeleteForever,
+            tint = MaterialTheme.colorScheme.error,
+            onClick = { if (!isClearingHistory) showClearHistoryDialog = true },
+        )
+    }
+
+    when (val s = backupState) {
+        is BackupUiState.Working -> {
+            AlertDialog(
+                onDismissRequest = {},
+                title = { Text("Working…") },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(16.dp))
+                        Text("Please wait…")
+                    }
+                },
+                confirmButton = {},
+            )
+        }
+        is BackupUiState.ExportSuccess, is BackupUiState.ImportSuccess -> {
+            val msg = when (s) {
+                is BackupUiState.ExportSuccess -> s.message
+                is BackupUiState.ImportSuccess -> s.message
+            }
+            AlertDialog(
+                onDismissRequest = backupViewModel::dismiss,
+                icon = {
+                    var appeared by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { appeared = true }
+                    val scale by animateFloatAsState(
+                        targetValue = if (appeared) 1f else 0.6f,
+                        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                        label = "backup_success_icon_scale",
+                    )
+                    Icon(
+                        Icons.Rounded.CheckCircle, null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+                    )
+                },
+                title = { Text("Done") },
+                text = { Text(msg) },
+                confirmButton = {
+                    TextButton(onClick = backupViewModel::dismiss) { Text("OK") }
+                },
+            )
+        }
+        is BackupUiState.Error -> {
+            AlertDialog(
+                onDismissRequest = backupViewModel::dismiss,
+                icon = {
+                    var appeared by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { appeared = true }
+                    val scale by animateFloatAsState(
+                        targetValue = if (appeared) 1f else 0.6f,
+                        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                        label = "backup_error_icon_scale",
+                    )
+                    Icon(
+                        Icons.Rounded.Error, null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+                    )
+                },
+                title = { Text("Error") },
+                text = { Text(s.message) },
+                confirmButton = {
+                    TextButton(onClick = backupViewModel::dismiss) { Text("OK") }
+                },
+            )
+        }
+        else -> {}
+    }
+
+    if (diagState !is ShareViewModel.DiagnosticState.Idle) {
+        AlertDialog(
+            onDismissRequest = { shareViewModel.clearDiagnostics() },
+            title = { Text("Share Diagnostics") },
+            text = {
+                Column {
+                    when (val s = diagState) {
+                        is ShareViewModel.DiagnosticState.Running -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                Spacer(Modifier.width(16.dp))
+                                Text("Testing connection...")
+                            }
+                        }
+                        is ShareViewModel.DiagnosticState.Success -> {
+                            Text(s.message, color = MaterialTheme.colorScheme.primary)
+                        }
+                        is ShareViewModel.DiagnosticState.Failure -> {
+                            Text(s.message, color = MaterialTheme.colorScheme.error)
+                        }
+                        else -> {}
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { shareViewModel.clearDiagnostics() }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    if (showClearHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryDialog = false },
+            icon = {
+                Icon(
+                    Icons.Rounded.DeleteForever,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            title = { Text("Clear Playback History?") },
+            text = {
+                Text(
+                    "This will permanently delete all play counts and listen records. " +
+                            "Smart Queue, Most Played, and Lost Memories will be reset. " +
+                            "This cannot be undone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearHistoryDialog = false
+                        libraryViewModel.clearHistory()
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Playback history cleared")
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) {
+                    Text("Clear History")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun AboutSection(onNavigateToLicenses: () -> Unit) {
+    val uriHandler = LocalUriHandler.current
+    SectionCard(icon = Icons.Rounded.Info, title = "About", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SettingsTextItem(
+            title = "Resonance",
+            subtitle = "v$APP_VERSION",
+            icon = Icons.Rounded.MusicNote,
+        )
+        SettingsTextItem(
+            title = "GitHub Repository",
+            subtitle = "View source code and report issues",
+            icon = Icons.Rounded.Code,
+            trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
+            onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance-app") },
+        )
+        SettingsTextItem(
+            title = "Resonance Website",
+            subtitle = "Try the web client at resonance.yuwixx.dev",
+            icon = Icons.Rounded.Language,
+            trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
+            onClick = { uriHandler.openUri("https://resonance.yuwixx.dev") },
+        )
+        SettingsTextItem(
+            title = "Join the Discord",
+            subtitle = "Chat, get help, or become a tester",
+            icon = Icons.Rounded.Forum,
+            trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
+            onClick = { uriHandler.openUri("https://discord.gg/SftqvvveMj") },
+        )
+        SettingsTextItem(
+            title = "Support on Ko-fi",
+            subtitle = "Buy me a coffee if Resonance's been useful",
+            icon = Icons.Rounded.Coffee,
+            trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
+            onClick = { uriHandler.openUri("https://ko-fi.com/yuwixx") },
+        )
+        SettingsTextItem(
+            title = "App License",
+            subtitle = "View Resonance's open source license",
+            icon = Icons.Rounded.Gavel,
+            trailingIcon = Icons.AutoMirrored.Rounded.OpenInNew,
+            onClick = { uriHandler.openUri("https://github.com/yuw1xx/resonance-app/blob/main/LICENSE") },
+        )
+        SettingsTextItem(
+            title = "Third-Party Licenses",
+            subtitle = "Open source libraries used in this project",
+            icon = Icons.Rounded.Description,
+            onClick = onNavigateToLicenses,
+        )
     }
 }
 
@@ -1394,16 +1632,19 @@ private fun LastFmSection(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
+        val lastFmContainerColor by animateColorAsState(
+            targetValue = when (authState) {
+                is LastFmAuthState.Authenticated -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                is LastFmAuthState.Error -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+            animationSpec = tween(340, easing = EmphasizedDecelerate),
+            label = "lastfm_card_color",
+        )
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(
-                containerColor = when (authState) {
-                    is LastFmAuthState.Authenticated -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                    is LastFmAuthState.Error         -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
-                    else                             -> MaterialTheme.colorScheme.surfaceContainerHigh
-                }
-            ),
+            colors = CardDefaults.cardColors(containerColor = lastFmContainerColor),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -1411,8 +1652,8 @@ private fun LastFmSection(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFFD51007),
+                        shape = MaterialTheme.shapes.small,
+                        color = BrandColors.lastFm,
                         modifier = Modifier.padding(end = 12.dp),
                     ) {
                         Text(
@@ -1497,33 +1738,49 @@ private fun LastFmSection(
             }
         }
 
-        if (authState is LastFmAuthState.Authenticated && enabled) {
-            Spacer(Modifier.height(12.dp))
+        AnimatedVisibility(
+            visible = authState is LastFmAuthState.Authenticated && enabled,
+            enter = fadeIn(tween(280, easing = EmphasizedDecelerate)) + expandVertically(tween(280, easing = EmphasizedDecelerate)),
+            exit = fadeOut(tween(180, easing = EmphasizedAccelerate)) + shrinkVertically(tween(180, easing = EmphasizedAccelerate)),
+        ) {
+            Column {
+                Spacer(Modifier.height(12.dp))
 
-            SettingsToggleCompact("Now Playing", "Send 'Now Playing' status when a track starts", nowPlayingEnabled, onNowPlayingChange)
-            SettingsToggleCompact("Scrobble Only on Wi-Fi", "Save mobile data by queuing scrobbles until on Wi-Fi", onlyOnWifi, onOnlyOnWifiChange)
-            SettingsToggleCompact("Offline Scrobble Queue", "Buffer scrobbles when offline and submit later", offlineQueue, onOfflineQueueChange)
+                SettingsToggleCompact("Now Playing", "Send 'Now Playing' status when a track starts", nowPlayingEnabled, onNowPlayingChange)
+                SettingsToggleCompact(
+                    "Scrobble Only on Wi-Fi",
+                    "Save mobile data by queuing scrobbles until on Wi-Fi",
+                    onlyOnWifi,
+                    onOnlyOnWifiChange,
+                )
+                SettingsToggleCompact(
+                    "Offline Scrobble Queue",
+                    "Buffer scrobbles when offline and submit later",
+                    offlineQueue,
+                    onOfflineQueueChange,
+                )
 
-            Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(4.dp))
 
-            SettingsSliderItem(
-                title = "Scrobble After",
-                value = scrobbleMinSecs.toFloat(),
-                range = 10f..120f,
-                label = "${scrobbleMinSecs}s",
-                steps = 11,
-                onValueChange = { onScrobbleMinSecsChange(it.toInt()) },
-                compact = true,
-            )
-            SettingsSliderItem(
-                title = "Scrobble at % of track",
-                value = scrobblePct,
-                range = 0.25f..1.0f,
-                label = "${(scrobblePct * 100).roundToInt()}%",
-                steps = 3,
-                onValueChange = onScrobblePctChange,
-                compact = true,
-            )
+                SettingsSliderItem(
+                    title = "Scrobble After",
+                    value = scrobbleMinSecs.toFloat(),
+                    range = 10f..120f,
+                    label = "${scrobbleMinSecs}s",
+                    steps = 10,
+                    onValueChange = { onScrobbleMinSecsChange((it / 10f).roundToInt() * 10) },
+                    compact = true,
+                )
+                SettingsSliderItem(
+                    title = "Scrobble at % of track",
+                    value = scrobblePct,
+                    range = 0.25f..1.0f,
+                    label = "${(scrobblePct * 100).roundToInt()}%",
+                    steps = 3,
+                    onValueChange = onScrobblePctChange,
+                    compact = true,
+                )
+            }
         }
     }
 
@@ -1543,14 +1800,14 @@ private fun LastFmLoginDialog(
     onDismiss: () -> Unit,
     onLogin: (String, String) -> Unit,
 ) {
-    var username by remember { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFD51007)) {
+            Surface(shape = MaterialTheme.shapes.small, color = BrandColors.lastFm) {
                 Text("Last.fm", fontWeight = FontWeight.Bold, color = Color.White,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
@@ -1609,8 +1866,11 @@ private fun LastFmLoginDialog(
 private fun RemoteShareSection(
     serverUrl: String,
     uploadToken: String,
+    status: SettingsViewModel.ShareServerStatus,
     onSave: (String, String) -> Unit,
+    onRecheck: () -> Unit,
 ) {
+    val uriHandler = LocalUriHandler.current
     var url by remember(serverUrl) { mutableStateOf(serverUrl) }
     var token by remember(uploadToken) { mutableStateOf(uploadToken) }
     var tokenVisible by remember { mutableStateOf(false) }
@@ -1619,12 +1879,12 @@ private fun RemoteShareSection(
 
     Column {
         Text(
-            "\"Share over the Internet\" works out of the box using Resonance's default relay server — " +
-                "no setup needed. If you'd rather use your own self-hosted server (e.g. behind a Cloudflare " +
-                "Tunnel), enter its details below.",
+            "\"Share over the Internet\" uses Resonance's public server, no setup needed. You can also " +
+                "run your own, on your home network or your own domain, and enter it below.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        TextButton(onClick = { uriHandler.openUri(SHARE_SERVER_GUIDE) }) { Text("How to run your own server") }
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = url,
@@ -1643,7 +1903,10 @@ private fun RemoteShareSection(
             visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 IconButton(onClick = { tokenVisible = !tokenVisible }) {
-                    Icon(if (tokenVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, null)
+                    Icon(
+                        if (tokenVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                        contentDescription = if (tokenVisible) "Hide token" else "Show token",
+                    )
                 }
             },
             modifier = Modifier.fillMaxWidth(),
@@ -1662,8 +1925,47 @@ private fun RemoteShareSection(
                 modifier = Modifier.align(Alignment.CenterVertically).padding(start = 4.dp),
             )
         }
+        if (serverUrl.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            when (status) {
+                SettingsViewModel.ShareServerStatus.Idle -> Unit
+                SettingsViewModel.ShareServerStatus.Checking -> Text(
+                    "Checking your server…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                is SettingsViewModel.ShareServerStatus.Reachable -> {
+                    Text(
+                        "Connected · server version ${status.version}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    status.latestVersion?.let { latest ->
+                        Text(
+                            "Version $latest is available for your server.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        TextButton(onClick = { uriHandler.openUri("$SHARE_SERVER_GUIDE#updating") }) {
+                            Text("How to update")
+                        }
+                    }
+                }
+                is SettingsViewModel.ShareServerStatus.Unreachable -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Can't reach your server: ${status.reason}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onRecheck) { Text("Retry") }
+                }
+            }
+        }
     }
 }
+
+private const val SHARE_SERVER_GUIDE = "https://github.com/yuw1xx/resonance-app/tree/main/server/resonance-share"
 
 @Composable
 private fun MalojaSection(
@@ -1686,15 +1988,18 @@ private fun MalojaSection(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
+        val malojaContainerColor by animateColorAsState(
+            targetValue = when {
+                isConfigured && enabled -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+            animationSpec = tween(340, easing = EmphasizedDecelerate),
+            label = "maloja_card_color",
+        )
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(
-                containerColor = when {
-                    isConfigured && enabled -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                    else -> MaterialTheme.colorScheme.surfaceContainerHigh
-                }
-            ),
+            colors = CardDefaults.cardColors(containerColor = malojaContainerColor),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -1702,8 +2007,8 @@ private fun MalojaSection(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF1A8C4E),
+                        shape = MaterialTheme.shapes.small,
+                        color = BrandColors.maloja,
                         modifier = Modifier.padding(end = 12.dp),
                     ) {
                         Text(
@@ -1804,7 +2109,7 @@ private fun MalojaSetupDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
-            Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF1A8C4E)) {
+            Surface(shape = MaterialTheme.shapes.small, color = BrandColors.maloja) {
                 Text("Maloja", fontWeight = FontWeight.Bold, color = Color.White,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
@@ -1817,12 +2122,17 @@ private fun MalojaSetupDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                val urlInvalid = url.isNotBlank() && MalojaRepository.normalizeUrl(url) == null
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
                     label = { Text("Server URL") },
                     placeholder = { Text("http://192.168.1.100:42010") },
                     singleLine = true,
+                    isError = urlInvalid,
+                    supportingText = if (urlInvalid) {
+                        { Text("Enter an address like http://192.168.1.100:42010") }
+                    } else null,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 )
@@ -1862,7 +2172,8 @@ private fun MalojaSetupDialog(
         confirmButton = {
             Button(
                 onClick = { onSave(url.trim(), apiKey.trim()) },
-                enabled = url.isNotBlank() && apiKey.isNotBlank(),
+                enabled = MalojaRepository.normalizeUrl(url) != null &&
+                    apiKey.isNotBlank(),
             ) { Text("Save") }
         },
         dismissButton = {
@@ -1886,7 +2197,7 @@ private fun ThemeColorPicker(
     val colors = PresetColors
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
-            "Accent Colour",
+            "Accent Color",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(bottom = 12.dp),
@@ -1923,6 +2234,7 @@ private fun SegmentedSettingsItem(
     selected: String,
     onSelect: (String) -> Unit,
 ) {
+    val haptic = rememberHaptics()
     Column(modifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -1936,7 +2248,10 @@ private fun SegmentedSettingsItem(
             options.forEachIndexed { index, (label, value) ->
                 SegmentedButton(
                     shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                    onClick = { onSelect(value) },
+                    onClick = {
+                        if (selected != value) haptic(HapticFeedbackType.SegmentTick)
+                        onSelect(value)
+                    },
                     selected = selected == value,
                     label = { Text(label, fontSize = 13.sp) },
                 )
@@ -1973,9 +2288,20 @@ private fun SettingsSliderItem(
                 fontWeight = FontWeight.SemiBold,
             )
         }
+        // The thumb follows the finger locally; the setting is saved once, on release.
+        var dragValue by remember { mutableStateOf<Float?>(null) }
+        val animatedValue by animateFloatAsState(
+            targetValue = value,
+            animationSpec = tween(200, easing = EmphasizedDecelerate),
+            label = "settings_slider_value",
+        )
         Slider(
-            value = value,
-            onValueChange = onValueChange,
+            value = dragValue ?: animatedValue,
+            onValueChange = { dragValue = it },
+            onValueChangeFinished = {
+                dragValue?.let(onValueChange)
+                dragValue = null
+            },
             valueRange = range,
             steps = steps,
             modifier = Modifier.padding(top = 0.dp),
@@ -2015,7 +2341,7 @@ private fun SettingsTextItem(
     ListItem(
         modifier = Modifier
             .padding(horizontal = 8.dp, vertical = 1.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onClick),
         leadingContent = icon?.let {
             { Icon(it, null, tint = tint, modifier = Modifier.size(24.dp)) }
@@ -2045,7 +2371,10 @@ private fun ScanLibraryItem(isSyncing: Boolean, onScan: () -> Unit) {
         supportingContent = {
             AnimatedContent(
                 targetState = isSyncing,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                transitionSpec = {
+                    fadeIn(tween(280, easing = EmphasizedDecelerate)) togetherWith
+                        fadeOut(tween(180, easing = EmphasizedAccelerate))
+                },
                 label = "sync_text"
             ) { syncing ->
                 Text(
@@ -2057,7 +2386,10 @@ private fun ScanLibraryItem(isSyncing: Boolean, onScan: () -> Unit) {
         trailingContent = {
             AnimatedContent(
                 targetState = isSyncing,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                transitionSpec = {
+                    fadeIn(tween(280, easing = EmphasizedDecelerate)) togetherWith
+                        fadeOut(tween(180, easing = EmphasizedAccelerate))
+                },
                 label = "sync_icon"
             ) { syncing ->
                 if (syncing) {
@@ -2071,15 +2403,6 @@ private fun ScanLibraryItem(isSyncing: Boolean, onScan: () -> Unit) {
     )
 }
 
-private fun LazyListScope.settingsToggle(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onToggle: (Boolean) -> Unit,
-) {
-    item { SettingsToggleRow(title, subtitle, checked, onToggle) }
-}
-
 @Composable
 private fun SettingsToggleRow(
     title: String,
@@ -2087,15 +2410,20 @@ private fun SettingsToggleRow(
     checked: Boolean,
     onToggle: (Boolean) -> Unit,
 ) {
+    val haptic = rememberHaptics()
     ListItem(
         modifier = Modifier
             .padding(horizontal = 8.dp, vertical = 1.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onToggle(!checked) },
+            .clip(MaterialTheme.shapes.medium)
+            // The whole row is one switch for touch and for TalkBack ("on/off, switch").
+            .toggleable(value = checked, role = Role.Switch) {
+                haptic(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                onToggle(it)
+            },
         headlineContent = { Text(title, fontWeight = FontWeight.Medium) },
         supportingContent = { Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant) },
         trailingContent = {
-            Switch(checked = checked, onCheckedChange = onToggle)
+            Switch(checked = checked, onCheckedChange = null)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
@@ -2111,10 +2439,13 @@ private fun NavidromeSection(
     onTest: (String, String, String) -> Unit,
     onSave: (String, String, String) -> Unit,
     onSwitchToLocal: () -> Unit,
+    onSwitchToNavidrome: () -> Unit,
+    onForgetServer: () -> Unit,
     onResetConnection: () -> Unit,
     onResetSync: () -> Unit,
 ) {
     var showSetupScreen by remember { mutableStateOf(false) }
+    var showForgetConfirm by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
@@ -2136,20 +2467,46 @@ private fun NavidromeSection(
 
         SourceRow(
             title = "Navidrome",
-            subtitle = if (currentSource == MusicSource.NAVIDROME && savedServerUrl != null)
-                savedServerUrl else "Stream from your self-hosted server",
+            subtitle = savedServerUrl ?: "Stream from your self-hosted server",
             icon = Icons.Rounded.Cloud,
             selected = currentSource == MusicSource.NAVIDROME,
-            onClick = { showSetupScreen = true }
+            onClick = {
+                when {
+                    savedServerUrl == null -> showSetupScreen = true
+                    currentSource != MusicSource.NAVIDROME -> onSwitchToNavidrome()
+                    else -> showSetupScreen = true
+                }
+            },
         )
 
-        if (currentSource == MusicSource.NAVIDROME) {
+        if (savedServerUrl != null) {
             Spacer(Modifier.height(4.dp))
-            TextButton(onClick = { showSetupScreen = true }) {
-                Icon(Icons.Rounded.Edit, null, modifier = Modifier.padding(end = 6.dp).size(16.dp))
-                Text("Configure Server")
+            Row {
+                TextButton(onClick = { showSetupScreen = true }) {
+                    Icon(Icons.Rounded.Edit, null, modifier = Modifier.padding(end = 6.dp).size(16.dp))
+                    Text("Configure Server")
+                }
+                TextButton(onClick = { showForgetConfirm = true }) {
+                    Icon(Icons.Rounded.LinkOff, null, modifier = Modifier.padding(end = 6.dp).size(16.dp))
+                    Text("Forget Server")
+                }
             }
         }
+    }
+
+    if (showForgetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showForgetConfirm = false },
+            title = { Text("Forget this server?") },
+            text = { Text("The login and the synced library are removed from this device. Downloaded songs stay until you delete them.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showForgetConfirm = false
+                    onForgetServer()
+                }) { Text("Forget") }
+            },
+            dismissButton = { TextButton(onClick = { showForgetConfirm = false }) { Text("Cancel") } },
+        )
     }
 
     if (showSetupScreen) {
@@ -2191,7 +2548,7 @@ private fun DownloadsSection(
             headlineContent = { Text("Storage Used", fontWeight = FontWeight.Medium) },
             supportingContent = {
                 Text(
-                    "$downloadedSongCount song${if (downloadedSongCount == 1) "" else "s"} · ${formatDownloadSize(storageUsedBytes)}",
+                    "$downloadedSongCount song${if (downloadedSongCount == 1) "" else "s"} · ${formatFileSize(storageUsedBytes)}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             },
@@ -2225,24 +2582,17 @@ private fun DownloadsSection(
     }
 }
 
-private fun formatDownloadSize(bytes: Long): String = when {
-    bytes >= 1_073_741_824L -> "%.2f GB".format(bytes / 1_073_741_824.0)
-    bytes >= 1_048_576L     -> "%.1f MB".format(bytes / 1_048_576.0)
-    bytes >= 1_024L         -> "%.0f KB".format(bytes / 1_024.0)
-    else                    -> "$bytes B"
-}
-
 @Composable
 private fun SourceRow(
     title: String,
     subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.medium,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
         else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         modifier = Modifier
@@ -2250,7 +2600,7 @@ private fun SourceRow(
             .border(
                 width = if (selected) 2.dp else 1.dp,
                 color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(12.dp)
+                shape = MaterialTheme.shapes.medium
             )
     ) {
         Row(
@@ -2290,12 +2640,13 @@ private fun NavidromeSetupScreen(
     onSave: (String, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // Flip immediately when user confirms — don't derive from syncState (which resets to Idle
-    // momentarily before the new sync starts, causing the page to flash back to config).
+    // Set on confirm rather than derived from syncState, which is briefly Idle before the sync
+    // starts and would flash the config page.
     var showSyncPage by remember { mutableStateOf(false) }
 
     Dialog(
-        onDismissRequest = { if (syncState !is NavidromeSyncState.Syncing) onDismiss() },
+        // The sync runs in the ViewModel, so closing the dialog doesn't interrupt it.
+        onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
@@ -2309,11 +2660,11 @@ private fun NavidromeSetupScreen(
             AnimatedContent(
                 targetState = showSyncPage,
                 transitionSpec = {
-                    (slideInHorizontally(tween(500, easing = EmphasizedDecelerate)) { it } +
-                        fadeIn(tween(500, delayMillis = 50, easing = EmphasizedDecelerate)))
+                    (slideInHorizontally(tween(700, easing = EmphasizedDecelerate)) { it } +
+                        fadeIn(tween(700, delayMillis = 70, easing = EmphasizedDecelerate)))
                         .togetherWith(
-                            slideOutHorizontally(tween(400, easing = EmphasizedAccelerate)) { -it } +
-                                fadeOut(tween(200, easing = EmphasizedAccelerate))
+                            slideOutHorizontally(tween(560, easing = EmphasizedAccelerate)) { -it } +
+                                fadeOut(tween(280, easing = EmphasizedAccelerate))
                         )
                 },
                 label = "navidrome-setup-step",
@@ -2347,8 +2698,8 @@ private fun NavidromeConfigPage(
     onSave: (String, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var serverUrl by remember { mutableStateOf(savedServerUrl ?: "") }
-    var username by remember { mutableStateOf(savedUsername ?: "") }
+    var serverUrl by rememberSaveable { mutableStateOf(savedServerUrl ?: "") }
+    var username by rememberSaveable { mutableStateOf(savedUsername ?: "") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     val isEditing = savedServerUrl != null
@@ -2404,7 +2755,10 @@ private fun NavidromeConfigPage(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             trailingIcon = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, null)
+                    Icon(
+                        if (passwordVisible) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                        contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                    )
                 }
             },
         )
@@ -2439,7 +2793,7 @@ private fun NavidromeConfigPage(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
         ) {
             TextButton(onClick = onDismiss) { Text("Cancel") }
-            // For existing connections with blank password: skip test — ViewModel uses stored password.
+            // Blank password on an existing connection: the stored one is used, so skip the test.
             val canSaveDirect = isEditing && password.isBlank() && serverUrl.isNotBlank() && username.isNotBlank()
             if (connectionState is NavidromeConnectionState.Connected || canSaveDirect) {
                 Button(onClick = { onSave(serverUrl, username, password) }) {
@@ -2481,7 +2835,7 @@ fun NavidromeSyncPage(
         }
     }
 
-    val songsDoneNow  = (syncState as? NavidromeSyncState.Syncing)?.songsDone      ?: 0
+    val songsDoneNow = (syncState as? NavidromeSyncState.Syncing)?.songsDone ?: 0
     val estimatedTotal = (syncState as? NavidromeSyncState.Syncing)?.estimatedTotal ?: 0
 
     val syncProgress = if (estimatedTotal > 0 && songsDoneNow > 0)
@@ -2490,16 +2844,16 @@ fun NavidromeSyncPage(
     val etaText: String? = if (elapsedSeconds > 5 && songsDoneNow > 0 && estimatedTotal > songsDoneNow) {
         val etaSecs = (elapsedSeconds * (estimatedTotal - songsDoneNow).toFloat() / songsDoneNow).toLong()
         when {
-            etaSecs < 60   -> "Less than a minute remaining"
+            etaSecs < 60 -> "Less than a minute remaining"
             etaSecs < 3600 -> "~${etaSecs / 60} min remaining"
-            else           -> "~${etaSecs / 3600}h ${(etaSecs % 3600) / 60}m remaining"
+            else -> "~${etaSecs / 3600}h ${(etaSecs % 3600) / 60}m remaining"
         }
     } else null
 
     val syncRotation by rememberInfiniteTransition(label = "sync-rotate")
         .animateFloat(
             initialValue = 0f, targetValue = 360f,
-            animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing)),
+            animationSpec = infiniteRepeatable(tween(2520, easing = LinearEasing)),
             label = "rotation",
         )
 
@@ -2512,27 +2866,34 @@ fun NavidromeSyncPage(
     ) {
         Spacer(Modifier.height(4.dp))
 
-        when (syncState) {
-            is NavidromeSyncState.Done -> Icon(
-                Icons.Rounded.CheckCircle, null,
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            is NavidromeSyncState.Error -> Icon(
-                Icons.Rounded.Error, null,
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.error,
-            )
-            else -> Icon(
-                Icons.Rounded.Sync, null,
-                modifier = Modifier.size(64.dp).graphicsLayer { rotationZ = syncRotation },
-                tint = MaterialTheme.colorScheme.primary,
-            )
+        val syncPhase = when (syncState) {
+            is NavidromeSyncState.Done -> "done"
+            is NavidromeSyncState.Error -> "error"
+            else -> "syncing"
+        }
+        AnimatedStateSwap(targetState = syncPhase, label = "navidrome_sync_icon") { phase ->
+            when (phase) {
+                "done" -> Icon(
+                    Icons.Rounded.CheckCircle, null,
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                "error" -> Icon(
+                    Icons.Rounded.Error, null,
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.error,
+                )
+                else -> Icon(
+                    Icons.Rounded.Sync, null,
+                    modifier = Modifier.size(64.dp).graphicsLayer { rotationZ = syncRotation },
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
 
         Text(
             text = when (syncState) {
-                is NavidromeSyncState.Done  -> "Library Ready!"
+                is NavidromeSyncState.Done -> "Library Ready!"
                 is NavidromeSyncState.Error -> "Sync Failed"
                 else -> "Syncing Library…"
             },
@@ -2554,7 +2915,7 @@ fun NavidromeSyncPage(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val countText = if (syncState.albumsDone > 0 || syncState.songsDone > 0)
-                    "${syncState.albumsDone} albums · ${syncState.songsDone} songs found"
+                    "${count(syncState.albumsDone, "album")} · ${count(syncState.songsDone, "song")} found"
                 else "Starting…"
                 Text(countText, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 if (etaText != null) {
@@ -2566,7 +2927,7 @@ fun NavidromeSyncPage(
                 }
                 Spacer(Modifier.height(4.dp))
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
+                    shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
                 ) {
                     Row(
@@ -2574,7 +2935,12 @@ fun NavidromeSyncPage(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Rounded.Info, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Icon(
+                            Icons.Rounded.Info,
+                            null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
                         Text(
                             "Keep Resonance open while syncing",
                             style = MaterialTheme.typography.bodySmall,
@@ -2588,7 +2954,7 @@ fun NavidromeSyncPage(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    "${syncState.albumCount} albums · ${syncState.songCount} songs",
+                    "${count(syncState.albumCount, "album")} · ${count(syncState.songCount, "song")}",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                 )
@@ -2791,9 +3157,9 @@ private fun NavTabsDialog(
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
                 navItems.forEach { item ->
-                    val isPinned  = item == navItems.first()
+                    val isPinned = item == navItems.first()
                     val isVisible = item.screen.route !in hiddenNavTabs
-                    val canHide   = !isPinned && isVisible && visibleNonPinnedCount > 1
+                    val canHide = !isPinned && isVisible && visibleNonPinnedCount > 1
 
                     Row(
                         modifier = Modifier
@@ -2805,7 +3171,7 @@ private fun NavTabsDialog(
                                 else Modifier
                             )
                             .padding(vertical = 8.dp, horizontal = 4.dp),
-                        verticalAlignment   = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Icon(
@@ -2817,9 +3183,9 @@ private fun NavTabsDialog(
                         )
                         Text(
                             item.label,
-                            style    = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
-                            color    = if (isPinned || isVisible) Color.Unspecified
+                            color = if (isPinned || isVisible) Color.Unspecified
                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
                         )
                         if (isPinned) {
@@ -2830,7 +3196,7 @@ private fun NavTabsDialog(
                             )
                         } else {
                             Switch(
-                                checked         = isVisible,
+                                checked = isVisible,
                                 onCheckedChange = if (!isVisible || canHide) {
                                     { checked -> onToggle(item.screen.route, !checked) }
                                 } else null,
@@ -2845,4 +3211,71 @@ private fun NavTabsDialog(
             TextButton(onClick = onDismiss) { Text("Done") }
         },
     )
+}
+
+@Composable
+private fun PlaylistFolderSyncCard(libraryViewModel: LibraryViewModel, prefs: ResonancePreferences) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val folder by prefs.playlistSyncFolder.collectAsStateWithLifecycle(initialValue = null)
+    val writeBack by prefs.playlistSyncExport.collectAsStateWithLifecycle(initialValue = false)
+    val relative by prefs.playlistSyncRelativePaths.collectAsStateWithLifecycle(initialValue = true)
+    var status by remember { mutableStateOf<String?>(null) }
+    val pickFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> if (uri != null) libraryViewModel.setPlaylistSyncFolder(uri) }
+
+    val folderName = remember(folder) {
+        folder?.let { runCatchingCancellable { DocumentFile.fromTreeUri(context, Uri.parse(it))?.name }.getOrNull() }
+    }
+
+    SectionCard(icon = Icons.Rounded.FolderOpen, title = "Playlist Folder Sync", modifier = Modifier.padding(horizontal = 8.dp)) {
+        SettingsTextItem(
+            title = "Sync folder",
+            subtitle = folderName?.let { "Keeps playlists in step with the .m3u files in \"$it\"" }
+                ?: "Pick a folder with .m3u / .m3u8 playlists to import and keep in sync",
+            icon = Icons.Rounded.Folder,
+            onClick = { pickFolder.launch(null) },
+        )
+        if (folder != null) {
+            SettingsToggleRow("Write changes back", "Save playlists edited here to their files", writeBack) {
+                scope.launch { prefs.setPlaylistSyncExport(it) }
+            }
+            SettingsToggleRow("Relative paths", "Write song paths relative to the folder (portable to a PC)", relative) {
+                scope.launch { prefs.setPlaylistSyncRelativePaths(it) }
+            }
+            SettingsTextItem(
+                title = "Sync now",
+                subtitle = status ?: "Import new and changed playlist files",
+                icon = Icons.Rounded.Sync,
+                onClick = {
+                    status = "Syncing…"
+                    libraryViewModel.syncPlaylistFolderNow { r ->
+                        status = buildList {
+                            if (r.imported > 0) add("${r.imported} imported")
+                            if (r.updated > 0) add("${r.updated} updated")
+                            if (r.written > 0) add("${r.written} written back")
+                            if (r.failed > 0) add("${r.failed} failed")
+                        }.joinToString(" · ").ifEmpty { "Everything is up to date" }
+                    }
+                },
+            )
+            SettingsTextItem(
+                title = "Export all playlists",
+                subtitle = "Write playlists that aren't in the folder yet as .m3u8 files",
+                icon = Icons.Rounded.FileDownload,
+                onClick = {
+                    libraryViewModel.exportAllPlaylistsToFolder { n ->
+                        status = if (n == 0) "Nothing new to export" else "$n playlist${if (n == 1) "" else "s"} exported"
+                    }
+                },
+            )
+            SettingsTextItem(
+                title = "Stop syncing",
+                subtitle = "Playlists stay; their files are no longer watched",
+                icon = Icons.Rounded.LinkOff,
+                onClick = { libraryViewModel.setPlaylistSyncFolder(null) },
+            )
+        }
+    }
 }

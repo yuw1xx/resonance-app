@@ -1,3 +1,4 @@
 package dev.yuwixx.resonance
 
-const val APP_VERSION = "2.2.0"
+// Single source of truth is versionName in app/build.gradle.kts.
+const val APP_VERSION = BuildConfig.VERSION_NAME

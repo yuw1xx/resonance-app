@@ -1,41 +1,46 @@
-// Last.fm integration: mobile-session authentication, now-playing updates, scrobbling
-// with offline queue, and track love/unlove. Uses its own DataStore separate from main prefs.
 package dev.yuwixx.resonance.data.repository
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.yuwixx.resonance.BuildConfig
 import dev.yuwixx.resonance.data.database.dao.PendingScrobbleDao
 import dev.yuwixx.resonance.data.database.entity.PendingScrobbleEntity
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.network.LastFmApi
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
+import dev.yuwixx.resonance.data.security.SecureCredentialStore
+import dev.yuwixx.resonance.data.util.md5Hex
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
+import java.util.concurrent.CopyOnWriteArrayList
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.security.MessageDigest
-import javax.inject.Inject
-import javax.inject.Singleton
 
 private const val TAG = "LastFmRepo"
-private const val DEFAULT_API_KEY    = "56e83db5fd112b64e486cba54141c783"
-private const val DEFAULT_API_SECRET = "cad85a4626b55111661a4d6e0be85f5d"
+private val DEFAULT_API_KEY = BuildConfig.LASTFM_API_KEY
+private val DEFAULT_API_SECRET = BuildConfig.LASTFM_API_SECRET
 
 private val Context.lastFmStore: DataStore<Preferences> by preferencesDataStore(name = "lastfm_prefs")
 
 private object LastFmKeys {
-    val SESSION_KEY  = stringPreferencesKey("session_key")
-    val USERNAME     = stringPreferencesKey("username")
-    val ENABLED      = booleanPreferencesKey("enabled")
-    val NOW_PLAYING  = booleanPreferencesKey("now_playing")
-    val ONLY_WIFI    = booleanPreferencesKey("only_wifi")
-    val API_KEY      = stringPreferencesKey("api_key")
-    val API_SECRET   = stringPreferencesKey("api_secret")
+    val SESSION_KEY = stringPreferencesKey("session_key")
+    val USERNAME = stringPreferencesKey("username")
+    val ENABLED = booleanPreferencesKey("enabled")
+    val NOW_PLAYING = booleanPreferencesKey("now_playing")
+    val ONLY_WIFI = booleanPreferencesKey("only_wifi")
+    val API_KEY = stringPreferencesKey("api_key")
+    val API_SECRET = stringPreferencesKey("api_secret")
 }
 
 data class PendingScrobble(
@@ -60,22 +65,19 @@ class LastFmRepository @Inject constructor(
     private val api: LastFmApi,
     private val mainPrefs: ResonancePreferences,
     private val pendingScrobbleDao: PendingScrobbleDao,
-    private val secureCredentialStore: dev.yuwixx.resonance.data.security.SecureCredentialStore,
+    private val secureCredentialStore: SecureCredentialStore,
 ) {
     private val store = context.lastFmStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val pendingScrobbles = java.util.concurrent.CopyOnWriteArrayList<PendingScrobble>()
+    private val pendingScrobbles = CopyOnWriteArrayList<PendingScrobble>()
 
-    val username: Flow<String>    = store.data.map { it[LastFmKeys.USERNAME]    ?: "" }
-    val isEnabled: Flow<Boolean>  = store.data.map { it[LastFmKeys.ENABLED]     ?: false }
+    val username: Flow<String> = store.data.map { it[LastFmKeys.USERNAME]    ?: "" }
+    val isEnabled: Flow<Boolean> = store.data.map { it[LastFmKeys.ENABLED]     ?: false }
     val nowPlaying: Flow<Boolean> = store.data.map { it[LastFmKeys.NOW_PLAYING] ?: true }
-    val onlyWifi: Flow<Boolean>   = store.data.map { it[LastFmKeys.ONLY_WIFI]   ?: false }
+    val onlyWifi: Flow<Boolean> = store.data.map { it[LastFmKeys.ONLY_WIFI]   ?: false }
 
-    // Migrated out of plain DataStore into Keystore-backed encrypted storage (see
-    // SecureCredentialStore). Was a Flow<String> before, but every use in this file only ever
-    // read it with .firstOrNull() — never .collect() — so a plain suspend getter is a smaller,
-    // equally-correct change than bridging a Flow over EncryptedSharedPreferences.
+    // Stored in SecureCredentialStore.
     @Volatile private var sessionKeyMigrated = false
 
     private suspend fun getSessionKey(): String {
@@ -95,8 +97,8 @@ class LastFmRepository @Inject constructor(
 
     init {
         scope.launch {
-            val sk  = getSessionKey()
-            val usr = username.firstOrNull()   ?: ""
+            val sk = getSessionKey()
+            val usr = username.firstOrNull() ?: ""
             if (sk.isNotBlank() && usr.isNotBlank()) {
                 fetchUserInfo(usr)
             }
@@ -123,9 +125,8 @@ class LastFmRepository @Inject constructor(
         }
     }
 
-    // Mirrors the current in-memory pendingScrobbles list into the DB so a killed process
-    // doesn't lose whatever's still unflushed. Delete-all-then-reinsert instead of per-row
-    // tracking — simpler, and flushes are already infrequent/batched.
+    // Writes the pending queue to the DB so a killed process doesn't lose it. Flushes are rare,
+    // so the table is simply replaced.
     private suspend fun persistPendingToDb() {
         pendingScrobbleDao.deleteAllForService("LASTFM")
         pendingScrobbles.forEach { p ->
@@ -143,18 +144,11 @@ class LastFmRepository @Inject constructor(
         }
     }
 
-    suspend fun setEnabled(v: Boolean)    { store.edit { it[LastFmKeys.ENABLED]     = v } }
+    suspend fun setEnabled(v: Boolean)    { store.edit { it[LastFmKeys.ENABLED] = v } }
     suspend fun setNowPlaying(v: Boolean) { store.edit { it[LastFmKeys.NOW_PLAYING] = v } }
-    suspend fun setOnlyWifi(v: Boolean)   { store.edit { it[LastFmKeys.ONLY_WIFI]   = v } }
+    suspend fun setOnlyWifi(v: Boolean)   { store.edit { it[LastFmKeys.ONLY_WIFI] = v } }
 
-    suspend fun setCustomCredentials(apiKey: String, apiSecret: String) {
-        store.edit {
-            it[LastFmKeys.API_KEY]    = apiKey
-            it[LastFmKeys.API_SECRET] = apiSecret
-        }
-    }
-
-        suspend fun authenticate(username: String, password: String) {
+    suspend fun authenticate(username: String, password: String) {
         _authState.value = LastFmAuthState.Loading
         try {
             val (apiKey, apiSecret) = getCredentials()
@@ -172,8 +166,8 @@ class LastFmRepository @Inject constructor(
             val response = api.getMobileSession(
                 username = username,
                 password = password,
-                apiKey   = apiKey,
-                apiSig   = sig,
+                apiKey = apiKey,
+                apiSig = sig,
             )
 
             if (response.error != null) {
@@ -191,12 +185,14 @@ class LastFmRepository @Inject constructor(
             sessionKeyMigrated = true
             secureCredentialStore.setLastFmSessionKey(sk)
             store.edit {
-                it[LastFmKeys.USERNAME]    = username
-                it[LastFmKeys.ENABLED]     = true
+                it[LastFmKeys.USERNAME] = username
+                it[LastFmKeys.ENABLED] = true
             }
 
             fetchUserInfo(username)
 
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "authenticate failed", e)
             _authState.value = LastFmAuthState.Error(e.message ?: "Network error — check your connection")
@@ -219,12 +215,14 @@ class LastFmRepository @Inject constructor(
             val user = resp.user
             if (user != null) {
                 _authState.value = LastFmAuthState.Authenticated(
-                    username  = user.name,
+                    username = user.name,
                     playCount = user.playcount,
                 )
             } else {
                 _authState.value = LastFmAuthState.Authenticated(usr, "–")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             _authState.value = LastFmAuthState.Authenticated(usr, "–")
         }
@@ -237,25 +235,33 @@ class LastFmRepository @Inject constructor(
             if (!nowPlayingOn) return@launch
             if (!isNetworkAllowedForScrobble()) return@launch
             try {
+                // The signature must cover exactly the parameters that are sent.
+                val album = song.album.takeIf { it.isNotBlank() }
+                val duration = (song.duration / 1000).toInt().takeIf { it > 0 }
+                val trackNumber = song.trackNumber.takeIf { it > 0 }
                 val (apiKey, sk, sig) = buildSignedParams(
                     "track.updateNowPlaying",
-                    mapOf(
-                        "artist" to song.displayArtist,
-                        "track"  to song.title,
-                        "album"  to song.album,
-                    )
+                    buildMap {
+                        put("artist", song.displayArtist)
+                        put("track", song.title)
+                        album?.let { put("album", it) }
+                        duration?.let { put("duration", it.toString()) }
+                        trackNumber?.let { put("trackNumber", it.toString()) }
+                    },
                 ) ?: return@launch
 
                 api.updateNowPlaying(
-                    artist      = song.displayArtist,
-                    track       = song.title,
-                    album       = song.album.takeIf { it.isNotBlank() },
-                    duration    = (song.duration / 1000).toInt(),
-                    trackNumber = song.trackNumber.takeIf { it > 0 },
-                    apiKey      = apiKey,
-                    sessionKey  = sk,
-                    apiSig      = sig,
+                    artist = song.displayArtist,
+                    track = song.title,
+                    album = album,
+                    duration = duration,
+                    trackNumber = trackNumber,
+                    apiKey = apiKey,
+                    sessionKey = sk,
+                    apiSig = sig,
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "updateNowPlaying failed: ${e.message}")
             }
@@ -267,11 +273,11 @@ class LastFmRepository @Inject constructor(
             if (!isScrobbleReady()) return@launch
             pendingScrobbles.add(
                 PendingScrobble(
-                    artist      = song.displayArtist,
-                    track       = song.title,
-                    album       = song.album,
-                    timestamp   = startedAt / 1000,
-                    duration    = (song.duration / 1000).toInt(),
+                    artist = song.displayArtist,
+                    track = song.title,
+                    album = song.album,
+                    timestamp = startedAt / 1000,
+                    duration = (song.duration / 1000).toInt(),
                     trackNumber = song.trackNumber,
                 )
             )
@@ -287,36 +293,44 @@ class LastFmRepository @Inject constructor(
 
         for (p in toFlush) {
             try {
+                val album = p.album.takeIf { it.isNotBlank() }
+                val duration = p.duration.takeIf { it > 0 }
+                val trackNumber = p.trackNumber.takeIf { it > 0 }
                 val (apiKey, sk, sig) = buildSignedParams(
                     "track.scrobble",
-                    mapOf(
-                        "artist[0]"    to p.artist,
-                        "track[0]"     to p.track,
-                        "timestamp[0]" to p.timestamp.toString(),
-                        "album[0]"     to p.album,
-                    )
+                    buildMap {
+                        put("artist[0]", p.artist)
+                        put("track[0]", p.track)
+                        put("timestamp[0]", p.timestamp.toString())
+                        album?.let { put("album[0]", it) }
+                        duration?.let { put("duration[0]", it.toString()) }
+                        trackNumber?.let { put("trackNumber[0]", it.toString()) }
+                    },
                 ) ?: continue
 
                 val response = api.scrobble(
-                    artist      = p.artist,
-                    track       = p.track,
-                    timestamp   = p.timestamp,
-                    album       = p.album.takeIf { it.isNotBlank() },
-                    duration    = p.duration.takeIf { it > 0 },
-                    trackNumber = p.trackNumber.takeIf { it > 0 },
-                    apiKey      = apiKey,
-                    sessionKey  = sk,
-                    apiSig      = sig,
+                    artist = p.artist,
+                    track = p.track,
+                    timestamp = p.timestamp,
+                    album = album,
+                    duration = duration,
+                    trackNumber = trackNumber,
+                    apiKey = apiKey,
+                    sessionKey = sk,
+                    apiSig = sig,
                 )
 
                 if (response.error != null) {
                     Log.w(TAG, "Scrobble error ${response.error}: ${response.message}")
-                    // 11 = service offline, 16 = temporarily unavailable — both are transient, re-queue.
-                    // All other API errors (bad session, invalid params, etc.) are permanent; drop them.
+                    // 11 (service offline) and 16 (temporarily unavailable) are retried; other
+                    // errors are permanent.
                     if (response.error == 11 || response.error == 16) pendingScrobbles.add(p)
                 } else {
                     Log.d(TAG, "Scrobbled: ${p.artist} – ${p.track}")
                 }
+            } catch (e: CancellationException) {
+                pendingScrobbles.add(p)
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Scrobble network error, re-queuing: ${e.message}")
                 val offlineQueueEnabled = mainPrefs.lastFmScrobbleOffline.firstOrNull() ?: true
@@ -325,7 +339,7 @@ class LastFmRepository @Inject constructor(
         }
     }
 
-    suspend fun loveTrack(song: Song): Result<Unit> = runCatching {
+    suspend fun loveTrack(song: Song): Result<Unit> = runCatchingCancellable {
         val (apiKey, sk, sig) = buildSignedParams(
             "track.love",
             mapOf("artist" to song.displayArtist, "track" to song.title)
@@ -337,7 +351,7 @@ class LastFmRepository @Inject constructor(
         if (resp.error != null) error("Love failed: ${resp.message}")
     }
 
-    suspend fun unloveTrack(song: Song): Result<Unit> = runCatching {
+    suspend fun unloveTrack(song: Song): Result<Unit> = runCatchingCancellable {
         val (apiKey, sk, sig) = buildSignedParams(
             "track.unlove",
             mapOf("artist" to song.displayArtist, "track" to song.title)
@@ -355,12 +369,17 @@ class LastFmRepository @Inject constructor(
         return enabled && sk.isNotBlank()
     }
 
-        private suspend fun getCredentials(): Pair<String, String> {
+    private suspend fun getCredentials(): Pair<String, String> {
         val prefs = store.data.firstOrNull()
-        val apiKey    = prefs?.get(LastFmKeys.API_KEY)?.takeIf    { it.isNotBlank() } ?: DEFAULT_API_KEY
+        val apiKey = prefs?.get(LastFmKeys.API_KEY)?.takeIf    { it.isNotBlank() } ?: DEFAULT_API_KEY
         val apiSecret = prefs?.get(LastFmKeys.API_SECRET)?.takeIf { it.isNotBlank() } ?: DEFAULT_API_SECRET
         return apiKey to apiSecret
     }
+
+    // Exposed for unauthenticated, read-only Last.fm calls made outside this repository (e.g.
+    // ArtistInfoRepository, MetadataEnrichmentScanner) that only need the API key, not a signed
+    // request.
+    suspend fun getApiKey(): String = getCredentials().first
 
         private suspend fun buildSignedParams(
         method: String,
@@ -378,23 +397,21 @@ class LastFmRepository @Inject constructor(
         return Triple(apiKey, sk, sign(allParams, apiSecret))
     }
 
-        // Last.fm API signature: sorted key+value pairs concatenated, then MD5-hashed.
-        private fun sign(params: Map<String, String>, secret: String): String {
+    // Last.fm API signature: sorted key+value pairs concatenated, then MD5-hashed.
+    private fun sign(params: Map<String, String>, secret: String): String {
         val payload = params.entries
             .sortedBy { it.key }
             .joinToString("") { (k, v) -> k + v } + secret
-        return MessageDigest.getInstance("MD5")
-            .digest(payload.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
+        return md5Hex(payload)
     }
 
     val pendingScrobbleCount: Int get() = pendingScrobbles.size
 
     private fun isOnWifi(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val net = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(net) ?: return false
-        return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     }
 
     private suspend fun isNetworkAllowedForScrobble(): Boolean {

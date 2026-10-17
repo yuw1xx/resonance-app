@@ -1,11 +1,15 @@
-// Room @Entity classes mapping to database tables: songs, playlists, history,
-// artist artwork cache, lyrics, playback queue, liked songs, and Navidrome remote tracks/albums.
 package dev.yuwixx.resonance.data.database.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "songs")
+// Indices back the hot lookups: path (M3U import / backup restore matching), folder (folder
+// browser + include/exclude filters), albumId (album detail, artwork).
+@Entity(
+    tableName = "songs",
+    indices = [Index("path"), Index("folder"), Index("albumId")],
+)
 data class SongEntity(
     @PrimaryKey val id: Long,
     val uri: String,
@@ -45,9 +49,7 @@ data class PlaylistEntity(
     val mixSource: String? = null,
     val mixType: String? = null,
     val lastMixGenerated: Long = 0L,
-    // Set once this playlist has been pushed to (or pulled from) Navidrome — only playlists
-    // created in Resonance sync both ways; a playlist that already exists only on the server
-    // stays visible through the existing read-only browse view instead of being auto-imported.
+    // Set once the playlist is linked to Navidrome. Server-only playlists aren't imported.
     val navidromePlaylistId: String? = null,
 )
 
@@ -58,14 +60,21 @@ data class MixNavidromeSongCrossRef(
     val position: Int,
 )
 
-@Entity(tableName = "playlist_songs", primaryKeys = ["playlistId", "songId"])
+@Entity(
+    tableName = "playlist_songs",
+    primaryKeys = ["playlistId", "songId"],
+    indices = [Index("songId")],
+)
 data class PlaylistSongCrossRef(
     val playlistId: Long,
     val songId: Long,
     val position: Int,
 )
 
-@Entity(tableName = "history")
+@Entity(
+    tableName = "history",
+    indices = [Index("listenedAt"), Index("songId")],
+)
 data class HistoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val songId: Long,
@@ -88,8 +97,23 @@ data class AlbumArtworkEntity(
     val fetchedAt: Long = System.currentTimeMillis(),
 )
 
-// Durable backup for the in-memory pending-scrobble queues in LastFmRepository/MalojaRepository
-// — a killed process shouldn't silently lose scrobbles queued while offline.
+// Combined MusicBrainz + Last.fm (+ Discogs, if a token is configured) artist facts, cached
+// 7 days like ArtistArtworkEntity above. List fields are comma-joined since Room has no native
+// list-column support here.
+@Entity(tableName = "artist_info")
+data class ArtistInfoEntity(
+    @PrimaryKey val artistName: String,
+    val formedYear: Int?,
+    val dissolvedYear: Int?,
+    val type: String?,
+    val genres: String,
+    val bio: String?,
+    val members: String?,
+    val sourceAttribution: String,
+    val fetchedAt: Long = System.currentTimeMillis(),
+)
+
+// Persists the offline scrobble queues so they survive the process being killed.
 @Entity(tableName = "pending_scrobbles")
 data class PendingScrobbleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -102,10 +126,8 @@ data class PendingScrobbleEntity(
     val timestamp: Long,
 )
 
-// Durable retry queue for star/unstar actions not yet pushed to Navidrome (offline, or the
-// push failed) — mirrors PendingScrobbleEntity's pattern. Its mere presence for a songId means
-// "not yet synced"; a pull from the server skips any song with a pending row here, so a local
-// action always wins over a stale remote read instead of needing timestamp-based merging.
+// Star changes not yet pushed to Navidrome. A pull skips songs that have a row here, so the
+// local change wins.
 @Entity(tableName = "pending_star_actions")
 data class PendingStarActionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -120,9 +142,8 @@ object StarAction {
     const val UNSTAR = "UNSTAR"
 }
 
-// Offline-download tracking for Navidrome songs. Kept as its own table (not extra columns on
-// NavidromeSongEntity) because NavidromeRepository.syncLibrary() wipes and rebuilds
-// navidrome_songs wholesale on every sync — download state needs an independent lifecycle.
+// Downloads of Navidrome songs. A separate table because sync deletes rows of songs that leave
+// the server.
 @Entity(tableName = "song_downloads")
 data class SongDownloadEntity(
     @PrimaryKey val songId: Long,
@@ -151,7 +172,7 @@ data class LyricsEntity(
     val fetchedAt: Long = System.currentTimeMillis(),
 )
 
-// id is always 0 — we keep exactly one row and overwrite it on every queue change.
+// A single row (id 0), overwritten on every queue change.
 @Entity(tableName = "queues")
 data class QueueEntity(
     @PrimaryKey val id: Long = 0L,
@@ -161,6 +182,8 @@ data class QueueEntity(
     val repeatMode: String,
     val originalOrder: String,
     val savedAt: Long = System.currentTimeMillis(),
+    // Playback position inside the current item, so a restored queue resumes mid-track.
+    val positionMs: Long = 0L,
 )
 
 @Entity(tableName = "liked_songs")
@@ -169,7 +192,7 @@ data class LikedSongEntity(
     val likedAt: Long = System.currentTimeMillis(),
 )
 
-@Entity(tableName = "navidrome_songs")
+@Entity(tableName = "navidrome_songs", indices = [Index("numericId")])
 data class NavidromeSongEntity(
     @PrimaryKey val navidromeId: String,
     val numericId: Long,
@@ -205,4 +228,23 @@ data class NavidromeAlbumEntity(
     val durationSec: Int,
     val year: Int,
     val cachedAt: Long = System.currentTimeMillis(),
+)
+
+// Rule set for a smart playlist, stored as JSON (see SmartPlaylistRules). The playlist row
+// itself stays in `playlists`, so smart playlists show up everywhere normal playlists do.
+@Entity(tableName = "smart_playlists")
+data class SmartPlaylistEntity(
+    @PrimaryKey val playlistId: Long,
+    val rulesJson: String,
+)
+
+// Links a playlist to an .m3u/.m3u8 file in the user's chosen sync folder (SAF document URI),
+// so folder sync can tell new, changed and already-imported files apart.
+@Entity(tableName = "playlist_sources")
+data class PlaylistSourceEntity(
+    @PrimaryKey val playlistId: Long,
+    val documentUri: String,
+    val displayName: String,
+    val lastModified: Long,
+    val lastSyncedAt: Long,
 )

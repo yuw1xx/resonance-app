@@ -1,6 +1,3 @@
-// Keystore-backed storage for the two real secrets the app persists: the Navidrome account
-// password and the Last.fm session key. Everything else (server URLs, usernames, tokens the
-// codebase already documents as non-secret) stays in the regular DataStore-backed preferences.
 package dev.yuwixx.resonance.data.security
 
 import android.content.Context
@@ -17,13 +14,22 @@ private const val PREFS_NAME = "resonance_secure_prefs"
 private const val KEY_NAVIDROME_PASSWORD = "navidrome_password"
 private const val KEY_LASTFM_SESSION_KEY = "lastfm_session_key"
 
+/**
+ * Keystore-backed storage for the Navidrome password and the Last.fm session key. All other
+ * settings stay in DataStore.
+ */
 @Singleton
 class SecureCredentialStore @Inject constructor(@ApplicationContext context: Context) {
 
-    // Null if Keystore/EncryptedSharedPreferences construction fails (rare, but seen on some
-    // OEM ROMs after OS updates) — every accessor below degrades to "no stored credential"
-    // rather than crashing, so the app just prompts the user to re-enter it.
-    private val prefs: SharedPreferences? = try {
+    // If the file can't be decrypted (its key is gone, e.g. after a restore onto another device
+    // or some OEM updates), the stored values are unrecoverable: start over with an empty store
+    // so new credentials can be saved. Null only if even that fails.
+    private val prefs: SharedPreferences? = open(context) ?: run {
+        context.deleteSharedPreferences(PREFS_NAME)
+        open(context)
+    }
+
+    private fun open(context: Context): SharedPreferences? = try {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
@@ -40,11 +46,12 @@ class SecureCredentialStore @Inject constructor(@ApplicationContext context: Con
     }
 
     fun getNavidromePassword(): String? = safeGet(KEY_NAVIDROME_PASSWORD)
-    fun setNavidromePassword(value: String) = safeSet(KEY_NAVIDROME_PASSWORD, value)
+    /** Returns whether the value was stored. */
+    fun setNavidromePassword(value: String): Boolean = safeSet(KEY_NAVIDROME_PASSWORD, value)
     fun clearNavidromePassword() = safeRemove(KEY_NAVIDROME_PASSWORD)
 
     fun getLastFmSessionKey(): String? = safeGet(KEY_LASTFM_SESSION_KEY)
-    fun setLastFmSessionKey(value: String) = safeSet(KEY_LASTFM_SESSION_KEY, value)
+    fun setLastFmSessionKey(value: String): Boolean = safeSet(KEY_LASTFM_SESSION_KEY, value)
     fun clearLastFmSessionKey() = safeRemove(KEY_LASTFM_SESSION_KEY)
 
     private fun safeGet(key: String): String? =
@@ -52,11 +59,13 @@ class SecureCredentialStore @Inject constructor(@ApplicationContext context: Con
             Log.e(TAG, "Failed to read $key", e); null
         }
 
-    private fun safeSet(key: String, value: String) {
-        try { prefs?.edit()?.putString(key, value)?.apply() } catch (e: Exception) {
+    private fun safeSet(key: String, value: String): Boolean =
+        try {
+            prefs?.edit()?.putString(key, value)?.commit() == true
+        } catch (e: Exception) {
             Log.e(TAG, "Failed to write $key", e)
+            false
         }
-    }
 
     private fun safeRemove(key: String) {
         try { prefs?.edit()?.remove(key)?.apply() } catch (e: Exception) {

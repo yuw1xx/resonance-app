@@ -1,6 +1,3 @@
-// Offline download/caching for Navidrome songs: enqueues background downloads (via
-// SongDownloadManager/WorkManager), tracks per-song state in the song_downloads table, and
-// resolves a downloaded song's local file path for playback substitution.
 package dev.yuwixx.resonance.data.repository
 
 import android.content.Context
@@ -12,7 +9,15 @@ import dev.yuwixx.resonance.data.database.dao.PlaylistDao
 import dev.yuwixx.resonance.data.database.dao.SongDownloadDao
 import dev.yuwixx.resonance.data.database.entity.DownloadState
 import dev.yuwixx.resonance.data.database.entity.SongDownloadEntity
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
 import dev.yuwixx.resonance.data.worker.SongDownloadManager
+import java.io.File
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,11 +26,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import javax.inject.Inject
-import javax.inject.Singleton
 
 @Singleton
 class NavidromeDownloadRepository @Inject constructor(
@@ -42,10 +42,7 @@ class NavidromeDownloadRepository @Inject constructor(
     val downloadStates: Flow<Map<Long, SongDownloadEntity>> =
         songDownloadDao.getAll().map { list -> list.associateBy { it.songId } }
 
-    // Hot in-memory snapshot of songId -> local file path, kept live from the DB. Playback
-    // substitution (PlayerViewModel.toMediaItem(), MusicService.restoreQueue()) happens at
-    // MediaItem-build call sites that aren't suspend today — a synchronous snapshot read avoids
-    // threading suspend through every one of those call sites just for this one lookup.
+    // Song ID to downloaded file, kept in memory so MediaItems can be built without suspending.
     private val downloadedPaths = MutableStateFlow<Map<Long, String>>(emptyMap())
 
     init {
@@ -59,9 +56,6 @@ class NavidromeDownloadRepository @Inject constructor(
     }
 
     fun localPathForSync(songId: Long): String? = downloadedPaths.value[songId]
-
-    suspend fun isDownloaded(songId: Long): Boolean =
-        songDownloadDao.getBySongId(songId)?.state == DownloadState.DOWNLOADED
 
     suspend fun localPathFor(songId: Long): String? {
         val entity = songDownloadDao.getBySongId(songId) ?: return null
@@ -89,7 +83,7 @@ class NavidromeDownloadRepository @Inject constructor(
         downloadManager.cancelSong(songId)
         val entity = songDownloadDao.getBySongId(songId)
         if (entity != null) {
-            runCatching { File(entity.localFilePath).delete() }
+            runCatchingCancellable { File(entity.localFilePath).delete() }
             songDownloadDao.delete(songId)
         }
     }
@@ -99,16 +93,18 @@ class NavidromeDownloadRepository @Inject constructor(
         songDownloadDao.deleteAll()
     }
 
-    suspend fun totalBytesUsed(): Long = songDownloadDao.sumDownloadedBytes()
-
+    // getExternalFilesDir is null when shared storage is unavailable; fall back to internal.
     private fun downloadsDir(): File =
-        File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "downloads").apply { mkdirs() }
+        File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: context.filesDir, "downloads")
+            .apply { mkdirs() }
 
-    // Called by SongDownloadWorker/SongBatchDownloadWorker — actually performs one song's
-    // download and persists the result. Not private: the workers live in a different package.
+    /** Downloads one song (used by the download workers). Already-downloaded songs are skipped. */
     suspend fun performDownload(songId: Long) = withContext(Dispatchers.IO) {
         val entity = navidromeSongDao.getSongByNumericId(songId)
-            ?: throw IllegalStateException("Song $songId not found in Navidrome cache")
+            ?: throw NotDownloadableException("Song $songId isn't in the Navidrome library")
+        songDownloadDao.getBySongId(songId)?.let { existing ->
+            if (existing.state == DownloadState.DOWNLOADED && File(existing.localFilePath).exists()) return@withContext
+        }
 
         songDownloadDao.upsert(
             SongDownloadEntity(
@@ -126,17 +122,27 @@ class NavidromeDownloadRepository @Inject constructor(
 
             val ext = entity.path.substringAfterLast('.', "mp3").ifBlank { "mp3" }
             val destFile = File(downloadsDir(), "$songId.$ext")
+            val partFile = File(destFile.path + ".part")
 
             val connection = (URL(downloadUrl).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15_000
-                readTimeout    = 300_000
+                readTimeout = 300_000
             }
             try {
-                connection.inputStream.use { input ->
-                    destFile.outputStream().use { output -> input.copyTo(output) }
+                val code = connection.responseCode
+                if (code != HttpURLConnection.HTTP_OK) throw IOException("Server returned HTTP $code")
+                // Subsonic reports errors as a 200 with a JSON/XML body; don't save that as audio.
+                val type = connection.contentType.orEmpty()
+                if (type.contains("json") || type.contains("xml")) {
+                    throw IOException("Server returned an error instead of audio")
                 }
+                connection.inputStream.use { input ->
+                    partFile.outputStream().use { output -> input.copyTo(output) }
+                }
+                if (!partFile.renameTo(destFile)) throw IOException("Couldn't save ${destFile.name}")
             } finally {
                 connection.disconnect()
+                partFile.delete()
             }
 
             songDownloadDao.upsert(
@@ -150,9 +156,14 @@ class NavidromeDownloadRepository @Inject constructor(
                     downloadedAt = System.currentTimeMillis(),
                 )
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             songDownloadDao.updateState(songId, DownloadState.FAILED, e.message)
             throw e
         }
     }
 }
+
+/** A song that can never be downloaded (not a Navidrome song); retrying won't help. */
+class NotDownloadableException(message: String) : Exception(message)

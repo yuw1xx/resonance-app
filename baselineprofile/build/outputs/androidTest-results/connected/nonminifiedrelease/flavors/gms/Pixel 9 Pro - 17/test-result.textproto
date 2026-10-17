@@ -1,0 +1,82 @@
+# proto-message: google.testing.platform.proto.api.core.TestSuiteResult
+# 2026-10-17T00:05:31.384293227Z:
+test_suite_meta_data {
+  scheduled_test_case_count: 1
+  device {
+    id: "adb-4B301FDAP000FV-ygcz3R._adb-tls-connect._tcp"
+    friendly_name: "primary"
+  }
+}
+test_status: FAILED
+test_result {
+  test_case {
+    test_class: "BaselineProfileGenerator"
+    test_package: "dev.yuwixx.resonance.baselineprofile"
+    test_method: "generate"
+    start_time {
+      seconds: 1792195376
+      nanos: 552000000
+    }
+    end_time {
+      seconds: 1792195529
+      nanos: 160000000
+    }
+    device {
+      id: "adb-4B301FDAP000FV-ygcz3R._adb-tls-connect._tcp"
+      friendly_name: "primary"
+    }
+  }
+  test_status: FAILED
+  error {
+    error_message: "java.lang.IllegalStateException: Generated Profile is empty, before filtering. Ensure your profileBlock invokes the target app, and runs a non-trivial amount of code\nat androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:134)\nat androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)\nat androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)\nat dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:25)\n"
+    error_type: "java.lang.IllegalStateException"
+    stack_trace: "java.lang.IllegalStateException: Generated Profile is empty, before filtering. Ensure your profileBlock invokes the target app, and runs a non-trivial amount of code\nat androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:134)\nat androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)\nat androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)\nat dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:25)\n"
+  }
+  output_artifact {
+    label {
+      label: "logcat"
+      namespace: "android"
+    }
+    source_path {
+      path: "/home/yu/StudioProjects/resonance/baselineprofile/build/outputs/androidTest-results/connected/nonminifiedrelease/flavors/gms/Pixel 9 Pro - 17/logcat-dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator-generate.txt"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info"
+      namespace: "android"
+    }
+    source_path {
+      path: "/home/yu/StudioProjects/resonance/baselineprofile/build/outputs/androidTest-results/connected/nonminifiedrelease/flavors/gms/Pixel 9 Pro - 17/device-info.pb"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.meminfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "/home/yu/StudioProjects/resonance/baselineprofile/build/outputs/androidTest-results/connected/nonminifiedrelease/flavors/gms/Pixel 9 Pro - 17/meminfo"
+    }
+  }
+  output_artifact {
+    label {
+      label: "device-info.cpuinfo"
+      namespace: "android"
+    }
+    source_path {
+      path: "/home/yu/StudioProjects/resonance/baselineprofile/build/outputs/androidTest-results/connected/nonminifiedrelease/flavors/gms/Pixel 9 Pro - 17/cpuinfo"
+    }
+  }
+}
+output_artifact {
+  label {
+    label: "test-results.log"
+    namespace: "com.google.testing.platform.runtime.android.driver.AndroidInstrumentationDriver"
+  }
+  source_path {
+    path: "/home/yu/StudioProjects/resonance/baselineprofile/build/outputs/androidTest-results/connected/nonminifiedrelease/flavors/gms/Pixel 9 Pro - 17/testlog/test-results.log"
+  }
+  type: TEST_DATA
+  mime_type: "text/plain"
+}

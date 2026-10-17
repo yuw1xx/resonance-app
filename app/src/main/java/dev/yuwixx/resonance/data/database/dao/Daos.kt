@@ -1,5 +1,3 @@
-// Room DAO interfaces for every table: songs, playlists, history, lyrics, liked songs,
-// artist artwork cache, playback queue, and Navidrome remote tracks/albums.
 package dev.yuwixx.resonance.data.database.dao
 
 import androidx.room.*
@@ -8,6 +6,8 @@ import kotlinx.coroutines.flow.Flow
 
 data class SongPlayCount(val songId: Long, val playCount: Int)
 data class HourPlayCount(val hour: Int, val playCount: Int)
+data class DailyTotal(val day: String, val totalMs: Long, val playCount: Int)
+data class DayOfWeekPlayCount(val dayOfWeek: Int, val playCount: Int)
 
 @Dao
 interface SongDao {
@@ -19,12 +19,6 @@ interface SongDao {
 
     @Query("SELECT * FROM songs WHERE folder = :folder")
     fun getSongsByFolder(folder: String): Flow<List<SongEntity>>
-
-    @Query("SELECT * FROM songs WHERE album = :album ORDER BY trackNumber ASC")
-    fun getSongsByAlbum(album: String): Flow<List<SongEntity>>
-
-    @Query("SELECT * FROM songs WHERE artist LIKE '%' || :artist || '%'")
-    fun getSongsByArtist(artist: String): Flow<List<SongEntity>>
 
     @Query("SELECT * FROM songs WHERE genre = :genre")
     fun getSongsByGenre(genre: String): Flow<List<SongEntity>>
@@ -42,6 +36,10 @@ interface SongDao {
     @Upsert
     suspend fun upsertSongs(songs: List<SongEntity>)
 
+    /** Just what a MediaStore sync needs to diff against, plus the per-song state it must keep. */
+    @Query("SELECT id, dateModified, size, path, listenCount, lastListened FROM songs")
+    suspend fun getSyncKeys(): List<SongSyncKey>
+
     @Query("UPDATE songs SET replayGainTrack = :track, replayGainAlbum = :album WHERE id = :id")
     suspend fun updateReplayGain(id: Long, track: Float?, album: Float?)
 
@@ -50,9 +48,6 @@ interface SongDao {
 
     @Query("DELETE FROM songs WHERE id IN (:ids)")
     suspend fun deleteSongsByIds(ids: List<Long>)
-
-    @Query("DELETE FROM songs")
-    suspend fun deleteAllSongs()
 
     @Query("UPDATE songs SET listenCount = listenCount + 1, lastListened = :time WHERE id = :id")
     suspend fun incrementListenCount(id: Long, time: Long)
@@ -68,9 +63,6 @@ interface SongDao {
 
     @Query("SELECT DISTINCT folder FROM songs ORDER BY folder ASC")
     fun getAllFolders(): Flow<List<String>>
-
-    @Query("SELECT DISTINCT genre FROM songs WHERE genre != '' ORDER BY genre ASC")
-    fun getAllGenres(): Flow<List<String>>
 
     @Query("SELECT * FROM songs WHERE path = :path LIMIT 1")
     suspend fun getSongByPath(path: String): SongEntity?
@@ -108,6 +100,41 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addSongToPlaylist(ref: PlaylistSongCrossRef)
 
+    // IGNORE, not REPLACE: re-adding a song that's already in the playlist must leave it where
+    // it is instead of moving it to the end (and leaving a hole at its old position).
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertSongRefsIgnoringDuplicates(refs: List<PlaylistSongCrossRef>): List<Long>
+
+    @Query("SELECT COALESCE(MAX(position) + 1, 0) FROM playlist_songs WHERE playlistId = :playlistId")
+    suspend fun nextPosition(playlistId: Long): Int
+
+    // Every playlist's refs in one query, so the playlists screen is built from three flows
+    // (playlists, refs, songs) instead of one query per playlist per song.
+    @Query("SELECT * FROM playlist_songs ORDER BY playlistId ASC, position ASC")
+    fun observeAllSongRefs(): Flow<List<PlaylistSongCrossRef>>
+
+    @Transaction
+    suspend fun deletePlaylistAndSongs(playlist: PlaylistEntity) {
+        clearPlaylist(playlist.id)
+        deletePlaylist(playlist)
+    }
+
+    // Rewrites positions as 0..n-1 in their current order, closing gaps left by removals.
+    @Transaction
+    suspend fun compactPositions(playlistId: Long) {
+        getPlaylistSongRefs(playlistId).forEachIndexed { index, ref ->
+            if (ref.position != index) updateSongPosition(playlistId, ref.songId, index)
+        }
+    }
+
+    @Transaction
+    suspend fun replaceSongs(playlistId: Long, songIds: List<Long>) {
+        clearPlaylist(playlistId)
+        insertSongRefsIgnoringDuplicates(
+            songIds.distinct().mapIndexed { i, id -> PlaylistSongCrossRef(playlistId, id, i) }
+        )
+    }
+
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId")
     suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long)
 
@@ -120,16 +147,51 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY isMix ASC, dateModified DESC")
     suspend fun getAllPlaylistsList(): List<PlaylistEntity>
 
-    @Query("""
-        SELECT s.path FROM songs s
-        INNER JOIN playlist_songs ps ON s.id = ps.songId
-        WHERE ps.playlistId = :playlistId
-        ORDER BY ps.position ASC
-    """)
-    suspend fun getSongPathsForPlaylist(playlistId: Long): List<String>
-
     @Query("SELECT * FROM playlists WHERE navidromePlaylistId = :navidromePlaylistId LIMIT 1")
     suspend fun getPlaylistByNavidromeId(navidromePlaylistId: String): PlaylistEntity?
+
+    // Backup restore matches playlists by name. Mixes are never in a backup, so they're excluded.
+    @Query("SELECT * FROM playlists WHERE name = :name AND isMix = 0 LIMIT 1")
+    suspend fun getPlaylistByName(name: String): PlaylistEntity?
+}
+
+@Dao
+interface SmartPlaylistDao {
+    @Query("SELECT * FROM smart_playlists")
+    fun observeAll(): Flow<List<SmartPlaylistEntity>>
+
+    @Query("SELECT * FROM smart_playlists WHERE playlistId = :playlistId")
+    suspend fun get(playlistId: Long): SmartPlaylistEntity?
+
+    @Upsert
+    suspend fun upsert(entity: SmartPlaylistEntity)
+
+    @Query("DELETE FROM smart_playlists WHERE playlistId = :playlistId")
+    suspend fun delete(playlistId: Long)
+
+    @Query("SELECT * FROM smart_playlists")
+    suspend fun getAll(): List<SmartPlaylistEntity>
+}
+
+@Dao
+interface PlaylistSourceDao {
+    @Query("SELECT * FROM playlist_sources")
+    suspend fun getAll(): List<PlaylistSourceEntity>
+
+    @Query("SELECT * FROM playlist_sources WHERE documentUri = :uri LIMIT 1")
+    suspend fun getByUri(uri: String): PlaylistSourceEntity?
+
+    @Query("SELECT * FROM playlist_sources WHERE playlistId = :playlistId")
+    suspend fun getByPlaylist(playlistId: Long): PlaylistSourceEntity?
+
+    @Upsert
+    suspend fun upsert(entity: PlaylistSourceEntity)
+
+    @Query("DELETE FROM playlist_sources WHERE playlistId = :playlistId")
+    suspend fun delete(playlistId: Long)
+
+    @Query("DELETE FROM playlist_sources")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -149,21 +211,11 @@ interface HistoryDao {
     @Insert
     suspend fun insertHistory(history: HistoryEntity)
 
-    @Query("""
-        SELECT * FROM history 
-        WHERE listenedAt BETWEEN :from AND :to
-        ORDER BY listenedAt DESC
-    """)
-    fun getHistoryInRange(from: Long, to: Long): Flow<List<HistoryEntity>>
-
     @Query("SELECT * FROM history ORDER BY listenedAt DESC LIMIT 200")
     fun getRecentHistory(): Flow<List<HistoryEntity>>
 
     @Query("SELECT * FROM history")
     suspend fun getAllHistory(): List<HistoryEntity>
-
-    @Query("DELETE FROM history WHERE listenedAt < :before")
-    suspend fun pruneHistory(before: Long)
 
     @Query("DELETE FROM history")
     suspend fun clearAllHistory()
@@ -201,6 +253,33 @@ interface HistoryDao {
         ORDER BY hour ASC
     """)
     suspend fun getPlaysByHour(from: Long, to: Long): List<HourPlayCount>
+
+    @Query("SELECT COUNT(*) FROM history WHERE songId = :songId")
+    suspend fun getPlayCountForSong(songId: Long): Int
+
+    @Query("SELECT COALESCE(SUM(durationListened), 0) FROM history WHERE songId = :songId")
+    suspend fun getTotalListenTimeForSong(songId: Long): Long
+
+    @Query("""
+        SELECT date(listenedAt / 1000, 'unixepoch', 'localtime') AS day,
+               COALESCE(SUM(durationListened), 0) AS totalMs,
+               COUNT(*) AS playCount
+        FROM history
+        WHERE listenedAt BETWEEN :from AND :to
+        GROUP BY day
+        ORDER BY day ASC
+    """)
+    suspend fun getDailyTotals(from: Long, to: Long): List<DailyTotal>
+
+    @Query("""
+        SELECT CAST(strftime('%w', listenedAt / 1000, 'unixepoch', 'localtime') AS INTEGER) AS dayOfWeek,
+               COUNT(*) AS playCount
+        FROM history
+        WHERE listenedAt BETWEEN :from AND :to
+        GROUP BY dayOfWeek
+        ORDER BY dayOfWeek ASC
+    """)
+    suspend fun getPlaysByDayOfWeek(from: Long, to: Long): List<DayOfWeekPlayCount>
 }
 
 @Dao
@@ -226,12 +305,8 @@ interface LikedSongsDao {
     @Query("SELECT COUNT(*) FROM liked_songs WHERE songId = :songId")
     suspend fun isLiked(songId: Long): Int
 
-    @Query("""
-        SELECT s.path FROM songs s
-        INNER JOIN liked_songs ls ON s.id = ls.songId
-        ORDER BY ls.likedAt DESC
-    """)
-    suspend fun getLikedSongPaths(): List<String>
+    @Query("SELECT songId FROM liked_songs")
+    suspend fun getAllLikedIds(): List<Long>
 }
 
 @Dao
@@ -247,6 +322,15 @@ interface ArtworkDao {
 
     @Upsert
     suspend fun upsertAlbumArtwork(artwork: AlbumArtworkEntity)
+}
+
+@Dao
+interface ArtistInfoDao {
+    @Query("SELECT * FROM artist_info WHERE artistName = :artistName")
+    suspend fun getArtistInfo(artistName: String): ArtistInfoEntity?
+
+    @Upsert
+    suspend fun upsert(info: ArtistInfoEntity)
 }
 
 @Dao
@@ -272,8 +356,9 @@ interface PendingStarActionDao {
     @Query("SELECT DISTINCT songId FROM pending_star_actions")
     suspend fun getPendingSongIds(): List<Long>
 
-    @Query("DELETE FROM pending_star_actions WHERE songId = :songId")
-    suspend fun deleteForSong(songId: Long)
+    /** Removes the actions for a song up to and including [upTo], leaving newer ones queued. */
+    @Query("DELETE FROM pending_star_actions WHERE songId = :songId AND timestamp <= :upTo")
+    suspend fun deleteForSongUpTo(songId: Long, upTo: Long)
 
     @Query("DELETE FROM pending_star_actions")
     suspend fun deleteAll()
@@ -287,9 +372,6 @@ interface SongDownloadDao {
     @Query("SELECT * FROM song_downloads WHERE songId = :songId")
     suspend fun getBySongId(songId: Long): SongDownloadEntity?
 
-    @Query("SELECT * FROM song_downloads WHERE songId IN (:songIds)")
-    suspend fun getBySongIds(songIds: List<Long>): List<SongDownloadEntity>
-
     @Upsert
     suspend fun upsert(entity: SongDownloadEntity)
 
@@ -302,11 +384,6 @@ interface SongDownloadDao {
     @Query("DELETE FROM song_downloads")
     suspend fun deleteAll()
 
-    @Query("SELECT COALESCE(SUM(fileSizeBytes), 0) FROM song_downloads WHERE state = 'DOWNLOADED'")
-    suspend fun sumDownloadedBytes(): Long
-
-    @Query("SELECT COUNT(*) FROM song_downloads WHERE state = :state")
-    suspend fun countByState(state: String): Int
 }
 
 @Dao
@@ -316,6 +393,9 @@ interface QueueDao {
 
     @Upsert
     suspend fun saveQueue(queue: QueueEntity)
+
+    @Query("DELETE FROM queues")
+    suspend fun clearQueue()
 }
 @Dao
 interface NavidromeSongDao {
@@ -331,6 +411,9 @@ interface NavidromeSongDao {
     @Query("SELECT * FROM navidrome_songs WHERE numericId = :id")
     suspend fun getSongByNumericId(id: Long): NavidromeSongEntity?
 
+    @Query("SELECT * FROM navidrome_songs WHERE numericId IN (:ids)")
+    suspend fun getSongsByNumericIds(ids: List<Long>): List<NavidromeSongEntity>
+
     @Query("SELECT COUNT(*) FROM navidrome_songs")
     suspend fun count(): Int
 
@@ -339,15 +422,15 @@ interface NavidromeSongDao {
 
     @Query("DELETE FROM navidrome_songs")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM navidrome_songs WHERE navidromeId IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }
 
 @Dao
 interface NavidromeAlbumDao {
     @Query("SELECT * FROM navidrome_albums ORDER BY artist ASC, year ASC, name ASC")
     fun getAllAlbums(): Flow<List<NavidromeAlbumEntity>>
-
-    @Query("SELECT * FROM navidrome_albums WHERE navidromeId = :id")
-    suspend fun getAlbumById(id: String): NavidromeAlbumEntity?
 
     @Query("SELECT COUNT(*) FROM navidrome_albums")
     suspend fun count(): Int
@@ -357,4 +440,19 @@ interface NavidromeAlbumDao {
 
     @Query("DELETE FROM navidrome_albums")
     suspend fun deleteAll()
+
+    @Query("SELECT * FROM navidrome_albums")
+    suspend fun getAllAlbumsList(): List<NavidromeAlbumEntity>
+
+    @Query("DELETE FROM navidrome_albums WHERE navidromeId IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }
+
+data class SongSyncKey(
+    val id: Long,
+    val dateModified: Long,
+    val size: Long,
+    val path: String,
+    val listenCount: Int,
+    val lastListened: Long,
+)

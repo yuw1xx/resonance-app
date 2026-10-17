@@ -1,0 +1,45 @@
+INSTRUMENTATION_STATUS: class=dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator:
+INSTRUMENTATION_STATUS: test=generate
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stack=java.lang.IllegalStateException: Generated Profile is empty, before filtering. Ensure your profileBlock invokes the target app, and runs a non-trivial amount of code
+at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:134)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:25)
+
+INSTRUMENTATION_STATUS: stream=
+Error in generate(dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator):
+java.lang.IllegalStateException: Generated Profile is empty, before filtering. Ensure your profileBlock invokes the target app, and runs a non-trivial amount of code
+at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:134)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:25)
+
+INSTRUMENTATION_STATUS: test=generate
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 152,819
+There was 1 failure:
+1) generate(dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator)
+java.lang.IllegalStateException: Generated Profile is empty, before filtering. Ensure your profileBlock invokes the target app, and runs a non-trivial amount of code
+at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:134)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)
+at androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:25)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1
+

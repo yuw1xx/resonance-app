@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "dev.yuwixx.resonance.baselineprofile-mergeGmsNonMinifiedReleaseResources-17:/values-sw/values-sw.xml",
+            "map": [
+                {
+                    "source": "/home/yu/.gradle/caches/9.4.1/transforms/e5b0370452ac5b3e6c459d5a83e7343e/transformed/core-1.9.0/res/values-sw/values-sw.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "100",
+                        "endOffsets": "151"
+                    }
+                }
+            ]
+        }
+    ]
+}

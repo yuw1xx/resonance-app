@@ -1,9 +1,8 @@
-// Domain model data classes and enums used throughout the app: Song, Album, Artist, Playlist,
-// playback state types (RepeatMode, SleepTimer, SortOrder), and smart queue types.
 package dev.yuwixx.resonance.data.model
 
 import android.net.Uri
 import androidx.compose.runtime.Immutable
+import dev.yuwixx.resonance.data.playlist.SmartRules
 
 @Immutable
 data class Song(
@@ -33,8 +32,7 @@ data class Song(
     val artworkUri: Uri?,
     val listenCount: Int = 0,
     val lastListened: Long = 0L,
-    // Non-null only for Navidrome-sourced songs — the original opaque Subsonic string id,
-    // needed to star/unstar against the server (id is the stableLongId-mapped Long instead).
+    // The Subsonic ID of a Navidrome song, needed to star it on the server.
     val navidromeId: String? = null,
 ) {
     val displayArtist: String get() = artists.joinToString(", ")
@@ -75,28 +73,27 @@ data class Playlist(
     val mixType: MixType? = null,
     val mixSource: String? = null,
     val lastMixGenerated: Long = 0L,
+    /** Non-null for a smart playlist: its songs come from these rules, not from manual edits. */
+    val smartRules: SmartRules? = null,
 ) {
+    val isSmart: Boolean get() = smartRules != null
     val songCount: Int get() = songs.size
     val totalDuration: Long get() = songs.sumOf { it.duration }
 }
-
-@Immutable
-data class PlaybackQueue(
-    val songs: List<Song>,
-    val currentIndex: Int,
-    val shuffleEnabled: Boolean,
-    val repeatMode: RepeatMode,
-    val originalOrder: List<Int>,
-)
 
 enum class RepeatMode { NONE, ONE, ALL }
 
 @Immutable
 data class LyricLine(
     val timeMs: Long,
+    /** Empty for an instrumental gap (a timestamp with no words). */
     val text: String,
     val wordTimings: List<WordTiming> = emptyList(),
-)
+    /** A second line sharing the same timestamp (usually a translation or romanization). */
+    val translation: String? = null,
+) {
+    val isGap: Boolean get() = text.isBlank()
+}
 
 @Immutable
 data class WordTiming(
@@ -124,8 +121,11 @@ enum class MixType { TOP_ARTIST, TOP_GENRE, ERA, FAVORITES, RECENTLY_LOVED }
 
 sealed class SleepTimer {
     data object Off : SleepTimer()
-    data class Tracks(val tracksLeft: Int) : SleepTimer()
-    data class Time(val minutes: Int, val startedAt: Long) : SleepTimer()
+    /** Pauses when [tracksLeft] more tracks have finished playing (1 = end of the current track). */
+    data class Tracks(val tracksLeft: Int, val fadeOut: Boolean = false) : SleepTimer()
+    data class Time(val minutes: Int, val startedAt: Long, val fadeOut: Boolean = false) : SleepTimer() {
+        val endsAt: Long get() = startedAt + minutes * 60_000L
+    }
 }
 
 data class WaveformData(

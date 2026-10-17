@@ -1,23 +1,25 @@
 package dev.yuwixx.resonance.cast
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
 import com.google.android.gms.cast.MediaSeekOptions
-import com.google.android.gms.common.images.WebImage
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
 import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
+import com.google.android.gms.common.images.WebImage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.Song
+import java.util.concurrent.Executors
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import javax.inject.Inject
-import javax.inject.Singleton
 
 @Singleton
 class CastManager @Inject constructor(
@@ -66,21 +68,34 @@ class CastManager @Inject constructor(
         override fun onSessionResuming(session: CastSession, sessionId: String) {}
     }
 
-    // Must be called from the main thread (MainActivity.onCreate).
-    // Safe to call on every Activity recreation — listener is only registered once.
+    // Main thread only. Safe to call on every Activity recreation.
+    private var initializing = false
+    private val initExecutor = Executors.newSingleThreadExecutor()
+
     fun initialize() {
-        if (_castContext != null) return
+        if (_castContext != null || initializing) return
+        initializing = true
+        // Async init: the Play Services setup happens off the main thread so it doesn't
+        // delay the first frame; the listeners below run back on the main thread.
         try {
-            _castContext = CastContext.getSharedInstance(context)
-            val sessionManager = _castContext?.sessionManager ?: return
-            sessionManager.addSessionManagerListener(sessionListener, CastSession::class.java)
-            // Sync state if already in a session (e.g., app restarted while casting)
-            val currentSession = sessionManager.currentCastSession
-            if (currentSession != null) {
-                _isCasting.value = true
-                currentSession.remoteMediaClient?.registerCallback(clientCallback)
-            }
+            CastContext.getSharedInstance(context, initExecutor)
+                .addOnSuccessListener { castContext ->
+                    _castContext = castContext
+                    val sessionManager = castContext.sessionManager
+                    sessionManager.addSessionManagerListener(sessionListener, CastSession::class.java)
+                    // Sync state if already in a session (e.g., app restarted while casting)
+                    val currentSession = sessionManager.currentCastSession
+                    if (currentSession != null) {
+                        _isCasting.value = true
+                        currentSession.remoteMediaClient?.registerCallback(clientCallback)
+                    }
+                }
+                .addOnFailureListener { e ->
+                    initializing = false
+                    Log.w("CastManager", "Cast not available: ${e.message}")
+                }
         } catch (e: Exception) {
+            initializing = false
             Log.w("CastManager", "Cast not available: ${e.message}")
         }
     }
@@ -92,7 +107,7 @@ class CastManager @Inject constructor(
             putString(MediaMetadata.KEY_ARTIST, song.displayArtist)
             putString(MediaMetadata.KEY_ALBUM_TITLE, song.album)
             if (artworkUrl != null) {
-                addImage(WebImage(android.net.Uri.parse(artworkUrl), 1000, 1000))
+                addImage(WebImage(Uri.parse(artworkUrl), 1000, 1000))
             }
         }
         val mediaInfo = MediaInfo.Builder(audioUrl)

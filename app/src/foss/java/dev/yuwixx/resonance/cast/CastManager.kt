@@ -1,7 +1,3 @@
-// FOSS-flavor stub: Chromecast requires Google Play Services (com.google.android.gms.cast.*),
-// which isn't available in this build. Keeps the exact public API of the gms-flavor
-// CastManager (app/src/gms/.../cast/CastManager.kt) so every call site (MainActivity,
-// PlayerViewModel) compiles unchanged and simply never observes a casting session.
 package dev.yuwixx.resonance.cast
 
 import android.content.Context
@@ -13,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** No-op Cast support for the foss build, with the same API as the gms version. */
 @Singleton
 class CastManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -24,7 +21,7 @@ class CastManager @Inject constructor(
     val castIsPlaying: StateFlow<Boolean> = _castIsPlaying.asStateFlow()
 
     fun initialize() {
-        // No Cast SDK in this build — nothing to initialize.
+        // No Cast SDK in this build.
     }
 
     fun castSong(audioUrl: String, song: Song, positionMs: Long = 0L, artworkUrl: String? = null) {

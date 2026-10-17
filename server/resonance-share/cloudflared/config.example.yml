@@ -1,0 +1,7 @@
+# Copy to config.yml. The tunnel ID and the credentials file come from `cloudflared tunnel create`.
+tunnel: <TUNNEL-ID>
+credentials-file: /home/nonroot/.cloudflared/<TUNNEL-ID>.json
+ingress:
+  - hostname: share.example.com
+    service: http://app:8080
+  - service: http_status:404

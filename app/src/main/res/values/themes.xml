@@ -1,7 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <!-- Window theme behind Compose. Its background matches the Material 3 surface of the
+         default scheme, so there's no flash of a mismatched color on cold start. -->
     <style name="Theme.Resonance" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/purple_500</item>
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <!-- Launch theme for the splash screen API; MainActivity's installSplashScreen() switches
+         to Theme.Resonance once the first frame is ready. -->
+    <style name="Theme.Resonance.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/window_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/splash_icon_background</item>
+        <item name="postSplashScreenTheme">@style/Theme.Resonance</item>
     </style>
 </resources>

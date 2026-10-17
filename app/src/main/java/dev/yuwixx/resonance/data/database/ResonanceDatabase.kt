@@ -1,4 +1,3 @@
-// Room database declaration listing all entities and exposing DAO accessors.
 package dev.yuwixx.resonance.data.database
 
 import androidx.room.Database
@@ -23,8 +22,11 @@ import dev.yuwixx.resonance.data.database.entity.*
         PendingScrobbleEntity::class,
         SongDownloadEntity::class,
         PendingStarActionEntity::class,
+        ArtistInfoEntity::class,
+        SmartPlaylistEntity::class,
+        PlaylistSourceEntity::class,
     ],
-    version = 8,
+    version = 10,
     exportSchema = true,
 )
 abstract class ResonanceDatabase : RoomDatabase() {
@@ -41,4 +43,7 @@ abstract class ResonanceDatabase : RoomDatabase() {
     abstract fun pendingScrobbleDao(): PendingScrobbleDao
     abstract fun songDownloadDao(): SongDownloadDao
     abstract fun pendingStarActionDao(): PendingStarActionDao
+    abstract fun artistInfoDao(): ArtistInfoDao
+    abstract fun smartPlaylistDao(): SmartPlaylistDao
+    abstract fun playlistSourceDao(): PlaylistSourceDao
 }

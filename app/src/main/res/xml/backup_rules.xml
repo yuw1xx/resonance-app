@@ -1,3 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Auto Backup (Android 11 and lower). The encrypted credentials can't be decrypted on another
+     device (their key stays in this device's keystore), and the database holds stream URLs with
+     the server token; playlists and history travel through the in-app backup instead. -->
 <full-backup-content>
+    <exclude domain="sharedpref" path="resonance_secure_prefs.xml" />
+    <exclude domain="database" path="." />
 </full-backup-content>

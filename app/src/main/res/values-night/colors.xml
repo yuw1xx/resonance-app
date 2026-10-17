@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Surface of the default (brand-seeded) dark scheme. -->
+    <color name="window_background">#FF141218</color>
+    <color name="splash_icon_background">#FF4F378B</color>
+</resources>

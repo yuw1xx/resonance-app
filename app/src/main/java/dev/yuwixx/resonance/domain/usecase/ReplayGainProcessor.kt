@@ -1,12 +1,15 @@
 package dev.yuwixx.resonance.domain.usecase
 
 import android.util.Log
-import dev.yuwixx.resonance.data.model.Song
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import org.jaudiotagger.audio.AudioFileIO
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Singleton
 class ReplayGainProcessor @Inject constructor() {
@@ -20,25 +23,20 @@ class ReplayGainProcessor @Inject constructor() {
         val albumPeak: Float?,
     )
 
-    // Lazily-populated cache of tag-read ReplayGain values, keyed by song id. Unbounded is fine
-    // here — entries are just two floats, not the large arrays WaveformExtractor's bounded cache
-    // protects against.
-    private val tagCache = java.util.concurrent.ConcurrentHashMap<Long, Pair<Float?, Float?>>()
+    // ReplayGain values by song ID. Unbounded, since each entry is two floats.
+    private val tagCache = ConcurrentHashMap<Long, Pair<Float?, Float?>>()
 
     fun peekCachedGain(songId: Long): Pair<Float?, Float?>? = tagCache[songId]
 
-    // Reads REPLAYGAIN_TRACK_GAIN/REPLAYGAIN_ALBUM_GAIN tags via jaudiotagger (the same library
-    // already used for tag editing in MusicRepository.updateSongTags) and caches the result.
-    // Deliberately not run during bulk library sync — opening every file to read tags would slow
-    // down scans of large libraries — so this is called lazily, in the background, right before
-    // a song is queued for playback.
+    // Reads the ReplayGain tags of one file. Called when a song is queued rather than during the
+    // library scan, which would have to open every file.
     suspend fun readAndCacheGain(songId: Long, path: String): Pair<Float?, Float?>? =
         withContext(Dispatchers.IO) {
             tagCache[songId]?.let { return@withContext it }
             try {
-                val file = java.io.File(path)
+                val file = File(path)
                 if (!file.exists()) return@withContext null
-                val tag = org.jaudiotagger.audio.AudioFileIO.read(file).tag ?: return@withContext null
+                val tag = AudioFileIO.read(file).tag ?: return@withContext null
                 // Generic string-keyed lookup works uniformly across ID3 TXXX and Vorbis comment
                 // tags, and sidesteps any jaudiotagger FieldKey enum version mismatch.
                 val trackGain = parseGainString(tag.getFirst("REPLAYGAIN_TRACK_GAIN"))
@@ -46,6 +44,8 @@ class ReplayGainProcessor @Inject constructor() {
                 val result = trackGain to albumGain
                 if (trackGain != null || albumGain != null) tagCache[songId] = result
                 result
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w("ReplayGainProcessor", "Failed to read RG tags for $path: ${e.message}")
                 null
@@ -55,20 +55,7 @@ class ReplayGainProcessor @Inject constructor() {
     private fun parseGainString(raw: String?): Float? =
         raw?.trim()?.removeSuffix("dB")?.removeSuffix("DB")?.trim()?.toFloatOrNull()
 
-        fun parseGain(song: Song): ReplayGainInfo {
-        if (song.replayGainTrack != null || song.replayGainAlbum != null) {
-            return ReplayGainInfo(
-                trackGainDb = song.replayGainTrack,
-                trackPeak = null,
-                albumGainDb = song.replayGainAlbum,
-                albumPeak = null,
-            )
-        }
-
-        return ReplayGainInfo(null, null, null, null)
-    }
-
-        fun computeMultiplier(
+    fun computeMultiplier(
         info: ReplayGainInfo,
         mode: Mode,
         preampDb: Float = 0f,

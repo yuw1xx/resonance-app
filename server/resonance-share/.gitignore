@@ -1,0 +1,6 @@
+# Secrets: the upload token and the Cloudflare tunnel credentials.
+.env
+cloudflared/*.json
+cloudflared/config.yml
+# Deploy backups.
+*.bak.*

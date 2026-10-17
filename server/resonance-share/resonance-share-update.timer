@@ -1,0 +1,10 @@
+[Unit]
+Description=Update the Resonance Share server once a day
+
+[Timer]
+OnCalendar=*-*-* 04:30
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

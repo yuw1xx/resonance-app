@@ -1,13 +1,13 @@
 package dev.yuwixx.resonance.presentation.components
 
-import android.annotation.SuppressLint
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
@@ -15,16 +15,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -41,11 +47,10 @@ import coil.compose.AsyncImagePainter
 import dev.yuwixx.resonance.data.model.MixType
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.model.WaveformData
-import dev.yuwixx.resonance.presentation.viewmodel.PlayerViewModel
-import kotlinx.coroutines.delay
 import kotlin.math.*
 import kotlin.math.pow
 import kotlin.random.Random
+import kotlinx.coroutines.delay
 
 val Emphasized = CubicBezierEasing(0.2f, 0.0f, 0f, 1.0f)
 val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
@@ -59,10 +64,10 @@ fun MixArtwork(
 ) {
     val (gradientColors, icon) = remember(mixType) {
         when (mixType) {
-            MixType.FAVORITES      -> listOf(Color(0xFFFF6B6B), Color(0xFFFFE66D)) to Icons.Rounded.Favorite
-            MixType.TOP_ARTIST     -> listOf(Color(0xFFA855F7), Color(0xFF6366F1)) to Icons.Rounded.Mic
-            MixType.TOP_GENRE      -> listOf(Color(0xFF10B981), Color(0xFF06B6D4)) to Icons.Rounded.LibraryMusic
-            MixType.ERA            -> listOf(Color(0xFFF59E0B), Color(0xFFEF4444)) to Icons.Rounded.History
+            MixType.FAVORITES -> listOf(Color(0xFFFF6B6B), Color(0xFFFFE66D)) to Icons.Rounded.Favorite
+            MixType.TOP_ARTIST -> listOf(Color(0xFFA855F7), Color(0xFF6366F1)) to Icons.Rounded.Mic
+            MixType.TOP_GENRE -> listOf(Color(0xFF10B981), Color(0xFF06B6D4)) to Icons.Rounded.LibraryMusic
+            MixType.ERA -> listOf(Color(0xFFF59E0B), Color(0xFFEF4444)) to Icons.Rounded.History
             MixType.RECENTLY_LOVED -> listOf(Color(0xFFEC4899), Color(0xFF8B5CF6)) to Icons.Rounded.AutoAwesome
         }
     }
@@ -94,9 +99,7 @@ fun MixArtwork(
 }
 internal val EaseInOutSine = CubicBezierEasing(0.37f, 0f, 0.63f, 1f)
 
-/** Shared "icon + title + optional trailing action" header used to introduce a section of
- *  content (a horizontal-scroll row, a settings group, a card). One look for this concept
- *  across the whole app instead of every screen inventing its own. */
+/** Icon, title and an optional trailing action above a section of content. */
 @Composable
 fun AppSectionHeader(
     title: String,
@@ -128,9 +131,7 @@ fun AppSectionHeader(
     }
 }
 
-/** Shared tonal card wrapping a labeled section of related controls — the grouping unit for
- *  "several controls that belong together" (used by Resonance Share's Nearby/Internet Link
- *  sections, and retrofitted onto Settings/Equalizer to replace ungrouped flat lists). */
+/** Tonal card around a labeled group of related controls. */
 @Composable
 fun SectionCard(
     icon: ImageVector?,
@@ -158,9 +159,7 @@ fun SectionCard(
     }
 }
 
-/** Divider between two logical groups sharing one [SectionCard] — use with [SectionSubHeader]
- *  to join related sub-sections into a single continuous card instead of stacking separate
- *  cards with a gap between them. */
+/** Divider between two groups in one [SectionCard]; use with [SectionSubHeader]. */
 @Composable
 fun SectionDivider(modifier: Modifier = Modifier) {
     HorizontalDivider(
@@ -181,9 +180,8 @@ fun SectionSubHeader(title: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** Big, centered, bold screen title meant to be the first item in a scrolling list — it
- *  scrolls away with the content instead of staying pinned behind a filled app-bar
- *  background. Pair with a transparent TopAppBar holding just the actions/back button. */
+/** Large title as the first item of a list, so it scrolls away with the content. Pair it with
+ *  a transparent TopAppBar for the actions. */
 @Composable
 fun BigScreenTitle(title: String, modifier: Modifier = Modifier) {
     Text(
@@ -196,14 +194,6 @@ fun BigScreenTitle(title: String, modifier: Modifier = Modifier) {
             .padding(horizontal = 16.dp, vertical = 20.dp),
     )
 }
-
-internal const val M3_SHORT2  = 100
-internal const val M3_SHORT4  = 200
-internal const val M3_MEDIUM2 = 300
-internal const val M3_MEDIUM4 = 400
-internal const val M3_LONG2   = 500
-internal const val M3_LONG4   = 600
-internal const val M3_XLONG1  = 700
 
 data class AppearanceConfig(
     val compactListMode: Boolean = false,
@@ -226,54 +216,195 @@ data class AppearanceConfig(
     val showEqualizerInPlayer: Boolean = true,
     val hapticEnabled: Boolean = true,
     val showBitrateInfo: Boolean = false,
+    val lyricsFontFamily: String = "DEFAULT",
 )
 
 val LocalAppearanceConfig = compositionLocalOf { AppearanceConfig() }
 
-@android.annotation.SuppressLint("NewApi")
-internal fun Modifier.preferredFrameRateSafe(hz: Float): Modifier =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) preferredFrameRate(hz)
-    else this
+// Shared motion helpers, so every screen uses the same specs.
+
+/** Swaps status content (an icon, a status row, a connection card): the new state pops in with
+ *  a spring, the old one fades and shrinks out. Same motion as the play/pause icon. */
+@Composable
+fun <T> AnimatedStateSwap(
+    targetState: T,
+    modifier: Modifier = Modifier,
+    label: String = "animated_state_swap",
+    contentAlignment: Alignment = Alignment.Center,
+    content: @Composable (T) -> Unit,
+) {
+    val popIn = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
+    AnimatedContent(
+        targetState = targetState,
+        modifier = modifier,
+        contentAlignment = contentAlignment,
+        transitionSpec = {
+            (scaleIn(popIn, initialScale = 0.85f) +
+                fadeIn(tween(280, easing = EmphasizedDecelerate))) togetherWith
+                (scaleOut(tween(180, easing = EmphasizedAccelerate), targetScale = 0.85f) +
+                    fadeOut(tween(180, easing = EmphasizedAccelerate)))
+        },
+        label = label,
+    ) { state -> content(state) }
+}
+
+/** Fades and slides between a prompt (such as a permission request) and the real content. */
+@Composable
+fun AnimatedPermissionGate(
+    granted: Boolean,
+    modifier: Modifier = Modifier,
+    prompt: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    AnimatedContent(
+        targetState = granted,
+        modifier = modifier,
+        transitionSpec = {
+            (fadeIn(tween(340, easing = EmphasizedDecelerate)) +
+                slideInVertically(tween(340, easing = EmphasizedDecelerate)) { it / 4 }) togetherWith
+                fadeOut(tween(210, easing = EmphasizedAccelerate))
+        },
+        label = "animated_permission_gate",
+    ) { isGranted -> if (isGranted) content() else prompt() }
+}
+
+// Lists can't tell an item's first appearance from scrolling back into view, so only the
+// first screenful animates; deeper items just appear.
+private const val ENTRANCE_LIMIT = 14
+
+/**
+ * Staggered fade and scale-in for the first screenful of a list, 40ms apart. Use it after
+ * `Modifier.animateItem()`. Animates in graphicsLayer only, so it never recomposes.
+ */
+@Composable
+fun Modifier.staggeredEntrance(index: Int, capMs: Int = 320): Modifier {
+    if (index >= ENTRANCE_LIMIT) return this
+    val progress = remember(index) { Animatable(0f) }
+    val spec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    LaunchedEffect(index) {
+        delay((index * 40L).coerceAtMost(capMs.toLong()))
+        progress.animateTo(1f, spec)
+    }
+    return this.graphicsLayer {
+        val p = progress.value
+        alpha = p
+        val scale = 0.94f + 0.06f * p
+        scaleX = scale
+        scaleY = scale
+    }
+}
+
+/** Playback progress (0..1) as an animated State. Read it only while drawing, so position
+ *  ticks redraw the seekbar instead of recomposing it. */
+@Composable
+private fun rememberAnimatedProgress(position: State<Long>, durationMs: Long): State<Float> {
+    val progress = remember { Animatable(0f) }
+    val currentDuration by rememberUpdatedState(durationMs)
+    LaunchedEffect(position) {
+        snapshotFlow {
+            val d = currentDuration
+            if (d > 0) (position.value.toFloat() / d).coerceIn(0f, 1f) else 0f
+        }.collect { target ->
+            // Big jumps (a seek, a track change) snap; normal ticks glide.
+            if (abs(target - progress.value) > 0.05f) progress.snapTo(target)
+            else progress.animateTo(target, tween(durationMillis = 170, easing = LinearEasing))
+        }
+    }
+    return progress.asState()
+}
+
+/** Haptic feedback that follows the Haptic Feedback setting. */
+@Composable
+fun rememberHaptics(): (HapticFeedbackType) -> Unit {
+    val haptics = LocalHapticFeedback.current
+    val enabled by rememberUpdatedState(LocalAppearanceConfig.current.hapticEnabled)
+    return remember(haptics) { { type -> if (enabled) haptics.performHapticFeedback(type) } }
+}
+
+/** Exposes the seekbar to TalkBack as an adjustable slider, updated once a second. */
+@Composable
+private fun Modifier.seekSemantics(position: State<Long>, durationMs: Long, onSeek: (Long) -> Unit): Modifier {
+    val seconds by remember(position) { derivedStateOf { position.value / 1000 } }
+    val fraction = if (durationMs > 0) (seconds * 1000f / durationMs).coerceIn(0f, 1f) else 0f
+    return semantics {
+        contentDescription = "Seek"
+        progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
+        setProgress { target ->
+            if (durationMs <= 0) return@setProgress false
+            onSeek((target.coerceIn(0f, 1f) * durationMs).toLong())
+            true
+        }
+    }
+}
+
+/**
+ * Tap or horizontal drag to seek. The thumb follows the finger, and one seek is issued on release.
+ * Vertical swipes are left alone so they reach the player sheet (swipe down to close).
+ */
+private fun Modifier.seekGestures(
+    durationMs: () -> Long,
+    onDragChange: (dragging: Boolean, fraction: Float) -> Unit,
+    onSeek: () -> (Long) -> Unit,
+    onTick: () -> Unit,
+): Modifier = pointerInput(Unit) {
+    fun fractionAt(x: Float) = (x / size.width).coerceIn(0f, 1f)
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+        if (slop == null) {
+            // Released without moving: a tap. Anything else was a vertical gesture.
+            val up = currentEvent.changes.firstOrNull { it.id == down.id }
+            if (up != null && !up.pressed && !up.isConsumed) {
+                val fraction = fractionAt(down.position.x)
+                onTick()
+                onSeek()((fraction * durationMs()).toLong())
+                onDragChange(false, fraction)
+            }
+            return@awaitEachGesture
+        }
+        var fraction = fractionAt(slop.position.x)
+        onDragChange(true, fraction)
+        onTick()
+        horizontalDrag(slop.id) { change ->
+            fraction = fractionAt(change.position.x)
+            onDragChange(true, fraction)
+            change.consume()
+        }
+        onSeek()((fraction * durationMs()).toLong())
+        onTick()
+        onDragChange(false, fraction)
+    }
+}
 
 @Composable
 fun MaterialYou3Seekbar(
-    positionProvider: () -> Long,
+    position: State<Long>,
     durationMs: Long,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
-    isPlaying: Boolean = false,
     playedColor: Color = MaterialTheme.colorScheme.primary,
     remainingColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
 ) {
     val haptics = LocalHapticFeedback.current
     val config = LocalAppearanceConfig.current
-    val positionMs by remember { derivedStateOf { positionProvider() } }
-
-    val targetProgress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-    val animatedProgress by animateFloatAsState(
-        targetValue = targetProgress,
-        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing),
-        label = "m3_progress",
-    )
+    val progress = rememberAnimatedProgress(position, durationMs)
+    val currentOnSeek by rememberUpdatedState(onSeek)
+    val currentDuration by rememberUpdatedState(durationMs)
+    val hapticsEnabled by rememberUpdatedState(config.hapticEnabled)
 
     var isDragging by remember { mutableStateOf(false) }
-    var dragProgress by remember { mutableFloatStateOf(0f) }
-    val displayProgress = if (isDragging) dragProgress else animatedProgress
+    val dragProgress = remember { mutableFloatStateOf(0f) }
 
-    // A thin track reads as a plain rectangle no matter its corner radius (8dp tall with a 4dp
-    // radius is imperceptible as "rounded" at normal viewing distance) — 14dp is thick enough
-    // for the pill shape to actually be visible, matching the Android 13+ media-notification
-    // seekbar this style is meant to evoke.
-    val activeHeight by animateDpAsState(
+    // Thick enough for the rounded ends to show, like the Android 13 media notification seekbar.
+    val activeHeight = animateDpAsState(
         targetValue = if (isDragging) 22.dp else 14.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
         label = "m3_height"
     )
-    // Always visible, not just while dragging — on a track this thick, a bare color transition
-    // alone doesn't read as "there's a handle here."
-    val thumbHeight by animateDpAsState(
+    // Always shown: on a track this thick, the color change alone doesn't read as a handle.
+    val thumbHeight = animateDpAsState(
         targetValue = if (isDragging) 32.dp else 22.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
         label = "m3_thumb_height"
     )
 
@@ -281,33 +412,21 @@ fun MaterialYou3Seekbar(
         modifier = modifier
             .fillMaxWidth()
             .height(48.dp)
-            .preferredFrameRateSafe(120f)
-            .pointerInput(durationMs) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull() ?: continue
-                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                        dragProgress = fraction
-                        if (change.pressed) {
-                            isDragging = true
-                            onSeek((fraction * durationMs).toLong())
-                            if (config.hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        } else {
-                            isDragging = false
-                        }
-                    }
-                }
-            }
+            .seekSemantics(position, durationMs) { currentOnSeek(it) }
+            .seekGestures(
+                durationMs = { currentDuration },
+                onDragChange = { dragging, fraction -> isDragging = dragging; dragProgress.floatValue = fraction },
+                onSeek = { currentOnSeek },
+                onTick = { if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+            )
     ) {
+        val displayProgress = if (isDragging) dragProgress.floatValue else progress.value
         val width = size.width
-        val height = activeHeight.toPx()
+        val height = activeHeight.value.toPx()
         val cy = size.height / 2f
         val splitX = displayProgress * width
         val thumbWidth = 4.dp.toPx()
-        // A small gap around the thumb keeps the played/remaining segments from visually
-        // merging into it — another Android 13+ media-seekbar trait that helps the handle read
-        // as a distinct, grabbable element instead of just part of the track.
+        // A gap on both sides of the thumb so it reads as a separate handle.
         val gap = 6.dp.toPx()
         val playedEnd = (splitX - thumbWidth / 2f - gap).coerceAtLeast(0f)
         val remainingStart = (splitX + thumbWidth / 2f + gap).coerceAtMost(width)
@@ -316,25 +435,25 @@ fun MaterialYou3Seekbar(
             drawRoundRect(
                 color = playedColor,
                 topLeft = Offset(0f, cy - height / 2f),
-                size = androidx.compose.ui.geometry.Size(playedEnd, height),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(height / 2f)
+                size = Size(playedEnd, height),
+                cornerRadius = CornerRadius(height / 2f)
             )
         }
         if (remainingStart < width) {
             drawRoundRect(
                 color = remainingColor,
                 topLeft = Offset(remainingStart, cy - height / 2f),
-                size = androidx.compose.ui.geometry.Size(width - remainingStart, height),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(height / 2f)
+                size = Size(width - remainingStart, height),
+                cornerRadius = CornerRadius(height / 2f)
             )
         }
 
-        val thumbH = thumbHeight.toPx()
+        val thumbH = thumbHeight.value.toPx()
         drawRoundRect(
             color = playedColor,
             topLeft = Offset(splitX - thumbWidth / 2f, cy - thumbH / 2f),
-            size = androidx.compose.ui.geometry.Size(thumbWidth, thumbH),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(thumbWidth / 2f)
+            size = Size(thumbWidth, thumbH),
+            cornerRadius = CornerRadius(thumbWidth / 2f)
         )
     }
 }
@@ -342,7 +461,7 @@ fun MaterialYou3Seekbar(
 @Composable
 fun WaveformSeekbar(
     waveformData: WaveformData?,
-    positionProvider: () -> Long,
+    position: State<Long>,
     durationMs: Long,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -355,34 +474,32 @@ fun WaveformSeekbar(
 ) {
     val haptics = LocalHapticFeedback.current
     val config = LocalAppearanceConfig.current
-    val positionMs by remember { derivedStateOf { positionProvider() } }
+    val progress = rememberAnimatedProgress(position, durationMs)
+    val currentOnSeek by rememberUpdatedState(onSeek)
+    val currentDuration by rememberUpdatedState(durationMs)
+    val hapticsEnabled by rememberUpdatedState(config.hapticEnabled)
 
-    val targetProgress = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-    val animatedProgress by animateFloatAsState(
-        targetValue = targetProgress,
-        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing),
-        label = "waveform_progress",
-    )
-
-    val infiniteTransition = rememberInfiniteTransition(label = "wave_breathe")
-    val breathe by infiniteTransition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "breathe_amp",
-    )
-    val ampMultiplier by animateFloatAsState(
-        targetValue = if (isPlaying) breathe else 1f,
-        animationSpec = tween(400),
-        label = "amp_multiplier",
+    // Read only while drawing, so breathing costs a redraw per frame, not a recomposition. It runs
+    // only while playing; paused, it would redraw for nothing.
+    val breathe = remember { Animatable(1f) }
+    LaunchedEffect(isPlaying) {
+        if (!isPlaying) {
+            breathe.animateTo(1f, tween(600, easing = EaseInOutSine))
+            return@LaunchedEffect
+        }
+        while (true) {
+            breathe.animateTo(1.04f, tween(1260, easing = EaseInOutSine))
+            breathe.animateTo(0.96f, tween(2520, easing = EaseInOutSine))
+        }
+    }
+    val playingBlend = animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0f,
+        animationSpec = MaterialTheme.motionScheme.slowEffectsSpec(),
+        label = "amp_blend",
     )
 
     var isDragging by remember { mutableStateOf(false) }
-    var dragProgress by remember { mutableFloatStateOf(0f) }
-    val displayProgress = if (isDragging) dragProgress else animatedProgress
+    val dragProgress = remember { mutableFloatStateOf(0f) }
 
     val amplitudes = remember(waveformData) {
         waveformData?.amplitudes ?: FloatArray(300) { i ->
@@ -398,73 +515,47 @@ fun WaveformSeekbar(
         modifier = modifier
             .fillMaxWidth()
             .height(64.dp)
-            .preferredFrameRateSafe(120f)
-            .pointerInput(durationMs) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull() ?: continue
-                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                        dragProgress = fraction
-                        if (change.pressed) {
-                            isDragging = true
-                            onSeek((fraction * durationMs).toLong())
-                            if (config.hapticEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        } else {
-                            isDragging = false
-                        }
-                    }
-                }
-            }
-            .drawWithCache {
-                onDrawWithContent {
-                    val barW = barWidthDp.toPx()
-                    val gap = barSpacingDp.toPx()
-                    val step = barW + gap
-                    val count = (size.width / step).toInt().coerceAtLeast(1)
-                    val cy = size.height / 2f
-                    val splitX = displayProgress * size.width
-
-                    val safeProgress = displayProgress.coerceIn(0.001f, 0.999f)
-                    val smoothBrush = Brush.horizontalGradient(
-                        0f to playedColor,
-                        safeProgress to playedColor,
-                        safeProgress to remainingColor,
-                        1f to remainingColor,
-                        startX = 0f,
-                        endX = size.width
-                    )
-
-                    for (i in 0 until count) {
-                        val barCX = i * step + barW / 2f
-
-                        val ampIdx = (i.toFloat() / count * amplitudes.size).toInt()
-                            .coerceIn(0, amplitudes.lastIndex)
-                        val rawAmp = amplitudes[ampIdx].coerceAtLeast(minHeightFraction)
-
-                        val distFromSplit = abs(barCX - splitX) / size.width
-                        val lift = if (distFromSplit < 0.04f) {
-                            val t = 1f - (distFromSplit / 0.04f)
-                            1f + t * t * 0.55f
-                        } else 1f
-
-                        val barH = (rawAmp * ampMultiplier * lift * size.height)
-                            .coerceIn(size.height * minHeightFraction, size.height * 0.95f)
-
-                        val top = cy - barH / 2f
-                        val bottom = cy + barH / 2f
-
-                        drawLine(
-                            brush = smoothBrush,
-                            start = Offset(barCX, top),
-                            end = Offset(barCX, bottom),
-                            strokeWidth = barW,
-                            cap = StrokeCap.Round,
-                        )
-                    }
-                }
-            },
+            .seekSemantics(position, durationMs) { currentOnSeek(it) }
+            .seekGestures(
+                durationMs = { currentDuration },
+                onDragChange = { dragging, fraction -> isDragging = dragging; dragProgress.floatValue = fraction },
+                onSeek = { currentOnSeek },
+                onTick = { if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) },
+            ),
     ) {
+        val displayProgress = if (isDragging) dragProgress.floatValue else progress.value
+        val ampMultiplier = 1f + (breathe.value - 1f) * playingBlend.value
+        val barW = barWidthDp.toPx()
+        val gap = barSpacingDp.toPx()
+        val step = barW + gap
+        val count = (size.width / step).toInt().coerceAtLeast(1)
+        val cy = size.height / 2f
+        val splitX = displayProgress * size.width
+
+        for (i in 0 until count) {
+            val barCX = i * step + barW / 2f
+
+            val ampIdx = (i.toFloat() / count * amplitudes.size).toInt()
+                .coerceIn(0, amplitudes.lastIndex)
+            val rawAmp = amplitudes[ampIdx].coerceAtLeast(minHeightFraction)
+
+            val distFromSplit = abs(barCX - splitX) / size.width
+            val lift = if (distFromSplit < 0.04f) {
+                val t = 1f - (distFromSplit / 0.04f)
+                1f + t * t * 0.55f
+            } else 1f
+
+            val barH = (rawAmp * ampMultiplier * lift * size.height)
+                .coerceIn(size.height * minHeightFraction, size.height * 0.95f)
+
+            drawLine(
+                color = if (barCX <= splitX) playedColor else remainingColor,
+                start = Offset(barCX, cy - barH / 2f),
+                end = Offset(barCX, cy + barH / 2f),
+                strokeWidth = barW,
+                cap = StrokeCap.Round,
+            )
+        }
     }
 }
 
@@ -486,7 +577,7 @@ fun SongCard(
         targetValue = if (isPlaying || isSelected) 1.015f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow,
+            stiffness = Spring.StiffnessLow,
         ),
         label = "song_scale",
     )
@@ -502,7 +593,7 @@ fun SongCard(
         targetValue = targetColor,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow,
+            stiffness = Spring.StiffnessLow,
         ),
         label = "song_color",
     )
@@ -510,7 +601,6 @@ fun SongCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .preferredFrameRateSafe(120f)
             .scale(scale)
             .combinedClickable(
                 onClick = onClick,
@@ -522,7 +612,7 @@ fun SongCard(
                 },
             ),
         color = animatedColor,
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.medium,
     ) {
         Row(
             modifier = Modifier.padding(
@@ -539,7 +629,7 @@ fun SongCard(
             Box(
                 modifier = Modifier
                     .size(artworkSizeDp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(MaterialTheme.shapes.medium)
                     .let { base ->
                         if (onLeadingClick != null) {
                             base.clickable {
@@ -553,8 +643,8 @@ fun SongCard(
                 AnimatedContent(
                     targetState = isSelected,
                     transitionSpec = {
-                        fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.8f) togetherWith
-                                fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.8f)
+                        fadeIn(tween(280)) + scaleIn(tween(280), initialScale = 0.8f) togetherWith
+                                fadeOut(tween(210)) + scaleOut(tween(210), targetScale = 0.8f)
                     },
                     label = "leading_selection"
                 ) { selected ->
@@ -574,10 +664,9 @@ fun SongCard(
                     } else {
                         ArtworkImage(
                             uri = song.artworkUri,
-                            contentDescription = song.album,
+                            contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             cornerRadius = 12.dp,
-                            isAnimating = isPlaying,
                             onArtworkMissing = onArtworkMissing,
                         )
                     }
@@ -638,10 +727,7 @@ fun ArtworkImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 16.dp,
-    isAnimating: Boolean = false,
-    // Invoked once, lazily, only if the primary `uri` fails to load (e.g. no embedded art) —
-    // lets a caller resolve a fallback image URL (Spotify search, etc.) without fetching it
-    // for songs that already have real artwork.
+    // Called once if `uri` fails to load, to look up a fallback image URL.
     onArtworkMissing: (suspend () -> String?)? = null,
 ) {
     var primaryFailed by remember(uri) { mutableStateOf(false) }
@@ -674,177 +760,56 @@ fun ArtworkImage(
     }
 }
 
+/** Whether audio is playing, so decorative animations can stop while paused. */
+val LocalPlaybackActive = compositionLocalOf { true }
+
 @Composable
 fun PlayingBarsIndicator(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     barCount: Int = 3,
 ) {
+    if (!LocalPlaybackActive.current) {
+        // Paused: static bars, no per-frame animation.
+        Canvas(modifier = modifier) {
+            val barW = size.width / (barCount * 2 - 1)
+            val cornerRadius = CornerRadius(barW / 2f)
+            for (i in 0 until barCount) {
+                val h = size.height * if (i % 2 == 0) 0.45f else 0.75f
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(i * barW * 2f, (size.height - h) / 2f),
+                    size = Size(barW, h),
+                    cornerRadius = cornerRadius,
+                )
+            }
+        }
+        return
+    }
     val sharedTransition = rememberInfiniteTransition(label = "bars_shared")
-    val baseAnim by sharedTransition.animateFloat(
+    // Read only in the draw phase: redraws per frame without recomposing.
+    val baseAnim = sharedTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
+            animation = tween(1680, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "bars_base",
     )
     Canvas(modifier = modifier) {
         val barW = size.width / (barCount * 2 - 1)
-        val cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2f)
+        val cornerRadius = CornerRadius(barW / 2f)
         for (i in 0 until barCount) {
-            val phase = (baseAnim + i / barCount.toFloat()) % 1f
+            val phase = (baseAnim.value + i / barCount.toFloat()) % 1f
             val sineVal = (sin(phase * 2 * PI).toFloat() + 1f) / 2f
             val h = (size.height * (0.25f + sineVal * 0.75f)).coerceAtLeast(barW)
             drawRoundRect(
                 color = color,
                 topLeft = Offset(i * barW * 2f, (size.height - h) / 2f),
-                size = androidx.compose.ui.geometry.Size(barW, h),
+                size = Size(barW, h),
                 cornerRadius = cornerRadius,
             )
-        }
-    }
-}
-
-@OptIn(ExperimentalSharedTransitionApi::class)
-@Composable
-fun MiniPlayer(
-    playerViewModel: PlayerViewModel,
-    style: String = "CARD",
-    onClick: () -> Unit,
-    sharedTransitionScope: SharedTransitionScope? = null,
-    animatedVisibilityScope: AnimatedVisibilityScope? = null,
-) {
-    val currentSong by playerViewModel.currentSong.collectAsState()
-    val isPlaying by playerViewModel.isPlaying.collectAsState()
-    val durationMs by playerViewModel.durationMs.collectAsState()
-
-    val positionProvider = remember { { playerViewModel.positionMs.value } }
-
-    val song = currentSong ?: return
-
-    val (outerPadding, cornerRadius, elevation) = when (style) {
-        "COMPACT"  -> Triple(0.dp, 0.dp, 0.dp)
-        "FLOATING" -> Triple(16.dp, 28.dp, 8.dp)
-        else       -> Triple(8.dp, 12.dp, 2.dp)
-    }
-
-    val miniConfig = LocalAppearanceConfig.current
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(outerPadding)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(cornerRadius),
-        tonalElevation = elevation,
-        shadowElevation = elevation,
-    ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-
-            if (miniConfig.miniPlayerShowProgress) {
-                LinearProgressIndicator(
-                    progress = {
-                        if (durationMs > 0) (positionProvider().toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .align(Alignment.BottomCenter),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Transparent
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val artworkModifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(if (style == "COMPACT") 4.dp else 8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-
-                Box(
-                    modifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-                        with(sharedTransitionScope) {
-                            artworkModifier.sharedElement(
-                                rememberSharedContentState(key = "artwork"),
-                                animatedVisibilityScope = animatedVisibilityScope
-                            )
-                        }
-                    } else artworkModifier
-                ) {
-                    ArtworkImage(
-                        uri = song.artworkUri,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        cornerRadius = 0.dp,
-                        onArtworkMissing = { playerViewModel.getSongArtworkUrl(song) },
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                AnimatedContent(
-                    targetState = song.title to song.displayArtist,
-                    transitionSpec = {
-                        (fadeIn(tween(280, delayMillis = 80, easing = EmphasizedDecelerate)) +
-                            slideInVertically(tween(320, easing = EmphasizedDecelerate)) { (it * 0.12f).toInt() })
-                            .togetherWith(fadeOut(tween(120, easing = EmphasizedAccelerate)))
-                    },
-                    label = "mini_song_info",
-                    modifier = Modifier.weight(1f),
-                ) { (title, artist) ->
-                    Column {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = artist,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                IconButton(onClick = { playerViewModel.playPause() }) {
-                    AnimatedContent(
-                        targetState = isPlaying,
-                        transitionSpec = {
-                            (scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium)) +
-                                fadeIn(tween(140, easing = EmphasizedDecelerate))) togetherWith
-                                (scaleOut(tween(80)) + fadeOut(tween(80)))
-                        },
-                        label = "mini_play_icon",
-                    ) { playing ->
-                        Icon(
-                            imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (playing) "Pause" else "Play",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                }
-
-                if (miniConfig.miniPlayerShowSkipBtn) {
-                    IconButton(onClick = { playerViewModel.skipNext() }) {
-                        Icon(
-                            imageVector = Icons.Rounded.SkipNext,
-                            contentDescription = "Next",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -861,8 +826,17 @@ fun formatDuration(ms: Long): String {
     }
 }
 
-// "2h 15m" style, for cumulative listening totals — distinct from formatDuration's "3:45"
-// track-position style above.
+/** "1 song", "3 songs". */
+fun count(n: Int, singular: String, plural: String = singular + "s"): String = "$n ${if (n == 1) singular else plural}"
+
+fun formatFileSize(bytes: Long): String = when {
+    bytes >= 1_073_741_824L -> "%.2f GB".format(bytes / 1_073_741_824.0)
+    bytes >= 1_048_576L -> "%.1f MB".format(bytes / 1_048_576.0)
+    bytes >= 1_024L -> "%.0f KB".format(bytes / 1_024.0)
+    else -> "$bytes B"
+}
+
+// "2h 15m", for listening totals.
 fun formatListenDuration(ms: Long): String {
     if (ms <= 0) return "0m"
     val totalMinutes = ms / 60000
@@ -871,8 +845,7 @@ fun formatListenDuration(ms: Long): String {
     return if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
 }
 
-// Codec label derived from mimeType, shared by the player screen's format chip, the song
-// detail info card, and the statistics format-breakdown chart.
+// Codec label from a MIME type.
 fun audioFormatLabel(mimeType: String): String = when {
     mimeType.contains("flac", ignoreCase = true) -> "FLAC"
     mimeType.contains("opus", ignoreCase = true) -> "Opus"
@@ -881,9 +854,7 @@ fun audioFormatLabel(mimeType: String): String = when {
     else -> "MP3"
 }
 
-// Renders each artist as its own clickable segment (e.g. "ArtistA, ArtistB" from a raw
-// "ArtistA/ArtistB" tag) instead of one Text with a single click target resolving to only the
-// first artist — see Song.artists/displayArtist.
+// Each artist is its own tap target, so "A, B" from an "A/B" tag can open either artist.
 @Composable
 fun MultiArtistText(
     artists: List<String>,
@@ -893,13 +864,9 @@ fun MultiArtistText(
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     maxLines: Int = 1,
 ) {
-    // Memoized on (artists, onArtistClick) — this sits inside the Player's PlaybackControls,
-    // which recomposes continuously as playback position ticks (10x/sec); without this, the
-    // AnnotatedString + LinkAnnotation objects below were being rebuilt from scratch on every
-    // one of those recompositions even though the artist list itself changes only on song change.
+    // Remembered because the player recomposes often while the artist list rarely changes.
     val text = remember(artists, onArtistClick) {
-        // Explicit no-op styles — LinkAnnotation.Clickable defaults to the usual blue/underlined
-        // hyperlink look, but these should read as plain text that merely happens to be tappable.
+        // Plain styles: without them, LinkAnnotation draws blue underlined links.
         val linkStyles = TextLinkStyles(style = SpanStyle(color = Color.Unspecified, textDecoration = TextDecoration.None))
         buildAnnotatedString {
             artists.forEachIndexed { i, artist ->
@@ -935,6 +902,8 @@ private data class ConfettiPiece(
     val rotationsPerFall: Float,
 )
 
+private const val CONFETTI_CYCLE_SECONDS = 12.6f
+
 @Composable
 fun ConfettiOverlay(modifier: Modifier = Modifier) {
     val pieces = remember {
@@ -955,23 +924,25 @@ fun ConfettiOverlay(modifier: Modifier = Modifier) {
         }
     }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "confetti")
-    val progress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing)),
-        label = "confetti_t",
-    )
+    // A clock that only moves forward. A repeating 0..1 animation would make every piece jump
+    // back each time it restarts.
+    val elapsedSeconds = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        val start = withFrameNanos { it }
+        while (true) {
+            withFrameNanos { elapsedSeconds.floatValue = (it - start) / 1_000_000_000f }
+        }
+    }
 
     Canvas(modifier = modifier.fillMaxSize()) {
+        val progress = elapsedSeconds.floatValue / CONFETTI_CYCLE_SECONDS
         pieces.forEach { p ->
-            // accumulated never decreases — rotation is continuous across cycles
             val accumulated = p.yOffset + progress * p.speed
             val rawY = accumulated % 1.0f
             val half = p.sizeDp.dp.toPx() / 2f
             val cx = (p.x + sin(accumulated * PI.toFloat() * 1.4f) * 0.028f) * size.width
             val cy = rawY * (size.height + half * 2f)
-            // fade in over top 6% of screen to hide the wrap-around
+            // Fade in over the top 6% of the screen to hide the wrap-around.
             val alpha = (rawY / 0.06f).coerceIn(0f, 0.9f)
 
             withTransform({
@@ -980,8 +951,8 @@ fun ConfettiOverlay(modifier: Modifier = Modifier) {
             }) {
                 drawRect(
                     color = p.color,
-                    topLeft = androidx.compose.ui.geometry.Offset(-half, -half * 0.5f),
-                    size = androidx.compose.ui.geometry.Size(half * 2f, half),
+                    topLeft = Offset(-half, -half * 0.5f),
+                    size = Size(half * 2f, half),
                     alpha = alpha,
                 )
             }

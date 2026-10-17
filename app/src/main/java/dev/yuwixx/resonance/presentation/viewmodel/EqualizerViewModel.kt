@@ -1,5 +1,6 @@
 package dev.yuwixx.resonance.presentation.viewmodel
 
+import kotlin.math.roundToInt
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.yuwixx.resonance.data.service.EqStateHolder
@@ -38,24 +39,23 @@ enum class EqPreset(val label: String) {
 
     fun gains(bandCount: Int): List<Short> {
         val template = when (this) {
-            FLAT      -> listOf(0, 0, 0, 0, 0)
-            ROCK      -> listOf(5, 3, -1, 3, 5)
-            POP       -> listOf(-1, 2, 5, 2, -1)
-            JAZZ      -> listOf(4, 2, -1, 2, 5)
+            FLAT -> listOf(0, 0, 0, 0, 0)
+            ROCK -> listOf(5, 3, -1, 3, 5)
+            POP -> listOf(-1, 2, 5, 2, -1)
+            JAZZ -> listOf(4, 2, -1, 2, 5)
             CLASSICAL -> listOf(5, 3, -2, 3, 4)
             BASS_BOOST -> listOf(8, 5, 1, 0, 0)
-            VOCAL     -> listOf(-2, -1, 3, 3, -1)
+            VOCAL -> listOf(-2, -1, 3, 3, -1)
         }
-        return when {
-            bandCount <= template.size -> template.take(bandCount).map { (it * 100).toShort() }
-            else -> {
-                val out = MutableList(bandCount) { 0.toShort() }
-                template.forEachIndexed { i, v ->
-                    val idx = (i.toFloat() / (template.size - 1) * (bandCount - 1)).toInt()
-                    out[idx.coerceIn(0, bandCount - 1)] = (v * 100).toShort()
-                }
-                out
-            }
+        // The 5-point curve is stretched over however many bands the device has, interpolating
+        // between points, so its shape is the same on a 3-band and a 10-band equalizer.
+        if (bandCount <= 1) return List(bandCount.coerceAtLeast(0)) { (template[template.size / 2] * 100).toShort() }
+        return List(bandCount) { band ->
+            val pos = band.toFloat() / (bandCount - 1) * (template.size - 1)
+            val lo = pos.toInt().coerceAtMost(template.size - 2)
+            val t = pos - lo
+            val db = template[lo] + (template[lo + 1] - template[lo]) * t
+            (db * 100).roundToInt().toShort()
         }
     }
 }

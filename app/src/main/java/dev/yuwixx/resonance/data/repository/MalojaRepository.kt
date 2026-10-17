@@ -7,12 +7,21 @@ import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.squareup.moshi.Moshi
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dev.yuwixx.resonance.BuildConfig
 import dev.yuwixx.resonance.data.database.dao.PendingScrobbleDao
 import dev.yuwixx.resonance.data.database.entity.PendingScrobbleEntity
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.network.MalojaApi
 import dev.yuwixx.resonance.data.network.MalojaScrobbleRequest
+import dev.yuwixx.resonance.data.util.runCatchingCancellable
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
+import retrofit2.Retrofit
+import retrofit2.converter.moshi.MoshiConverterFactory
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,20 +29,13 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.moshi.MoshiConverterFactory
-import java.util.concurrent.TimeUnit
-import javax.inject.Inject
-import javax.inject.Singleton
 
 private val Context.malojaStore: DataStore<Preferences> by preferencesDataStore(name = "maloja_prefs")
 
 private object MalojaKeys {
-    val ENABLED    = booleanPreferencesKey("enabled")
+    val ENABLED = booleanPreferencesKey("enabled")
     val SERVER_URL = stringPreferencesKey("server_url")
-    val API_KEY    = stringPreferencesKey("api_key")
+    val API_KEY = stringPreferencesKey("api_key")
 }
 
 private data class PendingMalojaScrobble(
@@ -49,15 +51,16 @@ class MalojaRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val moshi: Moshi,
     private val pendingScrobbleDao: PendingScrobbleDao,
+    private val okHttp: OkHttpClient,
 ) {
     private val store = context.malojaStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val pending = java.util.concurrent.CopyOnWriteArrayList<PendingMalojaScrobble>()
+    private val pending = CopyOnWriteArrayList<PendingMalojaScrobble>()
     private val flushMutex = Mutex()
 
     val isEnabled: Flow<Boolean> = store.data.map { it[MalojaKeys.ENABLED] ?: false }
-    val serverUrl: Flow<String>  = store.data.map { it[MalojaKeys.SERVER_URL] ?: "" }
-    val apiKey: Flow<String>     = store.data.map { it[MalojaKeys.API_KEY] ?: "" }
+    val serverUrl: Flow<String> = store.data.map { it[MalojaKeys.SERVER_URL] ?: "" }
+    val apiKey: Flow<String> = store.data.map { it[MalojaKeys.API_KEY] ?: "" }
 
     @Volatile private var currentApi: MalojaApi? = null
     @Volatile private var currentApiUrl: String = ""
@@ -65,7 +68,7 @@ class MalojaRepository @Inject constructor(
     init {
         scope.launch {
             serverUrl.collect { url ->
-                currentApi = if (url.isBlank()) null else buildApi(url)
+                currentApi = buildApi(url)
                 currentApiUrl = url
             }
         }
@@ -89,9 +92,8 @@ class MalojaRepository @Inject constructor(
         }
     }
 
-    // Mirrors the current in-memory pending list into the DB so a killed process doesn't lose
-    // whatever's still unflushed. Delete-all-then-reinsert instead of per-row tracking —
-    // simpler, and flushes are already infrequent/batched.
+    // Writes the pending queue to the DB so a killed process doesn't lose it. Flushes are rare,
+    // so the table is simply replaced.
     private suspend fun persistPendingToDb() {
         pendingScrobbleDao.deleteAllForService("MALOJA")
         pending.forEach { p ->
@@ -109,16 +111,17 @@ class MalojaRepository @Inject constructor(
         }
     }
 
-    suspend fun setEnabled(v: Boolean)  { store.edit { it[MalojaKeys.ENABLED]    = v } }
-    suspend fun setServerUrl(v: String) { store.edit { it[MalojaKeys.SERVER_URL] = v } }
-    suspend fun setApiKey(v: String)    { store.edit { it[MalojaKeys.API_KEY]    = v } }
+    suspend fun setEnabled(v: Boolean)  { store.edit { it[MalojaKeys.ENABLED] = v } }
 
-    suspend fun configure(url: String, key: String) {
+    /** Returns false (and saves nothing) when [url] isn't a usable http(s) address. */
+    suspend fun configure(url: String, key: String): Boolean {
+        val normalized = normalizeUrl(url) ?: return false
         store.edit {
-            it[MalojaKeys.SERVER_URL] = url.trim()
-            it[MalojaKeys.API_KEY]    = key.trim()
-            it[MalojaKeys.ENABLED]    = true
+            it[MalojaKeys.SERVER_URL] = normalized
+            it[MalojaKeys.API_KEY] = key.trim()
+            it[MalojaKeys.ENABLED] = true
         }
+        return true
     }
 
     suspend fun clear() {
@@ -139,10 +142,10 @@ class MalojaRepository @Inject constructor(
             pending.add(
                 PendingMalojaScrobble(
                     artists = song.artists.ifEmpty { listOf(song.artist) },
-                    title   = song.title,
-                    album   = song.album.takeIf { it.isNotBlank() },
-                    length  = (song.duration / 1000).toInt().takeIf { it > 0 },
-                    time    = startedAt / 1000,
+                    title = song.title,
+                    album = song.album.takeIf { it.isNotBlank() },
+                    length = (song.duration / 1000).toInt().takeIf { it > 0 },
+                    time = startedAt / 1000,
                 )
             )
             flush()
@@ -150,10 +153,10 @@ class MalojaRepository @Inject constructor(
         }
     }
 
-    suspend fun testConnection(url: String, key: String): Result<String> = runCatching {
+    suspend fun testConnection(url: String, key: String): Result<String> = runCatchingCancellable {
         if (url.isBlank()) error("Server URL is empty")
         if (key.isBlank()) error("API key is empty")
-        val api = buildApi(url)
+        val api = buildApi(url) ?: error("Not a valid server address")
         val resp = api.ping(key = key)
         when {
             resp.status == "success" || resp.status == "ok" -> resp.desc ?: "Connected"
@@ -185,11 +188,11 @@ class MalojaRepository @Inject constructor(
                     val resp = api.scrobble(
                         MalojaScrobbleRequest(
                             artists = p.artists,
-                            title   = p.title,
-                            album   = p.album,
-                            length  = p.length,
-                            time    = p.time,
-                            key     = key,
+                            title = p.title,
+                            album = p.album,
+                            length = p.length,
+                            time = p.time,
+                            key = key,
                         )
                     )
                     if (resp.status == "success" || resp.status == "ok") {
@@ -197,6 +200,8 @@ class MalojaRepository @Inject constructor(
                     } else {
                         Log.w(TAG, "Scrobble rejected: ${resp.status} — ${resp.desc}")
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Log.w(TAG, "Scrobble failed, re-queuing: ${e.message}")
                     pending.add(p)
@@ -205,14 +210,12 @@ class MalojaRepository @Inject constructor(
         }
     }
 
-    private fun buildApi(baseUrl: String): MalojaApi {
-        val normalized = baseUrl.trim().trimEnd('/') + "/"
-        val client = OkHttpClient.Builder()
+    // Null for a blank or malformed address; Retrofit would throw on it.
+    private fun buildApi(baseUrl: String): MalojaApi? {
+        val normalized = normalizeUrl(baseUrl) ?: return null
+        val client = okHttp.newBuilder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
-            })
             .build()
         return Retrofit.Builder()
             .baseUrl(normalized)
@@ -224,5 +227,16 @@ class MalojaRepository @Inject constructor(
 
     companion object {
         private const val TAG = "MalojaRepo"
+
+        /** Adds http:// to a bare host:port and checks the result parses; null if it doesn't. */
+        fun normalizeUrl(url: String): String? {
+            val trimmed = url.trim()
+            if (trimmed.isEmpty()) return null
+            val withScheme = if (SCHEME.containsMatchIn(trimmed)) trimmed else "http://$trimmed"
+            val parsed = withScheme.toHttpUrlOrNull()?.takeIf { it.host.isNotEmpty() } ?: return null
+            return parsed.toString().trimEnd('/') + "/"
+        }
+
+        private val SCHEME = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")
     }
 }

@@ -1,0 +1,26 @@
+# systemd unit for running the server without Docker. Install with:
+#   sudo cp resonance-share /usr/local/bin/
+#   sudo cp resonance-share.service /etc/systemd/system/
+#   sudo systemctl enable --now resonance-share
+[Unit]
+Description=Resonance Share relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+DynamicUser=yes
+StateDirectory=resonance-share
+Environment=DATA_DIR=/var/lib/resonance-share
+Environment=LISTEN_ADDR=:8080
+Environment=TRUST_PROXY=none
+# Keep the token out of this file: put UPLOAD_TOKEN=... in /etc/resonance-share.env (chmod 600).
+EnvironmentFile=/etc/resonance-share.env
+ExecStart=/usr/local/bin/resonance-share
+Restart=on-failure
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

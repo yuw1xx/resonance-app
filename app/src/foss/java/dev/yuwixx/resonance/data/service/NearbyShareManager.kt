@@ -1,23 +1,22 @@
-// FOSS-flavor stub: Nearby Connections requires Google Play Services, unavailable in this
-// build. Keeps the exact public API of the gms-flavor NearbyShareManager (including the
-// NearbyState/NearbyDevice shapes) so ShareViewModel and ShareSheet compile unchanged.
-// startScanning() reports GpsUnavailable — a state the shared UI already handles gracefully
-// for GrapheneOS users ("QR Code works without Google Play Services"), so it applies here too
-// without needing any new UI.
 package dev.yuwixx.resonance.data.service
 
 import android.app.Activity
 import android.content.Context
+import android.os.Build
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.data.util.DeviceInfo
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
+/**
+ * Nearby needs Play Services, so this foss version only reports GpsUnavailable, which the share
+ * sheet already handles.
+ */
 @Singleton
 class NearbyShareManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -68,7 +67,7 @@ class NearbyShareManager @Inject constructor(
     private val _incomingFile = MutableStateFlow<IncomingFile?>(null)
     val incomingFile: StateFlow<IncomingFile?> = _incomingFile.asStateFlow()
 
-    val localName: String = android.os.Build.MODEL
+    val localName: String = Build.MODEL
 
     val isGrapheneOs: Boolean by lazy { DeviceInfo.isGrapheneOs(context) }
 

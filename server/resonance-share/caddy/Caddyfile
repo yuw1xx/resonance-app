@@ -1,0 +1,5 @@
+# Caddy gets and renews the HTTPS certificate for SHARE_DOMAIN on its own. It replaces any
+# X-Forwarded-For a client sends with the real address, so TRUST_PROXY=proxy is safe here.
+{$SHARE_DOMAIN} {
+	reverse_proxy app:8080
+}

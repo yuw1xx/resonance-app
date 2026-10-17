@@ -1,25 +1,30 @@
-// Reads and writes audio metadata via MediaMetadataRetriever / MediaStore ContentValues.
-// Note: physical ID3 tag writes are subject to Android scoped-storage restrictions.
 package dev.yuwixx.resonance.domain.usecase
 
-import android.content.ContentValues
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.MediaStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.yuwixx.resonance.data.database.dao.SongDao
 import dev.yuwixx.resonance.data.model.Song
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
+/**
+ * Reads tags with MediaMetadataRetriever. Writes go through AudioTagWriter, like every other tag
+ * edit.
+ */
 @Singleton
 class TagEditor @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val songDao: SongDao,
+    private val audioTagWriter: AudioTagWriter,
 ) {
     data class SongTags(
         val title: String,
@@ -34,7 +39,7 @@ class TagEditor @Inject constructor(
         val lyrics: String,
     )
 
-        suspend fun readTags(song: Song): SongTags = withContext(Dispatchers.IO) {
+    suspend fun readTags(song: Song): SongTags = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(context, song.uri)
@@ -56,38 +61,58 @@ class TagEditor @Inject constructor(
     }
 
     suspend fun readEmbeddedLyrics(uri: Uri): String? = withContext(Dispatchers.IO) {
+        // Downloaded copies (file://) are read directly; MediaStore items need their path.
         @Suppress("DEPRECATION")
-        val path = context.contentResolver.query(
-            uri,
-            arrayOf(MediaStore.Audio.Media.DATA),
-            null, null, null,
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(0) else null
+        val path = if (uri.scheme == "file") {
+            uri.path
+        } else {
+            context.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.Audio.Media.DATA),
+                null, null, null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
         } ?: return@withContext null
 
         try {
             val lyrics = AudioFileIO.read(File(path)).tag?.getFirst(FieldKey.LYRICS)
             lyrics?.takeIf { it.isNotBlank() }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }
     }
 
-        suspend fun writeTags(song: Song, tags: SongTags): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val values = ContentValues().apply {
-                put(MediaStore.Audio.Media.TITLE, tags.title)
-                put(MediaStore.Audio.Media.ARTIST, tags.artist)
-                put(MediaStore.Audio.Media.ALBUM_ARTIST, tags.albumArtist)
-                put(MediaStore.Audio.Media.ALBUM, tags.album)
-                put(MediaStore.Audio.Media.GENRE, tags.genre)
-                put(MediaStore.Audio.Media.YEAR, tags.year.toIntOrNull() ?: 0)
-                put(MediaStore.Audio.Media.TRACK, tags.trackNumber.toIntOrNull() ?: 0)
+    suspend fun writeTags(song: Song, tags: SongTags): Boolean = withContext(Dispatchers.IO) {
+        val fields = mapOf(
+            FieldKey.TITLE to tags.title,
+            FieldKey.ARTIST to tags.artist,
+            FieldKey.ALBUM_ARTIST to tags.albumArtist,
+            FieldKey.ALBUM to tags.album,
+            FieldKey.GENRE to tags.genre,
+            FieldKey.YEAR to tags.year,
+            FieldKey.TRACK to tags.trackNumber,
+            FieldKey.DISC_NO to tags.discNumber,
+        )
+        val ok = audioTagWriter.writeTags(song.path, song.uri, fields)
+        if (ok) {
+            songDao.getSongById(song.id)?.let { entity ->
+                songDao.upsertSongs(listOf(
+                    entity.copy(
+                        title = tags.title,
+                        artist = tags.artist,
+                        albumArtist = tags.albumArtist,
+                        album = tags.album,
+                        genre = tags.genre,
+                        year = tags.year.toIntOrNull() ?: entity.year,
+                        trackNumber = tags.trackNumber.toIntOrNull() ?: entity.trackNumber,
+                        discNumber = tags.discNumber.toIntOrNull() ?: entity.discNumber,
+                    )
+                ))
             }
-            val updated = context.contentResolver.update(song.uri, values, null, null)
-            updated > 0
-        } catch (e: Exception) {
-            false
         }
+        ok
     }
 }

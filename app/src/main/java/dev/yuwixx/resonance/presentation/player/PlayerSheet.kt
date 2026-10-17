@@ -1,0 +1,392 @@
+package dev.yuwixx.resonance.presentation.player
+
+import android.net.Uri
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.foundation.gestures.AnchoredDraggableState
+import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitVerticalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.verticalDrag
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
+import dev.yuwixx.resonance.presentation.components.ArtworkImage
+import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+
+enum class PlayerSheetValue { Collapsed, Expanded }
+
+@Stable
+class PlayerSheetState(initialValue: PlayerSheetValue) {
+    internal val draggable = AnchoredDraggableState(initialValue)
+
+    val currentValue: PlayerSheetValue get() = draggable.currentValue
+
+    /** 0 = mini player, 1 = full player. Read it from draw/layout lambdas, not composition. */
+    val progress: Float
+        get() {
+            // Without anchors (not laid out yet, or hidden) progress() reports 1, so use the
+            // settled value.
+            val settled = if (draggable.currentValue == PlayerSheetValue.Expanded) 1f else 0f
+            if (draggable.anchors.size < 2) return settled
+            val p = draggable.progress(PlayerSheetValue.Collapsed, PlayerSheetValue.Expanded)
+            return if (p.isNaN()) settled else p
+        }
+
+    internal var animationSpec: AnimationSpec<Float>? = null
+
+    suspend fun expand() = animateTo(PlayerSheetValue.Expanded)
+    suspend fun collapse() = animateTo(PlayerSheetValue.Collapsed)
+    internal suspend fun settle(value: PlayerSheetValue) = animateTo(value)
+
+    private suspend fun animateTo(value: PlayerSheetValue) {
+        val spec = animationSpec
+        if (spec != null) draggable.animateTo(value, spec) else draggable.animateTo(value)
+    }
+
+    companion object {
+        val Saver = Saver<PlayerSheetState, String>(
+            save = { it.draggable.currentValue.name },
+            restore = { PlayerSheetState(PlayerSheetValue.valueOf(it)) },
+        )
+    }
+}
+
+@Composable
+fun rememberPlayerSheetState(): PlayerSheetState {
+    val state = rememberSaveable(saver = PlayerSheetState.Saver) { PlayerSheetState(PlayerSheetValue.Collapsed) }
+    state.animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec()
+    return state
+}
+
+/** Size and inset of the collapsed mini player for each mini player style. */
+@Immutable
+data class MiniPlayerMetrics(val contentHeight: Dp, val horizontalInset: Dp, val verticalInset: Dp, val corner: Dp) {
+    val totalHeight: Dp get() = contentHeight + verticalInset * 2
+
+    companion object {
+        /** Height of the artwork/title/controls row. */
+        val RowHeight = 64.dp
+        /** Extra lane under the row for the wavy progress line, so it never crosses the artwork. */
+        val ProgressLane = 14.dp
+
+        fun forStyle(style: String, showProgress: Boolean = true): MiniPlayerMetrics {
+            val height = RowHeight + if (showProgress) ProgressLane else 0.dp
+            return when (style) {
+                "COMPACT" -> MiniPlayerMetrics(height, 0.dp, 0.dp, 0.dp)
+                "FLOATING" -> MiniPlayerMetrics(height, 12.dp, 8.dp, 28.dp)
+                else -> MiniPlayerMetrics(height, 8.dp, 6.dp, 18.dp)
+            }
+        }
+    }
+}
+
+/** Links the mini and full player artworks to the floating morph layer drawn by the sheet. */
+@Stable
+class ArtworkMorph internal constructor(internal val progress: () -> Float) {
+    internal var sheet: LayoutCoordinates? = null
+    internal var mini: LayoutCoordinates? = null
+    internal var full: LayoutCoordinates? = null
+    internal var fullSize by mutableStateOf(IntSize.Zero)
+    /** Live scale of the full artwork (it shrinks slightly while paused). */
+    var fullScale: () -> Float = { 1f }
+    var fullCorner: Dp by mutableStateOf(24.dp)
+    var fullIsCircle: Boolean by mutableStateOf(false)
+    var miniCorner: Dp by mutableStateOf(10.dp)
+
+    /** True while mid-transition, when the floating copy is shown instead of either artwork. */
+    val inFlight: Boolean get() = progress().let { it > 0.001f && it < 0.999f } && full != null
+
+    internal fun miniModifier(): Modifier = Modifier
+        .onPlaced { mini = it }
+        .graphicsLayer { alpha = if (progress() > 0.001f && full != null) 0f else 1f }
+
+    internal fun fullModifier(): Modifier = Modifier
+        .onPlaced { full = it; fullSize = it.size }
+        .graphicsLayer { alpha = if (progress() < 0.999f) 0f else 1f }
+}
+
+val LocalArtworkMorph = staticCompositionLocalOf<ArtworkMorph?> { null }
+
+/** Clip outline for the sheet. It ends [bottomPx] above the bottom edge so it never draws under
+ *  the navigation bar, and its corners square off as the sheet fills the screen. */
+private class SheetShape(
+    private val insetPx: Float,
+    private val topPx: Float,
+    private val bottomPx: Float,
+    private val cornerPx: Float,
+) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val bottom = (size.height - bottomPx).coerceAtLeast(topPx)
+        if (insetPx == 0f && topPx == 0f && cornerPx == 0f) return Outline.Rectangle(Rect(0f, 0f, size.width, bottom))
+        return Outline.Rounded(
+            RoundRect(
+                left = insetPx, top = topPx, right = size.width - insetPx, bottom = bottom,
+                topLeftCornerRadius = CornerRadius(cornerPx), topRightCornerRadius = CornerRadius(cornerPx),
+                bottomLeftCornerRadius = CornerRadius(cornerPx), bottomRightCornerRadius = CornerRadius(cornerPx),
+            )
+        )
+    }
+}
+
+/**
+ * Mini player that drags open into the full player. Drag progress drives every transition in the
+ * draw and placement phases, so dragging never recomposes the player.
+ */
+@Composable
+fun PlayerSheet(
+    state: PlayerSheetState,
+    metrics: MiniPlayerMetrics,
+    /** Height of the navigation bar the collapsed sheet sits on, in px. */
+    bottomBarHeightPx: () -> Int,
+    collapsedContainerColor: Color,
+    expandedContainerColor: Color,
+    artworkUri: Uri?,
+    modifier: Modifier = Modifier,
+    mini: @Composable (onExpand: () -> Unit) -> Unit,
+    full: @Composable (onCollapse: () -> Unit) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val morph = remember(state) { ArtworkMorph { state.progress } }
+    val backProgress = remember { Animatable(0f) }
+    val showFull by remember { derivedStateOf { state.progress > 0.001f } }
+    val isExpanded by remember { derivedStateOf { state.progress > 0.999f } }
+    val hideMini by remember { derivedStateOf { state.progress > 0.25f } }
+
+    val expand: () -> Unit = remember(state) { { scope.launch { state.expand() } } }
+    val collapse: () -> Unit = remember(state) { { scope.launch { state.collapse() } } }
+
+    // Predictive back scrubs the sheet down/inward with the gesture, then collapses on commit.
+    PredictiveBackHandler(enabled = isExpanded) { events ->
+        try {
+            events.collect { backProgress.snapTo(it.progress) }
+            state.collapse()
+            backProgress.snapTo(0f)
+        } catch (e: CancellationException) {
+            backProgress.animateTo(0f)
+            throw e
+        }
+    }
+
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val fullHeightPx = constraints.maxHeight.toFloat()
+        val miniHeightPx = with(density) { metrics.totalHeight.toPx() }
+        val collapsedOffset = (fullHeightPx - bottomBarHeightPx() - miniHeightPx).coerceAtLeast(0f)
+
+        SideEffect {
+            val anchors = DraggableAnchors {
+                PlayerSheetValue.Collapsed at collapsedOffset
+                PlayerSheetValue.Expanded at 0f
+            }
+            if (state.draggable.anchors != anchors) state.draggable.updateAnchors(anchors)
+        }
+
+        val insetPx = with(density) { metrics.horizontalInset.toPx() }
+        val vInsetPx = with(density) { metrics.verticalInset.toPx() }
+        val cornerPx = with(density) { metrics.corner.toPx() }
+        val backCornerPx = with(density) { 32.dp.toPx() }
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .offset { IntOffset(0, state.draggable.offset.takeUnless { it.isNaN() }?.roundToInt() ?: collapsedOffset.roundToInt()) }
+                .graphicsLayer {
+                    val p = state.progress
+                    val offset = state.draggable.offset.takeUnless { it.isNaN() } ?: collapsedOffset
+                    val bp = backProgress.value
+                    val inv = 1f - p
+                    val scale = 1f - 0.08f * bp
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0.5f, 0.35f)
+                    shape = SheetShape(
+                        insetPx = insetPx * inv,
+                        topPx = vInsetPx * inv,
+                        // The layer is screen-height but pushed down by `offset`: hide the part
+                        // below the screen plus, while collapsed, the nav bar and card margin.
+                        bottomPx = offset + (bottomBarHeightPx() + vInsetPx) * inv,
+                        cornerPx = lerp(cornerPx, 0f, p) + backCornerPx * bp,
+                    )
+                    clip = true
+                }
+                .drawBehind {
+                    drawRect(lerp(collapsedContainerColor, expandedContainerColor, state.progress))
+                }
+                .onPlaced { morph.sheet = it }
+                .sheetDrag(state)
+        ) {
+            CompositionLocalProvider(LocalArtworkMorph provides morph) {
+                if (showFull) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                alpha = ((state.progress - 0.15f) / 0.55f).coerceIn(0f, 1f)
+                            }
+                    ) { full(collapse) }
+                }
+
+                // Mini player: fades out quickly as the sheet opens, and stops taking touches.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = metrics.horizontalInset, vertical = metrics.verticalInset)
+                        .height(metrics.contentHeight)
+                        .graphicsLayer { alpha = (1f - state.progress * 4f).coerceIn(0f, 1f) }
+                        // Once faded out it's measured but not placed, so it no longer
+                        // intercepts touches meant for the full player beneath it.
+                        .then(if (hideMini) Modifier.layout { m, c ->
+                            val p = m.measure(c); layout(p.width, p.height) {}
+                        } else Modifier)
+                ) { mini(expand) }
+
+                if (showFull) ArtworkMorphLayer(morph, artworkUri)
+            }
+        }
+    }
+}
+
+/**
+ * Vertical drag and fling for the sheet. The sheet moves under the finger while it is dragged, so
+ * pointer positions relative to the sheet understate the movement and read a flick as no velocity
+ * at all. Positions are converted to screen coordinates using where the sheet is actually placed.
+ */
+private fun Modifier.sheetDrag(state: PlayerSheetState): Modifier = composed {
+    val scope = rememberCoroutineScope()
+    val minFlingVelocity = with(LocalDensity.current) { SheetMinFlingVelocity.toPx() }
+    // Not state: only the gesture reads these.
+    val settleJob = remember { arrayOfNulls<Job>(1) }
+    val placedTop = remember { floatArrayOf(0f) }
+    onPlaced { placedTop[0] = it.positionInRoot().y }.pointerInput(state) {
+        val tracker = VelocityTracker()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val slop = awaitVerticalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                ?: return@awaitEachGesture
+            settleJob[0]?.cancel()
+            tracker.resetTracking()
+            var lastScreenY = slop.position.y + placedTop[0]
+            tracker.addPosition(slop.uptimeMillis, Offset(0f, lastScreenY))
+            state.draggable.dispatchRawDelta(slop.positionChange().y)
+            val completed = verticalDrag(slop.id) { change ->
+                // Batched samples since the last frame matter for the velocity of a quick flick.
+                change.historical.forEach {
+                    tracker.addPosition(it.uptimeMillis, Offset(0f, it.position.y + placedTop[0]))
+                }
+                val screenY = change.position.y + placedTop[0]
+                tracker.addPosition(change.uptimeMillis, Offset(0f, screenY))
+                state.draggable.dispatchRawDelta(screenY - lastScreenY)
+                lastScreenY = screenY
+                change.consume()
+            }
+            val velocity = if (completed) tracker.calculateVelocity().y else 0f
+            val target = when {
+                velocity > minFlingVelocity -> PlayerSheetValue.Collapsed
+                velocity < -minFlingVelocity -> PlayerSheetValue.Expanded
+                state.progress > 0.5f -> PlayerSheetValue.Expanded
+                else -> PlayerSheetValue.Collapsed
+            }
+            settleJob[0] = scope.launch { state.settle(target) }
+        }
+    }
+}
+
+private val SheetMinFlingVelocity = 125.dp
+
+/** The floating artwork copy that flies between the mini and full player artwork positions. */
+@Composable
+private fun BoxScope.ArtworkMorphLayer(morph: ArtworkMorph, artworkUri: Uri?) {
+    val density = LocalDensity.current
+    val size = morph.fullSize
+    if (size.width == 0) return
+    ArtworkImage(
+        uri = artworkUri,
+        contentDescription = null,
+        cornerRadius = 0.dp,
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .layout { measurable, _ ->
+                val placeable = measurable.measure(
+                    Constraints.fixed(size.width, size.height)
+                )
+                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+            }
+            .graphicsLayer {
+                val sheet = morph.sheet
+                val mini = morph.mini
+                val full = morph.full
+                if (!morph.inFlight || sheet == null || mini == null || full == null ||
+                    !sheet.isAttached || !mini.isAttached || !full.isAttached
+                ) {
+                    alpha = 0f
+                    return@graphicsLayer
+                }
+                val p = morph.progress()
+                val miniRect = sheet.localBoundingBoxOf(mini, clipBounds = false)
+                val fullScale = morph.fullScale()
+                val fullRectRaw = sheet.localBoundingBoxOf(full, clipBounds = false)
+                // The full artwork may be scaled around its center (paused state).
+                val fullSize = Size(fullRectRaw.width * fullScale, fullRectRaw.height * fullScale)
+                val fullRect = Rect(fullRectRaw.center - Offset(fullSize.width / 2f, fullSize.height / 2f), fullSize)
+
+                // Ease the morph so the artwork leads the rest of the sheet slightly.
+                val t = (p * 1.15f).coerceIn(0f, 1f)
+                val left = lerp(miniRect.left, fullRect.left, t)
+                val top = lerp(miniRect.top, fullRect.top, t)
+                val width = lerp(miniRect.width, fullRect.width, t)
+                val s = width / size.width
+                transformOrigin = TransformOrigin(0f, 0f)
+                translationX = left
+                translationY = top
+                scaleX = s
+                scaleY = s
+                alpha = 1f
+                val miniR = with(density) { morph.miniCorner.toPx() }
+                val fullR = if (morph.fullIsCircle) fullRect.width / 2f else with(density) { morph.fullCorner.toPx() } * fullScale
+                val displayedRadius = lerp(miniR, fullR, t)
+                shape = RoundedCornerShape(displayedRadius / s)
+                clip = true
+            },
+    )
+}

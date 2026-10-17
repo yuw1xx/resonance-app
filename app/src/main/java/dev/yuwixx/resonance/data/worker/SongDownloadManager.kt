@@ -4,9 +4,10 @@ import android.content.Context
 import androidx.work.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.yuwixx.resonance.data.preferences.ResonancePreferences
-import kotlinx.coroutines.flow.first
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.first
 
 @Singleton
 class SongDownloadManager @Inject constructor(
@@ -31,24 +32,23 @@ class SongDownloadManager @Inject constructor(
         workManager.enqueueUniqueWork(workNameForSong(songId), ExistingWorkPolicy.KEEP, request)
     }
 
-    // Used for "download whole album/playlist" — one aggregate job with one progress
-    // notification, rather than one WorkManager job per song (which would mean dozens of
-    // independently-scheduled jobs for a large album/playlist).
+    // One job for a whole album or playlist. The IDs go in a file because WorkManager input
+    // data is limited to 10 KB, which a large playlist exceeds.
     suspend fun enqueueBatch(workName: String, songIds: List<Long>) {
         if (songIds.isEmpty()) return
+        val listFile = File(context.cacheDir, "download_batches/$workName.txt").apply {
+            parentFile?.mkdirs()
+            writeText(songIds.joinToString(","))
+        }
         val request = OneTimeWorkRequestBuilder<SongBatchDownloadWorker>()
             .setConstraints(buildConstraints())
-            .setInputData(workDataOf(SongBatchDownloadWorker.KEY_SONG_IDS to songIds.joinToString(",")))
+            .setInputData(workDataOf(SongBatchDownloadWorker.KEY_LIST_FILE to listFile.path))
             .build()
         workManager.enqueueUniqueWork(workName, ExistingWorkPolicy.REPLACE, request)
     }
 
     fun cancelSong(songId: Long) {
         workManager.cancelUniqueWork(workNameForSong(songId))
-    }
-
-    fun cancelBatch(workName: String) {
-        workManager.cancelUniqueWork(workName)
     }
 
     fun workNameForAlbum(albumId: Long) = "download_album_$albumId"

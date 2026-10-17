@@ -4,11 +4,12 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.yuwixx.resonance.data.database.entity.DownloadState
+import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.network.GitHubApi
 import dev.yuwixx.resonance.data.network.GitHubRelease
-import dev.yuwixx.resonance.data.preferences.ResonancePreferences
-import dev.yuwixx.resonance.data.model.MusicSource
 import dev.yuwixx.resonance.data.network.NavidromeApiProvider
+import dev.yuwixx.resonance.data.preferences.ResonancePreferences
 import dev.yuwixx.resonance.data.repository.LastFmAuthState
 import dev.yuwixx.resonance.data.repository.LastFmRepository
 import dev.yuwixx.resonance.data.repository.MalojaRepository
@@ -17,19 +18,27 @@ import dev.yuwixx.resonance.data.repository.NavidromeDownloadRepository
 import dev.yuwixx.resonance.data.repository.NavidromeRepository
 import dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONException
+import org.json.JSONObject
+import java.io.File
+import java.io.IOException
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.io.File
-import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -56,7 +65,7 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
 
     val downloadedSongCount: StateFlow<Int> = navidromeDownloadRepository.downloadStates
-        .map { states -> states.values.count { it.state == dev.yuwixx.resonance.data.database.entity.DownloadState.DOWNLOADED } }
+        .map { states -> states.values.count { it.state == DownloadState.DOWNLOADED } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     fun removeAllDownloads() {
@@ -99,9 +108,9 @@ class SettingsViewModel @Inject constructor(
 
                 val shouldCheck = when (freq) {
                     "LAUNCH" -> true
-                    "DAILY"  -> hoursSinceLast >= 24
+                    "DAILY" -> hoursSinceLast >= 24
                     "WEEKLY" -> hoursSinceLast >= 168
-                    else     -> false
+                    else -> false
                 }
                 if (!shouldCheck) return@launch
             }
@@ -111,6 +120,11 @@ class SettingsViewModel @Inject constructor(
                 val release = gitHubApi.getLatestRelease()
                 prefs.setLastUpdateCheck(System.currentTimeMillis())
 
+                // Only app releases (v3.0.0); the share server is released as server-v2.1.0.
+                if (!release.tagName.matches(Regex("""v\d+(\.\d+)*"""))) {
+                    _updateState.value = if (isManual) UpdateState.UpToDate else UpdateState.Idle
+                    return@launch
+                }
                 val remoteVersion = release.tagName.removePrefix("v")
                 val localVersion = currentVersion.removePrefix("v")
 
@@ -126,6 +140,8 @@ class SettingsViewModel @Inject constructor(
                     if (isManual) _updateState.value = UpdateState.UpToDate
                     else _updateState.value = UpdateState.Idle
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (isManual) _updateState.value = UpdateState.Error("Failed to check for updates. Check your connection.")
                 else _updateState.value = UpdateState.Idle
@@ -146,39 +162,50 @@ class SettingsViewModel @Inject constructor(
         return false
     }
 
+    private var downloadJob: Job? = null
+
     fun downloadUpdate(context: Context, url: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        val file = File(context.cacheDir, "resonance_update.apk")
+        downloadJob?.cancel()
+        downloadJob = viewModelScope.launch(Dispatchers.IO) {
             _updateState.value = UpdateState.Downloading(0f)
             try {
-                val request = Request.Builder().url(url).build()
-                val response = okHttpClient.newCall(request).execute()
-                if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
-                val body = response.body ?: throw Exception("Empty response body")
-
-                val file = File(context.cacheDir, "resonance_update.apk")
-                if (file.exists()) file.delete()
-
-                val totalBytes = body.contentLength()
-                var downloadedBytes = 0L
-
-                body.byteStream().use { input ->
-                    file.outputStream().use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        var read: Int
-                        while (input.read(buffer).also { read = it } != -1) {
-                            output.write(buffer, 0, read)
-                            downloadedBytes += read
-                            if (totalBytes > 0) {
-                                _updateState.value = UpdateState.Downloading(downloadedBytes.toFloat() / totalBytes)
+                file.delete()
+                okHttpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                    if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+                    val body = response.body ?: throw IOException("Empty response body")
+                    val totalBytes = body.contentLength()
+                    var downloadedBytes = 0L
+                    body.byteStream().use { input ->
+                        file.outputStream().use { output ->
+                            val buffer = ByteArray(64 * 1024)
+                            var read: Int
+                            while (input.read(buffer).also { read = it } != -1) {
+                                ensureActive()
+                                output.write(buffer, 0, read)
+                                downloadedBytes += read
+                                if (totalBytes > 0) {
+                                    _updateState.value = UpdateState.Downloading(downloadedBytes.toFloat() / totalBytes)
+                                }
                             }
                         }
                     }
                 }
                 _updateState.value = UpdateState.ReadyToInstall(file)
+            } catch (e: CancellationException) {
+                file.delete()
+                throw e
             } catch (e: Exception) {
+                file.delete()
                 _updateState.value = UpdateState.Error(e.message ?: "Download failed")
             }
         }
+    }
+
+    fun cancelUpdateDownload() {
+        downloadJob?.cancel()
+        downloadJob = null
+        _updateState.value = UpdateState.Idle
     }
 
     val lastFmAuthState: StateFlow<LastFmAuthState> = lastFmRepository.authState
@@ -216,21 +243,19 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefs.setLastFmScrobbleOffline(v) }
     }
 
-    private val _pendingScrobbles = MutableStateFlow(0)
-    val pendingScrobbles: StateFlow<Int> = _pendingScrobbles.asStateFlow()
-
-    private val _malojaPending = MutableStateFlow(0)
-    val malojaPending: StateFlow<Int> = _malojaPending.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            while (true) {
-                _pendingScrobbles.value = lastFmRepository.pendingScrobbleCount
-                _malojaPending.value = malojaRepository.pendingCount
-                kotlinx.coroutines.delay(5000)
-            }
+    // Pending queues live in memory in the repositories; poll them only while the Settings
+    // UI is actually showing the counts.
+    private fun pollWhileSubscribed(read: () -> Int): StateFlow<Int> = flow {
+        while (true) {
+            emit(read())
+            delay(5000)
         }
-    }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(1_000), 0)
+
+    val pendingScrobbles: StateFlow<Int> = pollWhileSubscribed { lastFmRepository.pendingScrobbleCount }
+
+    val malojaPending: StateFlow<Int> = pollWhileSubscribed { malojaRepository.pendingCount }
+
 
     fun lastFmLogin(username: String, password: String) {
         viewModelScope.launch { lastFmRepository.authenticate(username, password) }
@@ -275,6 +300,52 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             prefs.setRemoteShareServerUrl(serverUrl.trimEnd('/'))
             prefs.setRemoteShareUploadToken(uploadToken)
+        }
+    }
+
+    sealed interface ShareServerStatus {
+        data object Idle : ShareServerStatus
+        data object Checking : ShareServerStatus
+        /** [latestVersion] is set when the server knows of a newer release. */
+        data class Reachable(val version: String, val latestVersion: String?) : ShareServerStatus
+        data class Unreachable(val reason: String) : ShareServerStatus
+    }
+
+    private val _shareServerStatus = MutableStateFlow<ShareServerStatus>(ShareServerStatus.Idle)
+    val shareServerStatus: StateFlow<ShareServerStatus> = _shareServerStatus.asStateFlow()
+
+    /** Asks a self-hosted share server for its version and whether an update is out. */
+    fun checkShareServer(serverUrl: String) {
+        val base = serverUrl.trim().trimEnd('/')
+        if (base.isEmpty()) {
+            _shareServerStatus.value = ShareServerStatus.Idle
+            return
+        }
+        _shareServerStatus.value = ShareServerStatus.Checking
+        viewModelScope.launch(Dispatchers.IO) {
+            _shareServerStatus.value = try {
+                okHttpClient.newCall(Request.Builder().url("$base/info").build()).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        ShareServerStatus.Unreachable("the server answered HTTP ${response.code}")
+                    } else {
+                        val info = JSONObject(response.body?.string().orEmpty())
+                        ShareServerStatus.Reachable(
+                            version = info.optString("version", "?"),
+                            latestVersion = info.optString("latestVersion").takeIf {
+                                it.isNotEmpty() && info.optBoolean("updateAvailable")
+                            },
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IllegalArgumentException) {
+                ShareServerStatus.Unreachable("not a valid address")
+            } catch (e: JSONException) {
+                ShareServerStatus.Unreachable("that address isn't a Resonance Share server")
+            } catch (e: IOException) {
+                ShareServerStatus.Unreachable(e.message ?: "no connection")
+            }
         }
     }
 
@@ -335,26 +406,45 @@ class SettingsViewModel @Inject constructor(
         navidromeRepository.resetSyncState()
     }
 
-        fun testNavidromeConnection(serverUrl: String, username: String, password: String) {
+    fun testNavidromeConnection(serverUrl: String, username: String, password: String) {
         viewModelScope.launch {
             navidromeRepository.testConnection(serverUrl, username, password)
         }
     }
 
-        fun saveNavidromeAndSwitch(serverUrl: String, username: String, password: String) {
+    fun saveNavidromeAndSwitch(serverUrl: String, username: String, password: String) {
         viewModelScope.launch {
             val effectivePassword = password.ifBlank { prefs.getNavidromePassword() ?: password }
             prefs.setNavidromeCredentials(serverUrl, username, effectivePassword)
             prefs.setMusicSource(MusicSource.NAVIDROME)
             navidromeApiProvider.rebuild(serverUrl, username, effectivePassword)
             navidromeRepository.resetSyncState()
-            navidromeRepository.syncLibrary()
+            navidromeRepository.syncLibrary(force = true)
             navidromeSyncRepository.pullStarredFromServer()
             navidromeSyncRepository.pullPlaylistsFromServer()
         }
     }
 
-        fun switchToLocal() {
+    // Switching source keeps the Navidrome login and cache, so coming back needs no new
+    // setup and only an incremental sync.
+    fun switchToLocal() {
+        viewModelScope.launch { prefs.setMusicSource(MusicSource.LOCAL) }
+    }
+
+    /** Switches back to the server that is already set up. */
+    fun switchToNavidrome() {
+        viewModelScope.launch {
+            val url = prefs.navidromeServerUrl.first() ?: return@launch
+            val username = prefs.navidromeUsername.first() ?: return@launch
+            val password = prefs.getNavidromePassword() ?: return@launch
+            navidromeApiProvider.rebuild(url, username, password)
+            prefs.setMusicSource(MusicSource.NAVIDROME)
+            navidromeRepository.syncLibrary()
+        }
+    }
+
+    /** Signs out of Navidrome: removes the login and the cached library, and goes back to local. */
+    fun forgetNavidrome() {
         viewModelScope.launch {
             prefs.clearNavidromeCredentials()
             navidromeRepository.clearCache()

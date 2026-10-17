@@ -1,8 +1,8 @@
 package dev.yuwixx.resonance.data.network
 
+import dev.yuwixx.resonance.data.util.md5Hex
 import okhttp3.Interceptor
 import okhttp3.Response
-import java.security.MessageDigest
 import java.util.UUID
 
 class NavidromeAuthInterceptor(
@@ -14,7 +14,7 @@ class NavidromeAuthInterceptor(
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val salt = UUID.randomUUID().toString().replace("-", "").take(12)
-        val token = md5("$password$salt")
+        val token = md5Hex("$password$salt")
 
         val url = chain.request().url.newBuilder()
             .addQueryParameter("u", username)
@@ -28,8 +28,4 @@ class NavidromeAuthInterceptor(
         return chain.proceed(chain.request().newBuilder().url(url).build())
     }
 
-    private fun md5(input: String): String {
-        val bytes = MessageDigest.getInstance("MD5").digest(input.toByteArray(Charsets.UTF_8))
-        return bytes.joinToString("") { "%02x".format(it) }
-    }
 }

@@ -2,7 +2,6 @@ package dev.yuwixx.resonance.presentation.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -16,12 +15,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.yuwixx.resonance.data.model.MixType
 import dev.yuwixx.resonance.data.model.Playlist
+import dev.yuwixx.resonance.data.model.Song
 import dev.yuwixx.resonance.presentation.components.*
 import dev.yuwixx.resonance.presentation.navigation.Screen
 import dev.yuwixx.resonance.presentation.viewmodel.LibraryViewModel
@@ -33,15 +33,16 @@ fun HomeScreen(
     playerViewModel: PlayerViewModel,
     libraryViewModel: LibraryViewModel,
     onNavigateTo: (Screen) -> Unit,
+    onOpenPlayer: () -> Unit,
 ) {
-    val currentSong by playerViewModel.currentSong.collectAsState()
-    val isPlaying by playerViewModel.isPlaying.collectAsState()
-    val mostPlayed by libraryViewModel.mostPlayed.collectAsState()
-    val autoMixes by libraryViewModel.autoMixes.collectAsState()
-    val allSongs by libraryViewModel.allSongs.collectAsState()
-    val showMostPlayed by libraryViewModel.prefs.homeShowMostPlayed.collectAsState(initial = true)
-    val showRecentlyAdded by libraryViewModel.prefs.homeShowRecentlyAdded.collectAsState(initial = true)
-    val recentlyAddedCount by libraryViewModel.prefs.homeRecentlyAddedCount.collectAsState(initial = 20)
+    val currentSong by playerViewModel.currentSong.collectAsStateWithLifecycle()
+    val isPlaying by playerViewModel.isPlaying.collectAsStateWithLifecycle()
+    val mostPlayed by libraryViewModel.mostPlayed.collectAsStateWithLifecycle()
+    val autoMixes by libraryViewModel.autoMixes.collectAsStateWithLifecycle()
+    val allSongs by libraryViewModel.allSongs.collectAsStateWithLifecycle()
+    val showMostPlayed by libraryViewModel.prefs.homeShowMostPlayed.collectAsStateWithLifecycle(initialValue = true)
+    val showRecentlyAdded by libraryViewModel.prefs.homeShowRecentlyAdded.collectAsStateWithLifecycle(initialValue = true)
+    val recentlyAddedCount by libraryViewModel.prefs.homeRecentlyAddedCount.collectAsStateWithLifecycle(initialValue = 20)
     val recentlyAdded = remember(allSongs, recentlyAddedCount) {
         allSongs.sortedByDescending { it.dateAdded }.take(recentlyAddedCount)
     }
@@ -84,16 +85,16 @@ fun HomeScreen(
             item {
                 AnimatedVisibility(
                     visible = currentSong != null,
-                    enter = fadeIn(tween(400, easing = EmphasizedDecelerate)) +
-                            expandVertically(tween(400, easing = EmphasizedDecelerate)),
-                    exit = fadeOut(tween(300, easing = EmphasizedAccelerate)) +
-                           shrinkVertically(tween(300, easing = EmphasizedAccelerate)),
+                    enter = fadeIn(tween(560, easing = EmphasizedDecelerate)) +
+                            expandVertically(tween(560, easing = EmphasizedDecelerate)),
+                    exit = fadeOut(tween(420, easing = EmphasizedAccelerate)) +
+                           shrinkVertically(tween(420, easing = EmphasizedAccelerate)),
                 ) {
                     currentSong?.let { song ->
                         ResumeCard(
                             song = song,
                             isPlaying = isPlaying,
-                            onClick = { onNavigateTo(Screen.Player) },
+                            onClick = onOpenPlayer,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             onArtworkMissing = { libraryViewModel.getSongArtworkUrl(song) },
                         )
@@ -101,14 +102,14 @@ fun HomeScreen(
                 }
             }
 
-            // Your Mixes — weekly auto-generated playlists (empty when location is "PLAYLISTS")
+            // Weekly generated mixes; empty when mixes are set to appear under Playlists.
             if (autoMixes.isNotEmpty()) {
                 item {
                     AppSectionHeader(
                         title = "Your Mixes",
                         icon = Icons.Rounded.AutoAwesome,
                         trailing = {
-                            IconButton(onClick = { libraryViewModel.refreshMixes() }, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = { libraryViewModel.refreshMixes() }) {
                                 Icon(
                                     Icons.Rounded.Refresh,
                                     contentDescription = "Refresh mixes",
@@ -191,7 +192,7 @@ fun HomeScreen(
 
 @Composable
 private fun ResumeCard(
-    song: dev.yuwixx.resonance.data.model.Song,
+    song: Song,
     isPlaying: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -201,7 +202,7 @@ private fun ResumeCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
         label = "resume_card_press",
     )
     Card(
@@ -209,8 +210,7 @@ private fun ResumeCard(
         interactionSource = interactionSource,
         modifier = modifier
             .fillMaxWidth()
-            .scale(pressScale)
-            .preferredFrameRateSafe(120f),
+            .scale(pressScale),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -225,7 +225,6 @@ private fun ResumeCard(
                 contentDescription = song.album,
                 modifier = Modifier.size(64.dp),
                 cornerRadius = 16.dp,
-                isAnimating = isPlaying,
                 onArtworkMissing = onArtworkMissing,
             )
             Spacer(Modifier.width(16.dp))
@@ -271,18 +270,18 @@ private fun MixCard(
     onClick: () -> Unit,
 ) {
     val description = when (mix.mixType) {
-        MixType.TOP_ARTIST     -> "Your top artist this week"
-        MixType.TOP_GENRE      -> "Your most-played genre"
-        MixType.ERA            -> "Songs from your favorite decade"
-        MixType.FAVORITES      -> "Your most played tracks of all time"
+        MixType.TOP_ARTIST -> "Your top artist this week"
+        MixType.TOP_GENRE -> "Your most-played genre"
+        MixType.ERA -> "Songs from your favorite decade"
+        MixType.FAVORITES -> "Your most played tracks of all time"
         MixType.RECENTLY_LOVED -> "What you've been playing this week"
-        null                   -> ""
+        null -> ""
     }
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
         label = "mix_card_press",
     )
     Card(
@@ -322,7 +321,7 @@ private fun MixCard(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "${mix.songCount} songs",
+                    count(mix.songCount, "song"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -342,7 +341,7 @@ private fun CompactArtworkCard(
     val isPressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
         label = "compact_card_press",
     )
     Card(

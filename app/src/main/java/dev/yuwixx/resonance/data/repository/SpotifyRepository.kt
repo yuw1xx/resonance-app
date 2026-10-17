@@ -1,7 +1,7 @@
-// Spotify Client Credentials flow: app-level auth (no user login) used only to look up
-// album art for tracks missing embedded artwork. Token is cached in memory until it expires.
 package dev.yuwixx.resonance.data.repository
 
+import kotlinx.coroutines.CancellationException
+import dev.yuwixx.resonance.BuildConfig
 import android.util.Base64
 import android.util.Log
 import dev.yuwixx.resonance.data.network.SpotifyApi
@@ -14,9 +14,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "SpotifyRepo"
-private const val DEFAULT_CLIENT_ID     = "257fd355d619466b80cc30e02e3836b2"
-private const val DEFAULT_CLIENT_SECRET = "6113274799b340388eaf12946dd0b4df"
+private val DEFAULT_CLIENT_ID = BuildConfig.SPOTIFY_CLIENT_ID
+private val DEFAULT_CLIENT_SECRET = BuildConfig.SPOTIFY_CLIENT_SECRET
 
+/**
+ * Album art lookup through Spotify's client-credentials flow (no user login). The token is kept
+ * in memory until it expires.
+ */
 @Singleton
 class SpotifyRepository @Inject constructor(
     private val authApi: SpotifyAuthApi,
@@ -40,23 +44,33 @@ class SpotifyRepository @Inject constructor(
             // Refresh a minute early so a request never races an about-to-expire token.
             tokenExpiresAtMs = now + (response.expiresInSeconds - 60).coerceAtLeast(0) * 1000L
             response.accessToken
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Failed to obtain Spotify access token: ${e.message}")
             null
         }
     }
 
-    suspend fun searchAlbumArt(title: String, artist: String): String? = withContext(Dispatchers.IO) {
+    /**
+     * The album art URL for a track: success with null means Spotify has no match; failure means
+     * the lookup itself didn't work (no network, no API key), which callers shouldn't cache.
+     */
+    suspend fun searchAlbumArt(title: String, artist: String): Result<String?> = withContext(Dispatchers.IO) {
         try {
-            val token = getAccessToken() ?: return@withContext null
+            val token = getAccessToken() ?: return@withContext Result.failure(IllegalStateException("No Spotify token"))
             val query = "track:$title artist:$artist"
             val response = api.searchTracks(bearerAuth = "Bearer $token", query = query)
-            response.tracks?.items?.firstOrNull()
-                ?.album?.images?.maxByOrNull { it.width ?: 0 }
-                ?.url
+            Result.success(
+                response.tracks?.items?.firstOrNull()
+                    ?.album?.images?.maxByOrNull { it.width ?: 0 }
+                    ?.url
+            )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Spotify album art search failed: ${e.message}")
-            null
+            Result.failure(e)
         }
     }
 }

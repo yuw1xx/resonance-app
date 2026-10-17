@@ -80,16 +80,45 @@ interface LastFmApi {
         @Query("format") format: String = "json",
     ): LastFmUserInfoResponse
 
+    // Needs only the API key, so it works without a Last.fm login. Used for artist info and
+    // genre suggestions.
     @GET("2.0/")
-    suspend fun getTopTracks(
-        @Query("method") method: String = "user.getTopTracks",
-        @Query("user") username: String,
-        @Query("period") period: String = "overall",
-        @Query("limit") limit: Int = 20,
+    suspend fun getArtistInfo(
+        @Query("method") method: String = "artist.getInfo",
+        @Query("artist") artist: String,
         @Query("api_key") apiKey: String,
         @Query("format") format: String = "json",
-    ): LastFmTopTracksResponse
+    ): LastFmArtistInfoResponse
 }
+
+@JsonClass(generateAdapter = true)
+data class LastFmArtistInfoResponse(
+    val artist: LastFmArtistInfo? = null,
+    val error: Int? = null,
+    val message: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class LastFmArtistInfo(
+    val name: String = "",
+    val bio: LastFmArtistBio? = null,
+    val tags: LastFmArtistTags? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class LastFmArtistBio(
+    val summary: String = "",
+)
+
+@JsonClass(generateAdapter = true)
+data class LastFmArtistTags(
+    val tag: List<LastFmArtistTag> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class LastFmArtistTag(
+    val name: String = "",
+)
 
 @JsonClass(generateAdapter = true)
 data class LastFmBaseResponse(
@@ -176,28 +205,4 @@ data class LastFmRegistered(
 data class LastFmImage(
     @Json(name = "#text") val url: String = "",
     val size: String = "",
-)
-
-@JsonClass(generateAdapter = true)
-data class LastFmTopTracksResponse(
-    @Json(name = "toptracks") val topTracks: LastFmTopTracks? = null,
-    val error: Int? = null,
-    val message: String? = null,
-)
-
-@JsonClass(generateAdapter = true)
-data class LastFmTopTracks(
-    val track: List<LastFmTopTrack> = emptyList(),
-)
-
-@JsonClass(generateAdapter = true)
-data class LastFmTopTrack(
-    val name: String,
-    val playcount: String = "0",
-    val artist: LastFmTopTrackArtist,
-)
-
-@JsonClass(generateAdapter = true)
-data class LastFmTopTrackArtist(
-    val name: String,
 )
