@@ -125,11 +125,7 @@ class NearbyShareManager @Inject constructor(
     fun startScanning(activity: Activity? = null) {
         if (_state.value != NearbyState.Idle) return
 
-        if (isGrapheneOs) {
-            _state.value = NearbyState.GpsUnavailable
-            return
-        }
-
+        // Covers GrapheneOS without sandboxed Google Play; with it installed, Nearby can work.
         val gpsResult = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context)
         if (gpsResult == ConnectionResult.SERVICE_MISSING ||
             gpsResult == ConnectionResult.SERVICE_DISABLED ||

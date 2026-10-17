@@ -130,7 +130,9 @@ private fun ShareSheetContent(
     var hasRequested by remember { mutableStateOf(false) }
 
     AnimatedPermissionGate(
-        granted = viewModel.isGrapheneOs || nearbyPermissions.allPermissionsGranted,
+        // GrapheneOS needs these too: QR sharing creates a Wi-Fi Direct group, which requires the
+        // nearby Wi-Fi devices permission.
+        granted = nearbyPermissions.allPermissionsGranted,
         prompt = {
             val isPermanentlyDenied = hasRequested && nearbyPermissions.permissions.any { !it.status.isGranted && !it.status.shouldShowRationale }
             PermissionPrompt(
