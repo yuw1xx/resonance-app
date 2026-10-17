@@ -120,7 +120,7 @@ class SettingsViewModel @Inject constructor(
                 val release = gitHubApi.getLatestRelease()
                 prefs.setLastUpdateCheck(System.currentTimeMillis())
 
-                // Only app releases (v3.0.0); the share server is released as server-v2.1.0.
+                // Only app releases (v3.0.0); the share server is released as server-1.0.
                 if (!release.tagName.matches(Regex("""v\d+(\.\d+)*"""))) {
                     _updateState.value = if (isManual) UpdateState.UpToDate else UpdateState.Idle
                     return@launch

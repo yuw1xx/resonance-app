@@ -79,13 +79,14 @@ func TestNewerVersion(t *testing.T) {
 		a, b string
 		want bool
 	}{
-		{"2.1.0", "2.0.0", true},
-		{"2.0.10", "2.0.9", true},
-		{"3.0.0", "2.9.9", true},
-		{"2.0.0", "2.0.0", false},
-		{"1.9.0", "2.0.0", false},
-		{"2.1", "2.0.0", false},
-		{"dev", "2.0.0", false},
+		{"1.1", "1.0", true},
+		{"1.0.1", "1.0", true},
+		{"1.0.10", "1.0.9", true},
+		{"2.0", "1.9.9", true},
+		{"1.0", "1.0.0", false},
+		{"0.9", "1.0", false},
+		{"1", "1.0", false},
+		{"dev", "1.0", false},
 	}
 	for _, c := range cases {
 		if got := newerVersion(c.a, c.b); got != c.want {
@@ -98,10 +99,10 @@ func TestUpdateCheckReadsOnlyServerReleases(t *testing.T) {
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`[
 			{"tag_name": "v9.0.0"},
-			{"tag_name": "server-v2.3.0", "prerelease": true},
-			{"tag_name": "server-v2.2.0", "draft": true},
-			{"tag_name": "server-v2.1.0"},
-			{"tag_name": "server-v2.0.0"}
+			{"tag_name": "server-1.3", "prerelease": true},
+			{"tag_name": "server-1.2", "draft": true},
+			{"tag_name": "server-1.1"},
+			{"tag_name": "server-1.0"}
 		]`))
 	}))
 	defer gh.Close()
@@ -110,7 +111,7 @@ func TestUpdateCheckReadsOnlyServerReleases(t *testing.T) {
 	if err := u.check(); err != nil {
 		t.Fatal(err)
 	}
-	if got := u.Latest(); got != "2.1.0" {
-		t.Errorf("latest = %q, want 2.1.0 (app tags, drafts and pre-releases are skipped)", got)
+	if got := u.Latest(); got != "1.1" {
+		t.Errorf("latest = %q, want 1.1 (app tags, drafts and pre-releases are skipped)", got)
 	}
 }

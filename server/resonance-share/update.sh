@@ -1,5 +1,5 @@
 #!/bin/sh
-# Updates the server to the newest image for the version in .env (SERVER_VERSION, default 2)
+# Updates the server to the newest image for the version in .env (SERVER_VERSION, default 1)
 # and restarts it only if something changed. Safe to run from cron or a systemd timer.
 set -eu
 cd "$(dirname "$0")"

@@ -139,8 +139,8 @@ opened on your router. This is how `share.yuwixx.dev` runs.
 ## Without Docker
 
 The server is a single program with no dependencies. Download the file for your system from the
-[server releases](https://github.com/yuw1xx/resonance-app/releases?q=server-v) (for example
-`resonance-share-2.1.0-linux-arm64` for a 64-bit Raspberry Pi), or build it yourself with Go:
+[server releases](https://github.com/yuw1xx/resonance-app/releases?q=server-) (for example
+`resonance-share-1.0-linux-arm64` for a 64-bit Raspberry Pi), or build it yourself with Go:
 
 ```sh
 CGO_ENABLED=0 go build -o resonance-share .
@@ -193,7 +193,7 @@ All settings go in `.env` (Docker) or the environment (without Docker).
 | `MAX_STORAGE_GB` | `20` | Disk space for files waiting to be downloaded |
 | `DATA_DIR` | `/data` | Where files are stored (without Docker) |
 | `LISTEN_ADDR` | `:8080` | Address and port to listen on (without Docker) |
-| `SERVER_VERSION` | `2` | Which image Docker runs: `2` is the newest 2.x, or pin one like `2.1.0` |
+| `SERVER_VERSION` | `1` | Which image Docker runs: `1` is the newest 1.x, or pin one like `1.0` |
 | `UPDATE_CHECK` | `true` | Look up new releases on GitHub once a day; `false` turns it off |
 | `UPDATE_REPO` | `yuw1xx/resonance-app` | Where to look for releases (for forks) |
 
@@ -215,9 +215,9 @@ fake their address. That is what `PUBLISH=127.0.0.1:8080` is for.
 ### How you find out
 
 - **In the app:** Settings → Online Services → Internet Share shows your server's version, and
-  "Version 2.1.0 is available for your server" when there is a newer one.
+  "Version 1.1 is available for your server" when there is a newer one.
 - **In the server log:** `docker compose logs app` shows a line like
-  `update available: 2.0.0 -> 2.1.0`.
+  `update available: 1.0 -> 1.1`.
 - **From GitHub:** on the repository page, choose **Watch → Custom → Releases** to get an email
   for every release.
 
@@ -250,10 +250,10 @@ or with cron (`crontab -e`):
 30 4 * * * /path/to/resonance-share/update.sh
 ```
 
-Automatic updates stay within the same major version (`SERVER_VERSION=2` follows 2.1, 2.2 and so
-on). Those never need changes on your side. A new major version (3.0) can, so moving to it is a
-deliberate step: read its release notes, then set `SERVER_VERSION=3`. To freeze the server on
-one version, set `SERVER_VERSION=2.1.0`.
+Automatic updates stay within the same major version (`SERVER_VERSION=1` follows 1.1, 1.2 and so
+on). Those never need changes on your side. A new major version (2.0) can, so moving to it is a
+deliberate step: read its release notes, then set `SERVER_VERSION=2`. To freeze the server on
+one version, set `SERVER_VERSION=1.0`.
 
 Without Docker, download the new file from the releases page, replace the old one and restart
 (`sudo systemctl restart resonance-share`).
@@ -283,14 +283,14 @@ Without Docker, download the new file from the releases page, replace the old on
 
 For the maintainer. The version comes from the git tag; nothing in the code has to change.
 
-1. Pick the version with [semantic versioning](https://semver.org): `2.1.0` for new features,
-   `2.0.1` for fixes, `3.0.0` if self-hosters must change something.
+1. Pick the version: `1.1` for new features, `1.1.1` for fixes, `2.0` if self-hosters must
+   change something.
 2. Tag and push:
    ```sh
-   git tag server-v2.1.0
-   git push origin server-v2.1.0
+   git tag server-1.1
+   git push origin server-1.1
    ```
-3. The "Server release" GitHub Action tests the server, publishes the image as `2.1.0`, `2`
+3. The "Server release" GitHub Action tests the server, publishes the image as `1.1`, `1`
    and `latest` on ghcr.io, and creates a release with the binaries and checksums. The release
    is never marked "latest", so the app's own update check isn't affected.
 4. The first time only: on GitHub, open the `resonance-share` package (your profile →

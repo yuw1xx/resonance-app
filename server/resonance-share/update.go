@@ -12,8 +12,8 @@ import (
 )
 
 // serverVersion is set from the release tag when the image is built
-// (-ldflags "-X main.serverVersion=2.1.0").
-var serverVersion = "2.0.0"
+// (-ldflags "-X main.serverVersion=1.1").
+var serverVersion = "1.0"
 
 const updateCheckInterval = 24 * time.Hour
 
@@ -78,8 +78,8 @@ func (u *updateChecker) check() error {
 	}
 	newest := ""
 	for _, r := range releases {
-		// The repository also holds app releases (v2.0.1); server releases are server-v2.1.0.
-		v, ok := strings.CutPrefix(r.TagName, "server-v")
+		// The repository also holds app releases (v3.0.0); server releases are server-1.0.
+		v, ok := strings.CutPrefix(r.TagName, "server-")
 		if !ok || r.Draft || r.Prerelease {
 			continue
 		}
@@ -98,17 +98,17 @@ func (u *updateChecker) check() error {
 	}
 	u.mu.Unlock()
 	if announce {
-		log.Printf("update available: %s -> %s, see https://github.com/%s/releases/tag/server-v%s",
+		log.Printf("update available: %s -> %s, see https://github.com/%s/releases/tag/server-%s",
 			serverVersion, newest, u.repo, newest)
 	}
 	return nil
 }
 
-// parseVersion reads "major.minor.patch".
+// parseVersion reads "major.minor" or "major.minor.patch"; a missing patch counts as 0.
 func parseVersion(v string) ([3]int, bool) {
 	var out [3]int
 	parts := strings.Split(v, ".")
-	if len(parts) != 3 {
+	if len(parts) != 2 && len(parts) != 3 {
 		return out, false
 	}
 	for i, p := range parts {

@@ -3,10 +3,10 @@
 services:
 
   app:
-    # Ready-made image from GitHub. "2" follows every 2.x release, which never breaks your
-    # setup; a new major version (3) is a deliberate switch. "docker compose up --build"
+    # Ready-made image from GitHub. "1" follows every 1.x release, which never breaks your
+    # setup; a new major version (2) is a deliberate switch. "docker compose up --build"
     # builds from this folder instead.
-    image: ghcr.io/yuw1xx/resonance-share:${SERVER_VERSION:-2}
+    image: ghcr.io/yuw1xx/resonance-share:${SERVER_VERSION:-1}
     build: .
     restart: unless-stopped
     environment:

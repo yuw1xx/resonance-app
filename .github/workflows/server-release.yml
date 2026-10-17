@@ -1,5 +1,5 @@
-# Publishes the Resonance Share server when a tag like server-v2.1.0 is pushed:
-#   git tag server-v2.1.0 && git push origin server-v2.1.0
+# Publishes the Resonance Share server when a tag like server-1.0 is pushed:
+#   git tag server-1.0 && git push origin server-1.0
 # Builds the Docker image for x86 and ARM (Raspberry Pi), pushes it to ghcr.io, and creates a
 # GitHub release with plain binaries. The release is never marked "latest", because the app's
 # own update check reads the latest release of this repository.
@@ -7,7 +7,7 @@ name: Server release
 
 on:
   push:
-    tags: ["server-v*"]
+    tags: ["server-[0-9]*"]
 
 permissions:
   contents: write
@@ -25,8 +25,8 @@ jobs:
       - name: Read version from tag
         id: version
         run: |
-          version="${GITHUB_REF_NAME#server-v}"
-          echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Tag must look like server-v2.1.0"; exit 1; }
+          version="${GITHUB_REF_NAME#server-}"
+          echo "$version" | grep -Eq '^[0-9]+\.[0-9]+(\.[0-9]+)?$' || { echo "Tag must look like server-1.0 or server-1.0.1"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "major=${version%%.*}" >> "$GITHUB_OUTPUT"
 
