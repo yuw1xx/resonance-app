@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -51,6 +52,12 @@ func main() {
 		log.Fatal("UPLOAD_TOKEN must be set")
 	}
 	addr := envOr("LISTEN_ADDR", ":8080")
+	trustProxy := envOr("TRUST_PROXY", "none")
+	switch trustProxy {
+	case "none", "cloudflare", "proxy":
+	default:
+		log.Fatalf("TRUST_PROXY must be none, cloudflare or proxy, not %q", trustProxy)
+	}
 	ttl := defaultTTL
 	if v := os.Getenv("TTL_HOURS"); v != "" {
 		if h, err := strconv.Atoi(v); err == nil && h > 0 {
@@ -108,6 +115,7 @@ func main() {
 		rateLimitBytes:    rateLimitBytes,
 		maxStorage:        maxStorage,
 		maxTTLHours:       maxTTLHours,
+		trustProxy:        trustProxy,
 		inflight:          make(map[string]struct{}),
 		ipLimiters:        make(map[string]*ipLimiter),
 	}
@@ -125,8 +133,8 @@ func main() {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	log.Printf("resonance-share %s listening on %s (data=%s defaultTTL=%s maxTTL=%dh maxUpload=%dMB rateLimit=%dMB+%dreq/hr maxStorage=%dGB)",
-		serverVersion, addr, dataDir, ttl, maxTTLHours, maxUpload>>20, rateLimitBytes>>20, rateLimitRequests, maxStorage>>30)
+	log.Printf("resonance-share %s listening on %s (data=%s defaultTTL=%s maxTTL=%dh maxUpload=%dMB rateLimit=%dMB+%dreq/hr maxStorage=%dGB trustProxy=%s)",
+		serverVersion, addr, dataDir, ttl, maxTTLHours, maxUpload>>20, rateLimitBytes>>20, rateLimitRequests, maxStorage>>30, trustProxy)
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
@@ -145,6 +153,7 @@ type server struct {
 	rateLimitBytes    int64
 	maxStorage        int64
 	maxTTLHours       int
+	trustProxy        string
 
 	mu       sync.Mutex
 	inflight map[string]struct{} // tokens currently being downloaded; skip sweep/delete-on-read race
@@ -184,7 +193,7 @@ func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	declared := r.ContentLength // -1 when unknown (chunked)
 	if !s.allowRequest(ip, max(declared, 0)) {
 		w.Header().Set("Retry-After", "3600")
@@ -415,7 +424,7 @@ func (s *server) handleManifestCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	if !s.allowRequest(ip, 0) {
 		w.Header().Set("Retry-After", "3600")
 		http.Error(w, "rate limit exceeded, try again later", http.StatusTooManyRequests)
@@ -561,19 +570,29 @@ func (s *server) pathFor(token string) string {
 	return filepath.Join(s.dataDir, token)
 }
 
-// clientIP prefers the IP Cloudflare reports. That header can be trusted only because all
-// traffic arrives through the cloudflared tunnel; the server has no public listener.
-func clientIP(r *http.Request) string {
-	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
-		return ip
-	}
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		if before, _, found := strings.Cut(fwd, ","); found {
-			return before
+// clientIP is the address rate limits are counted against. Forwarded headers are trusted only
+// when TRUST_PROXY says a proxy in front sets them; otherwise any client could fake them.
+//   - cloudflare: the CF-Connecting-IP header (Cloudflare Tunnel or proxy).
+//   - proxy: the last X-Forwarded-For entry, which the proxy in front (Caddy, nginx) appends.
+//   - none: the connecting address, for a server that clients reach directly.
+func (s *server) clientIP(r *http.Request) string {
+	switch s.trustProxy {
+	case "cloudflare":
+		if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+			return ip
 		}
-		return fwd
+	case "proxy":
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			parts := strings.Split(fwd, ",")
+			return strings.TrimSpace(parts[len(parts)-1])
+		}
 	}
-	return r.RemoteAddr
+	// Without the port, so every connection from one client counts as the same client.
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // allowRequest counts one request plus its declared size against the client's hourly budget.

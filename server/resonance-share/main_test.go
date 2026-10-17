@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"net/http/httptest"
+	"testing"
+)
 
 func TestRangeStart(t *testing.T) {
 	cases := []struct {
@@ -38,5 +41,34 @@ func TestLimiterCountsBytesNotFiles(t *testing.T) {
 	}
 	if !s.allowRequest("5.6.7.8", 50) {
 		t.Fatal("limits must be per client")
+	}
+}
+
+func TestClientIP(t *testing.T) {
+	cases := []struct {
+		trust, remote, cf, xff, want string
+	}{
+		// Direct: forwarded headers are ignored (they could be faked) and the port is dropped.
+		{"none", "203.0.113.5:51234", "1.1.1.1", "2.2.2.2", "203.0.113.5"},
+		{"none", "[2001:db8::1]:443", "", "", "2001:db8::1"},
+		{"cloudflare", "172.18.0.3:40000", "198.51.100.7", "", "198.51.100.7"},
+		{"cloudflare", "172.18.0.3:40000", "", "", "172.18.0.3"},
+		// Behind a proxy the last entry is the one the proxy added; earlier ones are client input.
+		{"proxy", "127.0.0.1:9000", "", "6.6.6.6, 198.51.100.9", "198.51.100.9"},
+		{"proxy", "127.0.0.1:9000", "", "", "127.0.0.1"},
+	}
+	for _, c := range cases {
+		s := &server{trustProxy: c.trust}
+		r := httptest.NewRequest("GET", "/info", nil)
+		r.RemoteAddr = c.remote
+		if c.cf != "" {
+			r.Header.Set("CF-Connecting-IP", c.cf)
+		}
+		if c.xff != "" {
+			r.Header.Set("X-Forwarded-For", c.xff)
+		}
+		if got := s.clientIP(r); got != c.want {
+			t.Errorf("%s %s cf=%q xff=%q: got %q want %q", c.trust, c.remote, c.cf, c.xff, got, c.want)
+		}
 	}
 }
