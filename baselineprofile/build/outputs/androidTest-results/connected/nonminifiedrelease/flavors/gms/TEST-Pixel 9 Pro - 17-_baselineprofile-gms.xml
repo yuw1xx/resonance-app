@@ -1,26 +1,17 @@
 <?xml version='1.0' encoding='UTF-8' ?>
-<testsuites tests="1" failures="1" errors="0" skipped="0" time="21.896" timestamp="2026-10-16T11:34:24" hostname="localhost">
-  <testsuite name="dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator" tests="1" failures="1" errors="0" skipped="0" time="20.124" timestamp="2026-10-16T11:34:24" hostname="localhost">
+<testsuites tests="1" failures="1" errors="0" skipped="0" time="154.81" timestamp="2026-10-17T00:05:31" hostname="localhost">
+  <testsuite name="dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator" tests="1" failures="1" errors="0" skipped="0" time="152.597" timestamp="2026-10-17T00:05:31" hostname="localhost">
     <properties>
       <property name="device" value="Pixel 9 Pro - 17" />
       <property name="flavor" value="gms" />
       <property name="project" value=":baselineprofile" />
     </properties>
-    <testcase name="generate" classname="dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator" time="20.124">
-      <failure>androidx.test.uiautomator.StaleObjectException
-at androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)
-at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:984)
-at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:973)
-at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate$lambda$0(BaselineProfileGenerator.kt:42)
-at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)
-at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:78)
-at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:76)
-at androidx.benchmark.macro.CompilationMode$Partial.compileImpl$benchmark_macro(CompilationMode.kt:359)
-at androidx.benchmark.macro.CompilationMode.resetAndCompile$benchmark_macro(CompilationMode.kt:126)
-at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:76)
+    <testcase name="generate" classname="dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator" time="152.597">
+      <failure>java.lang.IllegalStateException: Generated Profile is empty, before filtering. Ensure your profileBlock invokes the target app, and runs a non-trivial amount of code
+at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:134)
 at androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)
 at androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)
-at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:21)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:25)
 </failure>
     </testcase>
   </testsuite>

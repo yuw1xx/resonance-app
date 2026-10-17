@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.Until
 import org.junit.Rule
 import org.junit.Test
@@ -27,14 +28,20 @@ class BaselineProfileGenerator {
         pressHome()
         startActivityAndWait()
 
-        // Fresh install: walk through setup.
-        repeat(6) {
-            val next = device.findObject(By.text("Continue"))
-                ?: device.findObject(By.text("Skip"))
+        // Fresh install: walk through setup. "Skip" comes first because the Last.fm step's
+        // Continue stays disabled until an account is linked. Pages animate in, so a button
+        // found a moment ago can be stale by the time it is clicked; look it up again then.
+        repeat(8) {
+            device.waitForIdle()
+            val next = device.findObject(By.text("Skip"))
+                ?: device.findObject(By.text("Continue").enabled(true))
                 ?: device.findObject(By.text("Get Started"))
                 ?: return@repeat
-            next.click()
-            device.waitForIdle()
+            try {
+                next.click()
+            } catch (_: StaleObjectException) {
+                return@repeat
+            }
         }
 
         // Library tab → scroll the song list.

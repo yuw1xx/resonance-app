@@ -1,7 +1,7 @@
 EXECUTING: /home/yu/Android/Sdk/build-tools/36.0.0/aapt dump badging /home/yu/StudioProjects/resonance/baselineprofile/build/outputs/apk/gms/nonMinifiedRelease/baselineprofile-gms-nonMinifiedRelease.apk
 CURRENT_WORKING_DIRECTORY: /home/yu/StudioProjects/resonance
-START_TIME: 2026-10-16 13:34:23.933
-START_TIME-NANOS: 2026-10-16 13:34:23.933246885
+START_TIME: 2026-10-17 02:05:30.837
+START_TIME-NANOS: 2026-10-17 02:05:30.837084796
 ENVIRONMENT:
 
 *****************************************
@@ -30,7 +30,7 @@ locales: '--_--' 'af' 'am' 'ar' 'as' 'az' 'be' 'bg' 'bn' 'bs' 'ca' 'cs' 'da' 'de
 densities: '160' '240' '320' '65535'
 native-code: 'arm64-v8a' 'armeabi-v7a' 'x86' 'x86_64'
 ===================
-END_TIME: 2026-10-16 13:34:23.948
-END_TIME-NANOS: 2026-10-16 13:34:23.948366567
-DURATION: 15ms
+END_TIME: 2026-10-17 02:05:30.843
+END_TIME-NANOS: 2026-10-17 02:05:30.843049016
+DURATION: 5ms
 EXIT CODE: 0

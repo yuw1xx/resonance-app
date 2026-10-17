@@ -1,38 +1,19 @@
 
-#
-192.168.178.164:5555primaryœ
-‡
-BaselineProfileGenerator$dev.yuwixx.resonance.baselineprofilegenerate2ª—ÈÖ€ÃŽà:¾—ÈÖ€·œ°B
-192.168.178.164:5555primaryÙ
-ê	androidx.test.uiautomator.StaleObjectException
-at androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)
-at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:984)
-at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:973)
-at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate$lambda$0(BaselineProfileGenerator.kt:42)
-at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)
-at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:78)
-at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:76)
-at androidx.benchmark.macro.CompilationMode$Partial.compileImpl$benchmark_macro(CompilationMode.kt:359)
-at androidx.benchmark.macro.CompilationMode.resetAndCompile$benchmark_macro(CompilationMode.kt:126)
-at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:76)
+>:
+/adb-4B301FDAP000FV-ygcz3R._adb-tls-connect._tcpprimary¼
+¡
+BaselineProfileGenerator$dev.yuwixx.resonance.baselineprofilegenerate2°öÊÖ€´›‡:É÷ÊÖ€Ð¥LB:
+/adb-4B301FDAP000FV-ygcz3R._adb-tls-connect._tcpprimaryß
+œjava.lang.IllegalStateException: Generated Profile is empty, before filtering. Ensure your profileBlock invokes the target app, and runs a non-trivial amount of code
+at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:134)
 at androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)
 at androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)
-at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:21)
-}androidx.test.uiautomator.StaleObjectException
-at androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.javaê	androidx.test.uiautomator.StaleObjectException
-at androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)
-at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:984)
-at androidx.test.uiautomator.UiObject2.fling(UiObject2.java:973)
-at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate$lambda$0(BaselineProfileGenerator.kt:42)
-at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)
-at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:78)
-at androidx.benchmark.macro.BaselineProfilesKt$collect$1$1$1.invoke(BaselineProfiles.kt:76)
-at androidx.benchmark.macro.CompilationMode$Partial.compileImpl$benchmark_macro(CompilationMode.kt:359)
-at androidx.benchmark.macro.CompilationMode.resetAndCompile$benchmark_macro(CompilationMode.kt:126)
-at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:76)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:25)
+java.lang.IllegalStateExceptionœjava.lang.IllegalStateException: Generated Profile is empty, before filtering. Ensure your profileBlock invokes the target app, and runs a non-trivial amount of code
+at androidx.benchmark.macro.BaselineProfilesKt.collect(BaselineProfiles.kt:134)
 at androidx.benchmark.macro.junit4.BaselineProfileRule.collect(BaselineProfileRule.kt:94)
 at androidx.benchmark.macro.junit4.BaselineProfileRule.collect$default(BaselineProfileRule.kt:84)
-at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:21)
+at dev.yuwixx.resonance.baselineprofile.BaselineProfileGenerator.generate(BaselineProfileGenerator.kt:25)
 "ø
 
 logcatandroidâ

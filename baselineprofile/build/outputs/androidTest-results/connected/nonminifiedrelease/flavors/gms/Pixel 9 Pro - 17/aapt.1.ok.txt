@@ -1,16 +1,16 @@
 EXECUTING: /home/yu/Android/Sdk/build-tools/36.0.0/aapt dump badging /home/yu/StudioProjects/resonance/app/build/outputs/apk/gms/nonMinifiedRelease/app-gms-nonMinifiedRelease.apk
 CURRENT_WORKING_DIRECTORY: /home/yu/StudioProjects/resonance
-START_TIME: 2026-10-16 13:34:23.417
-START_TIME-NANOS: 2026-10-16 13:34:23.417709134
+START_TIME: 2026-10-17 02:05:30.299
+START_TIME-NANOS: 2026-10-17 02:05:30.299655842
 ENVIRONMENT:
 
 *****************************************
 STDOUT/STDERR BELOW
 ===================
-package: name='dev.yuwixx.resonance' versionCode='9' versionName='3.0.0' platformBuildVersionName='17' platformBuildVersionCode='37' compileSdkVersion='37' compileSdkVersionCodename='17'
+package: name='dev.yuwixx.resonance.benchmark' versionCode='9' versionName='3.0.0' platformBuildVersionName='17' platformBuildVersionCode='37' compileSdkVersion='37' compileSdkVersionCodename='17'
 sdkVersion:'26'
 targetSdkVersion:'36'
-uses-permission: name='dev.yuwixx.resonance.permission.WIDGET_CONTROL'
+uses-permission: name='dev.yuwixx.resonance.benchmark.permission.WIDGET_CONTROL'
 uses-permission: name='android.permission.ACCESS_WIFI_STATE'
 uses-permission: name='android.permission.READ_MEDIA_AUDIO'
 uses-permission: name='android.permission.READ_EXTERNAL_STORAGE' maxSdkVersion='32'
@@ -33,7 +33,7 @@ uses-permission: name='android.permission.BLUETOOTH_ADMIN' maxSdkVersion='30'
 uses-permission: name='android.permission.NEARBY_WIFI_DEVICES'
 uses-permission: name='android.permission.REQUEST_INSTALL_PACKAGES'
 uses-permission: name='android.permission.RECEIVE_BOOT_COMPLETED'
-uses-permission: name='dev.yuwixx.resonance.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+uses-permission: name='dev.yuwixx.resonance.benchmark.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
 application-label:'Resonance'
 application-label-af:'Resonance'
 application-label-am:'Resonance'
@@ -151,7 +151,7 @@ locales: '--_--' 'af' 'am' 'ar' 'as' 'az' 'be' 'bg' 'bn' 'bs' 'ca' 'cs' 'da' 'de
 densities: '160' '240' '320' '480' '640' '65534' '65535'
 native-code: 'arm64-v8a' 'armeabi-v7a' 'x86' 'x86_64'
 ===================
-END_TIME: 2026-10-16 13:34:23.471
-END_TIME-NANOS: 2026-10-16 13:34:23.471975681
-DURATION: 54ms
+END_TIME: 2026-10-17 02:05:30.316
+END_TIME-NANOS: 2026-10-17 02:05:30.316164376
+DURATION: 16ms
 EXIT CODE: 0
