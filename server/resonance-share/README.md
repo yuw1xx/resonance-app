@@ -16,6 +16,18 @@ Configuration (environment, see `docker-compose.yml`): `UPLOAD_TOKEN` (in `.env`
 committed), `TTL_HOURS`, `MAX_TTL_HOURS`, `MAX_UPLOAD_MB`, `RATE_LIMIT_MB_PER_HOUR`,
 `RATE_LIMIT_REQUESTS_PER_HOUR`, `MAX_STORAGE_GB`.
 
-Deploy: copy `main.go`/`go.mod`/`Dockerfile` next to the compose file on the server, keep a
+## Running your own
+
+The server is reached through a Cloudflare Tunnel, so it needs no open ports. It trusts the
+client IP that Cloudflare reports, so don't expose port 8080 directly.
+
+1. `cp .env.example .env` and set `UPLOAD_TOKEN` to a long random value.
+2. Create a tunnel (`cloudflared tunnel create resonance-share`), put its credentials JSON in
+   `cloudflared/`, and copy `cloudflared/config.example.yml` to `cloudflared/config.yml` with
+   your tunnel ID and hostname.
+3. `docker compose up -d --build`.
+4. In the app: Settings → Online Services → Internet Share, enter your URL and upload token.
+
+Updating: copy `main.go`/`go.mod`/`Dockerfile` next to the compose file, keep a
 `main.go.bak.<unix-time>` of the previous version, then `docker compose up -d --build app`.
 Test: `go test ./...`.
