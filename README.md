@@ -28,13 +28,13 @@ Resonance is a powerful local music player built entirely with Kotlin and Jetpac
 
 ## Screenshots
 
-| Home | Player | Settings | Artist |
+| Home | Player | Library | Search |
 | :---: | :---: | :---: | :---: |
-| <img src="screenshots/Screenshot_20260407-001502.png" width="200"> | <img src="screenshots/Screenshot_20260407-001514.png" width="200"> | <img src="screenshots/Screenshot_20260407-001534.png" width="200"> | <img src="screenshots/Screenshot_20260407-001546.png" width="200"> |
+| <img src="screenshots/Screenshot_20261017-151253.png" width="200"> | <img src="screenshots/Screenshot_20261017-151221.png" width="200"> | <img src="screenshots/Screenshot_20261017-151245.png" width="200"> | <img src="screenshots/Screenshot_20261017-151341.png" width="200"> |
 
-| Playlist | Resonance Share | Search | Lyrics |
+| Album | Artist | Settings | Appearance |
 | :---: | :---: | :---: | :---: |
-| <img src="screenshots/Screenshot_20260407-230040.png" width="200"> | <img src="screenshots/Screenshot_20260407-230052.png" width="200"> | <img src="screenshots/Screenshot_20260407-230127.png" width="200"> | <img src="screenshots/Screenshot_20260407-230239.png" width="200"> |
+| <img src="screenshots/Screenshot_20261017-151416.png" width="200"> | <img src="screenshots/Screenshot_20261017-151410.png" width="200"> | <img src="screenshots/Screenshot_20261017-151320.png" width="200"> | <img src="screenshots/Screenshot_20261017-151315.png" width="200"> |
 
 ## Features
 
