@@ -20,6 +20,8 @@ import dev.yuwixx.resonance.data.repository.NavidromeSyncRepository
 import dev.yuwixx.resonance.data.repository.NavidromeSyncState
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONException
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import javax.inject.Inject
@@ -118,6 +120,11 @@ class SettingsViewModel @Inject constructor(
                 val release = gitHubApi.getLatestRelease()
                 prefs.setLastUpdateCheck(System.currentTimeMillis())
 
+                // Only app releases (v3.0.0); the share server is released as server-v2.1.0.
+                if (!release.tagName.matches(Regex("""v\d+(\.\d+)*"""))) {
+                    _updateState.value = if (isManual) UpdateState.UpToDate else UpdateState.Idle
+                    return@launch
+                }
                 val remoteVersion = release.tagName.removePrefix("v")
                 val localVersion = currentVersion.removePrefix("v")
 
@@ -293,6 +300,52 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             prefs.setRemoteShareServerUrl(serverUrl.trimEnd('/'))
             prefs.setRemoteShareUploadToken(uploadToken)
+        }
+    }
+
+    sealed interface ShareServerStatus {
+        data object Idle : ShareServerStatus
+        data object Checking : ShareServerStatus
+        /** [latestVersion] is set when the server knows of a newer release. */
+        data class Reachable(val version: String, val latestVersion: String?) : ShareServerStatus
+        data class Unreachable(val reason: String) : ShareServerStatus
+    }
+
+    private val _shareServerStatus = MutableStateFlow<ShareServerStatus>(ShareServerStatus.Idle)
+    val shareServerStatus: StateFlow<ShareServerStatus> = _shareServerStatus.asStateFlow()
+
+    /** Asks a self-hosted share server for its version and whether an update is out. */
+    fun checkShareServer(serverUrl: String) {
+        val base = serverUrl.trim().trimEnd('/')
+        if (base.isEmpty()) {
+            _shareServerStatus.value = ShareServerStatus.Idle
+            return
+        }
+        _shareServerStatus.value = ShareServerStatus.Checking
+        viewModelScope.launch(Dispatchers.IO) {
+            _shareServerStatus.value = try {
+                okHttpClient.newCall(Request.Builder().url("$base/info").build()).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        ShareServerStatus.Unreachable("the server answered HTTP ${response.code}")
+                    } else {
+                        val info = JSONObject(response.body?.string().orEmpty())
+                        ShareServerStatus.Reachable(
+                            version = info.optString("version", "?"),
+                            latestVersion = info.optString("latestVersion").takeIf {
+                                it.isNotEmpty() && info.optBoolean("updateAvailable")
+                            },
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IllegalArgumentException) {
+                ShareServerStatus.Unreachable("not a valid address")
+            } catch (e: JSONException) {
+                ShareServerStatus.Unreachable("that address isn't a Resonance Share server")
+            } catch (e: IOException) {
+                ShareServerStatus.Unreachable(e.message ?: "no connection")
+            }
         }
     }
 

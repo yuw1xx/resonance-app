@@ -1,0 +1,12 @@
+# Runs update.sh. Change both /opt/resonance-share paths to where this folder is, then:
+#   sudo cp resonance-share-update.service resonance-share-update.timer /etc/systemd/system/
+#   sudo systemctl enable --now resonance-share-update.timer
+[Unit]
+Description=Update the Resonance Share server
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/resonance-share
+ExecStart=/opt/resonance-share/update.sh

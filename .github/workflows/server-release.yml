@@ -1,0 +1,86 @@
+# Publishes the Resonance Share server when a tag like server-v2.1.0 is pushed:
+#   git tag server-v2.1.0 && git push origin server-v2.1.0
+# Builds the Docker image for x86 and ARM (Raspberry Pi), pushes it to ghcr.io, and creates a
+# GitHub release with plain binaries. The release is never marked "latest", because the app's
+# own update check reads the latest release of this repository.
+name: Server release
+
+on:
+  push:
+    tags: ["server-v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server/resonance-share
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from tag
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#server-v}"
+          echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Tag must look like server-v2.1.0"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "major=${version%%.*}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/resonance-share/go.mod
+
+      - name: Test
+        run: go vet ./... && go test ./...
+
+      - name: Build binaries
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 linux/arm/7 windows/amd64 darwin/arm64; do
+            os="${target%%/*}"; rest="${target#*/}"; arch="${rest%%/*}"
+            arm=""; [ "$arch" = arm ] && arm="${target##*/}"
+            name="resonance-share-${VERSION}-${os}-${arch}${arm:+v$arm}"
+            [ "$os" = windows ] && name="$name.exe"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" GOARM="$arm" \
+              go build -trimpath -ldflags "-s -w -X main.serverVersion=${VERSION}" -o "dist/$name" .
+          done
+          cd dist && sha256sum -- * > SHA256SUMS
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: server/resonance-share
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          build-args: VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/resonance-share:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/resonance-share:${{ steps.version.outputs.major }}
+            ghcr.io/${{ github.repository_owner }}/resonance-share:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "Resonance Share server ${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            --latest=false

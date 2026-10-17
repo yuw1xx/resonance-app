@@ -3,11 +3,16 @@
 services:
 
   app:
+    # Ready-made image from GitHub. "2" follows every 2.x release, which never breaks your
+    # setup; a new major version (3) is a deliberate switch. "docker compose up --build"
+    # builds from this folder instead.
+    image: ghcr.io/yuw1xx/resonance-share:${SERVER_VERSION:-2}
     build: .
     restart: unless-stopped
     environment:
       UPLOAD_TOKEN: ${UPLOAD_TOKEN:?Set UPLOAD_TOKEN in .env}
       TRUST_PROXY: ${TRUST_PROXY:-none}
+      UPDATE_CHECK: ${UPDATE_CHECK:-true}
       TTL_HOURS: ${TTL_HOURS:-24}
       MAX_TTL_HOURS: ${MAX_TTL_HOURS:-72}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-500}

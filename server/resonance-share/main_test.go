@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 )
@@ -70,5 +71,46 @@ func TestClientIP(t *testing.T) {
 		if got := s.clientIP(r); got != c.want {
 			t.Errorf("%s %s cf=%q xff=%q: got %q want %q", c.trust, c.remote, c.cf, c.xff, got, c.want)
 		}
+	}
+}
+
+func TestNewerVersion(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"2.1.0", "2.0.0", true},
+		{"2.0.10", "2.0.9", true},
+		{"3.0.0", "2.9.9", true},
+		{"2.0.0", "2.0.0", false},
+		{"1.9.0", "2.0.0", false},
+		{"2.1", "2.0.0", false},
+		{"dev", "2.0.0", false},
+	}
+	for _, c := range cases {
+		if got := newerVersion(c.a, c.b); got != c.want {
+			t.Errorf("newerVersion(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+func TestUpdateCheckReadsOnlyServerReleases(t *testing.T) {
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[
+			{"tag_name": "v9.0.0"},
+			{"tag_name": "server-v2.3.0", "prerelease": true},
+			{"tag_name": "server-v2.2.0", "draft": true},
+			{"tag_name": "server-v2.1.0"},
+			{"tag_name": "server-v2.0.0"}
+		]`))
+	}))
+	defer gh.Close()
+	u := newUpdateChecker("owner/repo")
+	u.apiBase = gh.URL
+	if err := u.check(); err != nil {
+		t.Fatal(err)
+	}
+	if got := u.Latest(); got != "2.1.0" {
+		t.Errorf("latest = %q, want 2.1.0 (app tags, drafts and pre-releases are skipped)", got)
 	}
 }

@@ -41,6 +41,10 @@ server's address. They only need to be able to reach the server.
    ```
    Open `.env` and put the output after `UPLOAD_TOKEN=`. Keep this token private.
 
+The server itself is a ready-made image that Docker downloads on the first start
+(`ghcr.io/yuw1xx/resonance-share`, for normal PCs and Raspberry Pi). If it can't be downloaded,
+Docker builds it from this folder instead.
+
 ## A. Local network
 
 The server listens on port 8080 and phones on your Wi-Fi talk to it directly.
@@ -48,7 +52,7 @@ The server listens on port 8080 and phones on your Wi-Fi talk to it directly.
 1. Leave the "A" lines in `.env` as they are (`TRUST_PROXY=none`, `PUBLISH=8080`).
 2. Start it:
    ```sh
-   docker compose up -d --build
+   docker compose up -d
    ```
 3. Find the computer's local IP address (`ip addr` on Linux, `ipconfig` on Windows), for example
    `192.168.1.50`. Open `http://192.168.1.50:8080/healthz` in a phone browser; it should say `ok`.
@@ -78,7 +82,7 @@ anywhere, without opening ports.
 **Public with Funnel (anyone with the link, with HTTPS):**
 
 1. In `.env`, set `TRUST_PROXY=proxy` and `PUBLISH=127.0.0.1:8080`, then
-   `docker compose up -d --build`.
+   `docker compose up -d`.
 2. Run `sudo tailscale funnel --bg 8080`. It prints an address like
    `https://myserver.tailnet-name.ts.net`.
 3. Use that `https://` address in the app.
@@ -98,7 +102,7 @@ automatically.
    TRUST_PROXY=proxy
    PUBLISH=127.0.0.1:8080
    ```
-4. `docker compose up -d --build`. The first start can take a minute while Caddy gets the
+4. `docker compose up -d`. The first start can take a minute while Caddy gets the
    certificate (`docker compose logs -f caddy` shows progress).
 5. Check that `https://share.example.com/healthz` says `ok`, then
    [connect the app](#connect-the-app) with `https://share.example.com`.
@@ -129,15 +133,23 @@ opened on your router. This is how `share.yuwixx.dev` runs.
    TRUST_PROXY=cloudflare
    PUBLISH=127.0.0.1:8080
    ```
-5. `docker compose up -d --build`, check `https://share.example.com/healthz`, then
+5. `docker compose up -d`, check `https://share.example.com/healthz`, then
    [connect the app](#connect-the-app).
 
 ## Without Docker
 
-The server is a single Go program with no dependencies.
+The server is a single program with no dependencies. Download the file for your system from the
+[server releases](https://github.com/yuw1xx/resonance-app/releases?q=server-v) (for example
+`resonance-share-2.1.0-linux-arm64` for a 64-bit Raspberry Pi), or build it yourself with Go:
 
 ```sh
 CGO_ENABLED=0 go build -o resonance-share .
+```
+
+Then run it:
+
+```sh
+chmod +x resonance-share
 UPLOAD_TOKEN=your-token DATA_DIR=./data ./resonance-share
 ```
 
@@ -181,6 +193,9 @@ All settings go in `.env` (Docker) or the environment (without Docker).
 | `MAX_STORAGE_GB` | `20` | Disk space for files waiting to be downloaded |
 | `DATA_DIR` | `/data` | Where files are stored (without Docker) |
 | `LISTEN_ADDR` | `:8080` | Address and port to listen on (without Docker) |
+| `SERVER_VERSION` | `2` | Which image Docker runs: `2` is the newest 2.x, or pin one like `2.1.0` |
+| `UPDATE_CHECK` | `true` | Look up new releases on GitHub once a day; `false` turns it off |
+| `UPDATE_REPO` | `yuw1xx/resonance-app` | Where to look for releases (for forks) |
 
 ### TRUST_PROXY
 
@@ -195,11 +210,59 @@ proxy is in front:
 With `proxy` or `cloudflare`, never expose port 8080 to the network as well, or clients can
 fake their address. That is what `PUBLISH=127.0.0.1:8080` is for.
 
+## Updating
+
+### How you find out
+
+- **In the app:** Settings → Online Services → Internet Share shows your server's version, and
+  "Version 2.1.0 is available for your server" when there is a newer one.
+- **In the server log:** `docker compose logs app` shows a line like
+  `update available: 2.0.0 -> 2.1.0`.
+- **From GitHub:** on the repository page, choose **Watch → Custom → Releases** to get an email
+  for every release.
+
+To find out, the server asks GitHub once a day which releases exist. It sends nothing about you
+or your files. Set `UPDATE_CHECK=false` in `.env` to turn this off.
+
+### Update by hand
+
+```sh
+./update.sh
+```
+
+It downloads the newest image and restarts the server only if something changed. Files waiting
+to be downloaded are kept. If you built the image yourself, use `git pull` and
+`docker compose up -d --build` instead.
+
+### Update automatically
+
+Run `update.sh` once a day with a systemd timer. First open `resonance-share-update.service`
+and change both `/opt/resonance-share` paths to this folder (`pwd` prints it). Then:
+
+```sh
+sudo cp resonance-share-update.service resonance-share-update.timer /etc/systemd/system/
+sudo systemctl enable --now resonance-share-update.timer
+```
+
+or with cron (`crontab -e`):
+
+```
+30 4 * * * /path/to/resonance-share/update.sh
+```
+
+Automatic updates stay within the same major version (`SERVER_VERSION=2` follows 2.1, 2.2 and so
+on). Those never need changes on your side. A new major version (3.0) can, so moving to it is a
+deliberate step: read its release notes, then set `SERVER_VERSION=3`. To freeze the server on
+one version, set `SERVER_VERSION=2.1.0`.
+
+Without Docker, download the new file from the releases page, replace the old one and restart
+(`sudo systemctl restart resonance-share`).
+
 ## Checking and maintenance
 
-- `docker compose logs -f app` shows the server log: its settings at startup, and any errors.
+- `docker compose logs -f app` shows the server log: its settings at startup, update notices and
+  errors.
 - `docker compose ps` shows what is running.
-- Updating: `git pull`, then `docker compose up -d --build`.
 - Files waiting for download live in the `share_data` Docker volume. They are temporary, so
   there is nothing to back up except `.env` (and `cloudflared/` for setup D).
 
@@ -215,6 +278,26 @@ fake their address. That is what `PUBLISH=127.0.0.1:8080` is for.
 | The receiver gets "not found" (404) | The link was already used or has expired. |
 | The receiver can't connect | Their phone can't reach the server: not on the same network (A), not in your tailnet (B), or DNS/ports aren't set up (C/D). |
 | The server exits with a `TRUST_PROXY` error | It must be `none`, `proxy` or `cloudflare`. |
+
+## Publishing a new version
+
+For the maintainer. The version comes from the git tag; nothing in the code has to change.
+
+1. Pick the version with [semantic versioning](https://semver.org): `2.1.0` for new features,
+   `2.0.1` for fixes, `3.0.0` if self-hosters must change something.
+2. Tag and push:
+   ```sh
+   git tag server-v2.1.0
+   git push origin server-v2.1.0
+   ```
+3. The "Server release" GitHub Action tests the server, publishes the image as `2.1.0`, `2`
+   and `latest` on ghcr.io, and creates a release with the binaries and checksums. The release
+   is never marked "latest", so the app's own update check isn't affected.
+4. The first time only: on GitHub, open the `resonance-share` package (your profile →
+   Packages), then **Package settings → Change visibility → Public**. New packages are private.
+
+Servers then show the update within a day, and servers with automatic updates install it
+themselves.
 
 ## API
 

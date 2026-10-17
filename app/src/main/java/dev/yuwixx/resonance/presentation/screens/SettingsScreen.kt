@@ -1259,10 +1259,14 @@ private fun OnlineServicesSettingsSection(
     )
 
     SectionCard(icon = Icons.Rounded.Public, title = "Internet Share", modifier = Modifier.padding(horizontal = 8.dp)) {
+        val shareServerStatus by settingsViewModel.shareServerStatus.collectAsStateWithLifecycle()
+        LaunchedEffect(remoteShareServerUrl) { settingsViewModel.checkShareServer(remoteShareServerUrl) }
         RemoteShareSection(
             serverUrl = remoteShareServerUrl,
             uploadToken = remoteShareUploadToken,
+            status = shareServerStatus,
             onSave = { url, token -> settingsViewModel.saveRemoteShareConfig(url, token) },
+            onRecheck = { settingsViewModel.checkShareServer(remoteShareServerUrl) },
         )
     }
 }
@@ -1862,8 +1866,11 @@ private fun LastFmLoginDialog(
 private fun RemoteShareSection(
     serverUrl: String,
     uploadToken: String,
+    status: SettingsViewModel.ShareServerStatus,
     onSave: (String, String) -> Unit,
+    onRecheck: () -> Unit,
 ) {
+    val uriHandler = LocalUriHandler.current
     var url by remember(serverUrl) { mutableStateOf(serverUrl) }
     var token by remember(uploadToken) { mutableStateOf(uploadToken) }
     var tokenVisible by remember { mutableStateOf(false) }
@@ -1872,12 +1879,12 @@ private fun RemoteShareSection(
 
     Column {
         Text(
-            "\"Share over the Internet\" works out of the box using Resonance's default relay server — " +
-                "no setup needed. If you'd rather use your own self-hosted server (e.g. behind a Cloudflare " +
-                "Tunnel), enter its details below.",
+            "\"Share over the Internet\" uses Resonance's public server, no setup needed. You can also " +
+                "run your own, on your home network or your own domain, and enter it below.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        TextButton(onClick = { uriHandler.openUri(SHARE_SERVER_GUIDE) }) { Text("How to run your own server") }
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = url,
@@ -1918,8 +1925,47 @@ private fun RemoteShareSection(
                 modifier = Modifier.align(Alignment.CenterVertically).padding(start = 4.dp),
             )
         }
+        if (serverUrl.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            when (status) {
+                SettingsViewModel.ShareServerStatus.Idle -> Unit
+                SettingsViewModel.ShareServerStatus.Checking -> Text(
+                    "Checking your server…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                is SettingsViewModel.ShareServerStatus.Reachable -> {
+                    Text(
+                        "Connected · server version ${status.version}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    status.latestVersion?.let { latest ->
+                        Text(
+                            "Version $latest is available for your server.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        TextButton(onClick = { uriHandler.openUri("$SHARE_SERVER_GUIDE#updating") }) {
+                            Text("How to update")
+                        }
+                    }
+                }
+                is SettingsViewModel.ShareServerStatus.Unreachable -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Can't reach your server: ${status.reason}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onRecheck) { Text("Retry") }
+                }
+            }
+        }
     }
 }
+
+private const val SHARE_SERVER_GUIDE = "https://github.com/yuw1xx/resonance-app/tree/main/server/resonance-share"
 
 @Composable
 private fun MalojaSection(

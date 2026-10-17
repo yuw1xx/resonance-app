@@ -23,7 +23,6 @@ import (
 )
 
 const (
-	serverVersion         = "2.0.0"
 	defaultMaxUploadBytes = 500 << 20 // 500 MB
 	defaultTTL            = 24 * time.Hour
 	defaultMaxTTLHours    = 72
@@ -121,6 +120,10 @@ func main() {
 	}
 
 	go s.sweepLoop(ttl)
+	if envOr("UPDATE_CHECK", "true") != "false" {
+		s.updates = newUpdateChecker(envOr("UPDATE_REPO", "yuw1xx/resonance-app"))
+		go s.updates.loop()
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/upload", s.handleUpload)
@@ -154,6 +157,7 @@ type server struct {
 	maxStorage        int64
 	maxTTLHours       int
 	trustProxy        string
+	updates           *updateChecker // nil when UPDATE_CHECK=false
 
 	mu       sync.Mutex
 	inflight map[string]struct{} // tokens currently being downloaded; skip sweep/delete-on-read race
@@ -382,7 +386,7 @@ func (s *server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	info := map[string]any{
 		"version":                  serverVersion,
 		"maxUploadMB":              s.maxUpload >> 20,
 		"maxTTLHours":              s.maxTTLHours,
@@ -390,7 +394,14 @@ func (s *server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"rateLimitMBPerHour":       s.rateLimitBytes >> 20,
 		"rateLimitRequestsPerHour": s.rateLimitRequests,
 		"rangeDownloads":           true,
-	})
+	}
+	if s.updates != nil {
+		if latest := s.updates.Latest(); latest != "" {
+			info["latestVersion"] = latest
+			info["updateAvailable"] = newerVersion(latest, serverVersion)
+		}
+	}
+	_ = json.NewEncoder(w).Encode(info)
 }
 
 // manifestSongEntry holds the same fields as a single-song link; a manifest is a list of them.
