@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.*
@@ -213,6 +214,20 @@ fun ResonanceNavGraph(
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
             restoreState = true
+        }
+    }
+
+    // Pages saved in the other tabs (an album, an artist) belong to the library that was active
+    // when they were opened; after switching source they would show nothing.
+    // Read from the preferences directly: the view model's flow starts with a placeholder.
+    val storedSource by libraryViewModel.prefs.musicSource.collectAsStateWithLifecycle(initialValue = null)
+    var shownSource by rememberSaveable { mutableStateOf<MusicSource?>(null) }
+    LaunchedEffect(storedSource) {
+        val current = storedSource ?: return@LaunchedEffect
+        val previous = shownSource
+        shownSource = current
+        if (previous != null && previous != current) {
+            navItems.forEach { navController.clearBackStack(it.screen.route) }
         }
     }
 

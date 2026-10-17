@@ -1106,6 +1106,8 @@ private fun NavidromeSettingsSection(settingsViewModel: SettingsViewModel) {
         onTest = { url, user, pass -> settingsViewModel.testNavidromeConnection(url, user, pass) },
         onSave = { url, user, pass -> settingsViewModel.saveNavidromeAndSwitch(url, user, pass) },
         onSwitchToLocal = { settingsViewModel.switchToLocal() },
+        onSwitchToNavidrome = { settingsViewModel.switchToNavidrome() },
+        onForgetServer = { settingsViewModel.forgetNavidrome() },
         onResetConnection = { settingsViewModel.resetNavidromeConnectionState() },
         onResetSync = { settingsViewModel.resetNavidromeSyncState() },
     )
@@ -2391,10 +2393,13 @@ private fun NavidromeSection(
     onTest: (String, String, String) -> Unit,
     onSave: (String, String, String) -> Unit,
     onSwitchToLocal: () -> Unit,
+    onSwitchToNavidrome: () -> Unit,
+    onForgetServer: () -> Unit,
     onResetConnection: () -> Unit,
     onResetSync: () -> Unit,
 ) {
     var showSetupScreen by remember { mutableStateOf(false) }
+    var showForgetConfirm by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
@@ -2416,20 +2421,46 @@ private fun NavidromeSection(
 
         SourceRow(
             title = "Navidrome",
-            subtitle = if (currentSource == MusicSource.NAVIDROME && savedServerUrl != null)
-                savedServerUrl else "Stream from your self-hosted server",
+            subtitle = savedServerUrl ?: "Stream from your self-hosted server",
             icon = Icons.Rounded.Cloud,
             selected = currentSource == MusicSource.NAVIDROME,
-            onClick = { showSetupScreen = true }
+            onClick = {
+                when {
+                    savedServerUrl == null -> showSetupScreen = true
+                    currentSource != MusicSource.NAVIDROME -> onSwitchToNavidrome()
+                    else -> showSetupScreen = true
+                }
+            },
         )
 
-        if (currentSource == MusicSource.NAVIDROME) {
+        if (savedServerUrl != null) {
             Spacer(Modifier.height(4.dp))
-            TextButton(onClick = { showSetupScreen = true }) {
-                Icon(Icons.Rounded.Edit, null, modifier = Modifier.padding(end = 6.dp).size(16.dp))
-                Text("Configure Server")
+            Row {
+                TextButton(onClick = { showSetupScreen = true }) {
+                    Icon(Icons.Rounded.Edit, null, modifier = Modifier.padding(end = 6.dp).size(16.dp))
+                    Text("Configure Server")
+                }
+                TextButton(onClick = { showForgetConfirm = true }) {
+                    Icon(Icons.Rounded.LinkOff, null, modifier = Modifier.padding(end = 6.dp).size(16.dp))
+                    Text("Forget Server")
+                }
             }
         }
+    }
+
+    if (showForgetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showForgetConfirm = false },
+            title = { Text("Forget this server?") },
+            text = { Text("The login and the synced library are removed from this device. Downloaded songs stay until you delete them.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showForgetConfirm = false
+                    onForgetServer()
+                }) { Text("Forget") }
+            },
+            dismissButton = { TextButton(onClick = { showForgetConfirm = false }) { Text("Cancel") } },
+        )
     }
 
     if (showSetupScreen) {

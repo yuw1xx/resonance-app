@@ -372,7 +372,26 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    // Switching source keeps the Navidrome login and cache, so coming back needs no new
+    // setup and only an incremental sync.
     fun switchToLocal() {
+        viewModelScope.launch { prefs.setMusicSource(MusicSource.LOCAL) }
+    }
+
+    /** Switches back to the server that is already set up. */
+    fun switchToNavidrome() {
+        viewModelScope.launch {
+            val url = prefs.navidromeServerUrl.first() ?: return@launch
+            val username = prefs.navidromeUsername.first() ?: return@launch
+            val password = prefs.getNavidromePassword() ?: return@launch
+            navidromeApiProvider.rebuild(url, username, password)
+            prefs.setMusicSource(MusicSource.NAVIDROME)
+            navidromeRepository.syncLibrary()
+        }
+    }
+
+    /** Signs out of Navidrome: removes the login and the cached library, and goes back to local. */
+    fun forgetNavidrome() {
         viewModelScope.launch {
             prefs.clearNavidromeCredentials()
             navidromeRepository.clearCache()

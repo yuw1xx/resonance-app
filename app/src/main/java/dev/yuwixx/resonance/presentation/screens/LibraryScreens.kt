@@ -951,6 +951,15 @@ fun AlbumDetailScreen(
             )
         }
     ) { padding ->
+        if (album == null && albums.isNotEmpty()) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Text(
+                    "This album isn't in your library.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         album?.let { currentAlbum ->
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
